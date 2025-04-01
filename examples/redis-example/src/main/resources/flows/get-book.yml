@@ -1,0 +1,29 @@
+flow:
+  id: 'get-book'
+  description: 'Create a user profile and demonstrate async and fork-n-join patterns'
+  ttl: 1000000s
+  exception: 'v1.hello.exception'
+
+first:
+  task: 'v1.get.book'
+
+tasks:
+  - input:
+      - 'input.path_parameter.book_key -> header.book_key'
+    process: 'v1.get.book'
+    output:
+      - 'text(application/json) -> output.header.content-type'
+      - 'result -> output.body'
+    description: 'Retrieve user profile from database using profile_id'
+    execution: end
+
+  - input:
+      - 'error.code -> status'
+      - 'error.message -> message'
+      - 'error.stack -> stack'
+    process: 'v1.hello.exception'
+    output:
+      - 'result.status -> output.status'
+      - 'result -> output.body'
+    description: 'Just a demo exception handler'
+    execution: end

@@ -1,0 +1,43 @@
+flow:
+  id: 'create-book-v2'
+  description: 'Create a user profile and demonstrate async and fork-n-join patterns'
+  ttl: 1000000s
+  exception: 'v1.hello.exception'
+
+first:
+  task: 'v2.create.book'
+
+tasks:
+  - input:
+      - 'input.body -> *'
+    process: 'v2.create.book'
+    output:
+      - 'result.book -> output.body'
+      - 'result.cache_item -> model.cache_item'
+    description: 'Inform the user that a profile will be created'
+    execution: response
+    next:
+      - 'cache.redis.v1.put'
+
+  - input:
+      - 'model.cache_item -> cache_item'
+#      - 'input.none -> model.cache_item' # Trick to clear the data in model
+#      - 'model.cache_item -> cache_item_2'
+#      - 'input.cache_item -> cache_item'
+      - 'int(300) -> cache_ttl'
+      - 'text(test-create-book-v2) -> header.cache_key'
+    process: 'cache.redis.v1.put'
+    output: []
+    description: 'Inform the user that a profile will be created'
+    execution: end
+
+  - input:
+      - 'error.code -> status'
+      - 'error.message -> message'
+      - 'error.stack -> stack'
+    process: 'v1.hello.exception'
+    output:
+      - 'result.status -> output.status'
+      - 'result -> output.body'
+    description: 'Just a demo exception handler'
+    execution: end

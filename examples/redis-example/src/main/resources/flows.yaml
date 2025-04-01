@@ -1,0 +1,8 @@
+flows:
+  - 'create-book.yml'
+  - 'create-book-v2.yml'
+  - 'create-book-v3.yml'
+  - 'get-book.yml'
+  - 'delete-book.yml'
+
+location: 'classpath:/flows/'

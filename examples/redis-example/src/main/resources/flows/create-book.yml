@@ -1,0 +1,29 @@
+flow:
+  id: 'create-book'
+  description: 'Create a user profile and demonstrate async and fork-n-join patterns'
+  ttl: 1000000s
+  exception: 'v1.hello.exception'
+
+first:
+  task: 'v1.create.book'
+
+tasks:
+  - input:
+      - 'input.body -> *'
+    process: 'v1.create.book'
+    output:
+      - 'int(201) -> output.status'
+      - 'result -> output.body'
+    description: 'Inform the user that a profile will be created'
+    execution: end
+
+  - input:
+      - 'error.code -> status'
+      - 'error.message -> message'
+      - 'error.stack -> stack'
+    process: 'v1.hello.exception'
+    output:
+      - 'result.status -> output.status'
+      - 'result -> output.body'
+    description: 'Just a demo exception handler'
+    execution: end
