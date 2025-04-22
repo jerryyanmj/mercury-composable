@@ -1,0 +1,18 @@
+flow:
+  id: 'mock'
+  description: 'Create a user profile and demonstrate async and fork-n-join patterns'
+  ttl: 10s
+  exception: 'v1.hello.exception'
+
+first.task: 'no.op'
+
+tasks:
+  - input:
+      - 'classpath(text:/mock/mock.json) -> model.mock_response'
+    process: 'no.op'
+    output:
+      - 'int(201) -> output.status'
+      - 'text(application/json) -> output.content-type'
+      - 'model.mock_response -> output.body'
+    description: 'mock api'
+    execution: end

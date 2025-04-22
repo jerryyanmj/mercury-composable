@@ -1,0 +1,7 @@
+flows:
+  - 'get-profile.yml'
+  - 'create-profile.yml'
+  - 'delete-profile.yml'
+  - 'mock.yml'
+
+location: 'classpath:/flows/'
