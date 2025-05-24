@@ -1,0 +1,20 @@
+#
+# REST automation is the recommended way to create REST endpoints properly
+# Note that URL comparison is case-insensitive but case sensitivity is preserved
+# for the original URL and path parameters
+#
+rest:
+  - service: "http.flow.adapter"
+    methods: [ 'GET' ]
+    url: "/api/demo-retry?mode=_"
+    flow: 'demo-retry'
+    timeout: 10s
+    tracing: true
+
+  - service: "http.flow.adapter"
+    methods: [ 'GET' ]
+    url: "/api/demo-circuit-breaker?mode=_"
+    flow: 'demo-circuit-breaker'
+    timeout: 10s
+    tracing: true
+

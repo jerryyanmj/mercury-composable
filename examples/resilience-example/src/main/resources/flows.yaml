@@ -1,0 +1,5 @@
+flows:
+  - 'demo-retry.yml'
+  - 'demo-circuit-breaker.yml'
+
+location: 'classpath:/flows/'

@@ -1,0 +1,57 @@
+flow:
+  id: 'demo-retry'
+  description: 'Demonstrate circuit breaker usage'
+  ttl: 10s
+  exception: 'v1.hello.exception'
+
+first.task: 'my.task'
+
+tasks:
+  - name: 'my.task'
+    input:
+      - 'model.attempt -> attempt'
+      - 'input.query.mode -> mode'
+    process: 'v1.process.data'
+    output:
+      - 'int(204) -> output.status'
+    description: 'Inform the user that a profile will be created'
+    execution: end
+    exception: 'resilience.handler'
+
+  - input:
+      - 'error.code -> status'
+      - 'error.message -> message'
+      - 'model.attempt -> attempt'
+      - 'int(3) -> max_attempts'
+    process: 'resilience.handler'
+    output:
+      - 'result.attempt -> model.attempt'
+      - 'result.decision -> decision'
+      - 'result.status -> model.status'
+      - 'result.message -> model.message'
+    description: 'Just a demo of retry.  The abort function kicks in after 3 retries.'
+    execution: decision
+    next:
+      - 'my.task'
+      - 'abort.request'
+
+  - name: 'abort.request'
+    input: []
+    process: 'no.op'
+    output:
+      - 'text(application/json) -> output.header.content-type'
+      - 'result.status -> output.status'
+      - 'text(Abort function kicks in after 3 retries) -> output.body.result'
+    description: 'This function aborts a request'
+    execution: end
+
+  - input:
+      - 'error.code -> status'
+      - 'error.message -> message'
+      - 'error.stack -> stack'
+    process: 'v1.hello.exception'
+    output:
+      - 'result.status -> output.status'
+      - 'result -> output.body'
+    description: 'Just a demo exception handler'
+    execution: end
