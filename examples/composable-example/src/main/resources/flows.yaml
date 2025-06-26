@@ -2,5 +2,6 @@ flows:
   - 'get-profile.yml'
   - 'create-profile.yml'
   - 'delete-profile.yml'
+  - 'sum-integer.yml'
 
 location: 'classpath:/flows/'

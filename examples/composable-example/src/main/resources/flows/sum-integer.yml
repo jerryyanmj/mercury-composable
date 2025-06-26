@@ -1,0 +1,40 @@
+flow:
+  id: 'sum-integer'
+  description: 'sum up all integers'
+  ttl: 300000s
+
+first.task: 'my.first.task'
+
+tasks:
+  - name: 'my.first.task'
+    input:
+      - 'input.query.total -> total'
+      - 'input.query.worker -> size'
+    process: 'v1.list.splitter'
+    output:
+      - 'result -> model.dataList'
+    description: 'Pass a pojo to another task'
+    execution: fork
+    source: 'model.dataList'
+    next:
+      - 'calculate.sum.parallel'
+    join: 'calculate.sum.final'
+
+  - name: 'calculate.sum.parallel'
+    input:
+      - 'model.dataList.ITEM -> integer-list'
+    process: 'v1.sum.list'
+    output:
+      - 'result -> model.reduced[]'
+    description: 'Hello world'
+    execution: sink
+
+  - name: 'calculate.sum.final'
+    input:
+      - 'model.reduced -> integer-list'
+    process: 'v1.sum.list'
+    output:
+      - 'text(application/json) -> output.header.content-type'
+      - 'result -> output.body.sum'
+    description: 'Return result'
+    execution: end
