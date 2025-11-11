@@ -1,7 +1,10 @@
 package com.example.graphql;
 
+import com.example.graphql.config.DataSourceConfig;
 import com.example.graphql.config.DataSourceConfigManager;
+import com.example.graphql.config.EndpointConfig;
 import com.example.graphql.config.QueryConfigManager;
+import com.example.graphql.datasource.ConfigurableDataFetcherFactory;
 import com.example.graphql.datasource.DataFetcherFactory;
 import com.example.graphql.datasource.DataSourceType;
 import com.example.graphql.datasource.SimpleDataFetcherFactory;
@@ -15,8 +18,27 @@ import java.util.Map;
 
 public class Application {
     public static void main(String[] args) throws Exception {
-        DataSourceConfigManager configManager = new DataSourceConfigManager();
-        configManager.loadDataSources("/datasources.json");
+        DataSourceConfigManager dataSourceConfigManager = new DataSourceConfigManager();
+        dataSourceConfigManager.loadDataSources("/datasources.json");
+
+        System.out.println("=== Data Source Configuration ===");
+        Map<String, DataSourceConfig> allDataSources = dataSourceConfigManager.getAllDataSources();
+        if (allDataSources.isEmpty()) {
+            System.err.println("WARNING: No data sources loaded from configuration!");
+        } else {
+            System.out.println("Loaded data sources: " + allDataSources.keySet());
+            for (Map.Entry<String, DataSourceConfig> entry : allDataSources.entrySet()) {
+                DataSourceConfig config = entry.getValue();
+                System.out.println("  - " + entry.getKey() + ": " + config.getBaseUrl());
+                System.out.println("    Endpoints: " + config.getEndpoints().keySet());
+
+                for (String endpointName : config.getEndpoints().keySet()) {
+                    EndpointConfig endpoint = config.getEndpoint(endpointName);
+                    System.out.println("       ↳ " + endpointName + ": " + endpoint.getPath() +
+                            " -> " + endpoint.getResponseMapping().keySet());
+                }
+            }
+        }
 
         QueryConfigManager queryConfigManager = new QueryConfigManager();
         QueryRegistry queryRegistry = new QueryRegistry();
@@ -28,12 +50,14 @@ public class Application {
         System.out.println("Total queries in registry: " + queryRegistry.getAllQueries().size());
         queryRegistry.getAllQueries().forEach(q -> System.out.println("  - " + q.getName()));
 
-        DataFetcherFactory dataFetcherFactory = new SimpleDataFetcherFactory();
+        System.out.println("=== Schema Initialization Phase ===");
+        DataFetcherFactory dataFetcherFactory = new ConfigurableDataFetcherFactory(dataSourceConfigManager);
         SchemaManager schemaManager = new SchemaManager(queryRegistry, dataFetcherFactory);
         GraphQLHandler graphQLHandler = new GraphQLHandler(queryRegistry, schemaManager);
 
-        // 启动服务器
-        System.out.println("Data sources configured: " + configManager.hasDataSources());
+        System.out.println("Data sources configured: " + dataSourceConfigManager.hasDataSources());
+
+        // Start server
         System.out.println("Starting GraphQL Server on port 8080...");
         SimpleGraphQLServer server = new SimpleGraphQLServer(8080, graphQLHandler);
         server.start();

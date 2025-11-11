@@ -1,5 +1,6 @@
-{
-  "userService": {
+[
+  {
+    "name": "userService",
     "type": "REST",
     "baseUrl": "http://localhost:9090",
     "endpoints": {
@@ -21,7 +22,8 @@
       }
     }
   },
-  "postService": {
+  {
+    "name": "postService",
     "type": "REST",
     "baseUrl": "http://localhost:9090",
     "endpoints": {
@@ -50,4 +52,4 @@
       }
     }
   }
-}
+]

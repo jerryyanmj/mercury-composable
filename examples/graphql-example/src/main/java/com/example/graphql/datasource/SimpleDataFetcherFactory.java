@@ -28,7 +28,7 @@ public class SimpleDataFetcherFactory implements DataFetcherFactory {
         };
     }
 
-    private Map<String, Object> getUserData(String userId) {
+    Map<String, Object> getUserData(String userId) {
         System.out.println("Invoke user source fetcher: /api/user/" + userId);
         return Map.of(
                 "id", userId,
@@ -41,7 +41,7 @@ public class SimpleDataFetcherFactory implements DataFetcherFactory {
         );
     }
 
-    private Map<String, Object> getPostData(String postId) {
+    Map<String, Object> getPostData(String postId) {
         System.out.println("Invoke post source fetcher: /api/post/" + postId);
         return Map.of(
                 "id", postId,
@@ -54,7 +54,7 @@ public class SimpleDataFetcherFactory implements DataFetcherFactory {
         );
     }
 
-    private Map<String, Object> getUserWithPostsData(String userId) {
+    Map<String, Object> getUserWithPostsData(String userId) {
         System.out.println("Invoke user with posts source fetcher " + userId);
         Map<String, Object> userData = getUserData(userId);
         List<Map<String, Object>> postsData = List.of(
