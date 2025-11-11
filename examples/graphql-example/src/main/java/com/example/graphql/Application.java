@@ -9,6 +9,7 @@ import com.example.graphql.datasource.DataFetcherFactory;
 import com.example.graphql.datasource.DataSourceType;
 import com.example.graphql.datasource.SimpleDataFetcherFactory;
 import com.example.graphql.handler.GraphQLHandler;
+import com.example.graphql.mock.MockHttpServer;
 import com.example.graphql.model.QueryDefinition;
 import com.example.graphql.registry.QueryRegistry;
 import com.example.graphql.schema.SchemaManager;
@@ -17,6 +18,9 @@ import com.example.graphql.server.SimpleGraphQLServer;
 import java.util.Map;
 
 public class Application {
+
+    private static MockHttpServer mockServer;
+
     public static void main(String[] args) throws Exception {
         DataSourceConfigManager dataSourceConfigManager = new DataSourceConfigManager();
         dataSourceConfigManager.loadDataSources("/datasources.json");
@@ -61,6 +65,14 @@ public class Application {
         System.out.println("Starting GraphQL Server on port 8080...");
         SimpleGraphQLServer server = new SimpleGraphQLServer(8080, graphQLHandler);
         server.start();
+
+        mockServer = new MockHttpServer(9090);
+        mockServer.start();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (mockServer != null) {
+                mockServer.stop();
+            }
+        }));
     }
 
     private static void registerSampleQueries(QueryRegistry registry) {

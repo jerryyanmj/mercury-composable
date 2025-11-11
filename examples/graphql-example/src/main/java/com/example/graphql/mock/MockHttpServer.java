@@ -1,3 +1,4 @@
+// com/example/graphql/mock/EnhancedMockHttpServer.java
 package com.example.graphql.mock;
 
 import com.sun.net.httpserver.HttpServer;
@@ -8,132 +9,208 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.util.concurrent.Executors;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.List;
+import java.util.ArrayList;
 
 public class MockHttpServer {
     private HttpServer server;
     private final int port;
 
+    // 模拟数据存储
+    private final Map<String, Map<String, Object>> userDatabase = new HashMap<>();
+    private final Map<String, Map<String, Object>> postDatabase = new HashMap<>();
+    private final Map<String, List<String>> userPostsDatabase = new HashMap<>();
+
     public MockHttpServer(int port) {
         this.port = port;
+        initializeMockData();
+    }
+
+    private void initializeMockData() {
+        // 初始化用户数据
+        for (int i = 1; i <= 5; i++) {
+            String userId = String.valueOf(i);
+            userDatabase.put(userId, Map.of(
+                    "id", userId,
+                    "name", "Mock User " + i,
+                    "email", "user" + i + "@mock.com",
+                    "fullName", "Mock User " + i + " Full Name",
+                    "hobbies", List.of("reading", "coding", "gaming", "hobby" + i),
+                    "phone", "555-010" + i,
+                    "address", "Mock Address " + i
+            ));
+        }
+
+        // 初始化帖子数据
+        int postId = 1;
+        for (int userId = 1; userId <= 5; userId++) {
+            List<String> userPostIds = new ArrayList<>();
+            for (int j = 1; j <= 3; j++) {
+                String postIdStr = String.valueOf(postId);
+                postDatabase.put(postIdStr, Map.of(
+                        "id", postIdStr,
+                        "title", "Post " + postId + " by User " + userId,
+                        "content", "This is the content of post " + postId + ". It contains detailed information about various topics related to user " + userId + ".",
+                        "createdAt", "2024-01-" + (postId % 30 + 1),
+                        "updatedAt", "2024-01-" + (postId % 30 + 2),
+                        "author", "author_" + userId,
+                        "tags", List.of("tag" + j, "tech", "graphql")
+                ));
+                userPostIds.add(postIdStr);
+                postId++;
+            }
+            userPostsDatabase.put(String.valueOf(userId), userPostIds);
+        }
+
+        System.out.println("Mock data initialized:");
+        System.out.println("  - Users: " + userDatabase.keySet());
+        System.out.println("  - Posts: " + postDatabase.keySet());
+        System.out.println("  - User posts mapping: " + userPostsDatabase);
     }
 
     public void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress(port), 0);
         server.setExecutor(Executors.newCachedThreadPool());
 
-        // 模拟用户服务
-        server.createContext("/users/", new UserHandler());
-
-        // 模拟帖子服务
-        server.createContext("/posts/", new PostHandler());
-
-        // 模拟用户帖子服务
-        server.createContext("/user-posts/", new UserPostsHandler());
+        // 注册API端点
+        server.createContext("/api/user/", new UserHandler());
+        server.createContext("/api/post/", new PostHandler());
+        server.createContext("/api/posts", new UserPostsHandler());
 
         server.start();
-        System.out.println("Mock HTTP Server started on port " + port);
+        System.out.println("Enhanced Mock HTTP Server started on port " + port);
+        System.out.println("Available endpoints:");
+        System.out.println("  GET /api/user/{id}");
+        System.out.println("  GET /api/post/{id}");
+        System.out.println("  GET /api/posts?userId={userId}");
     }
 
     public void stop() {
         if (server != null) {
             server.stop(0);
-            System.out.println("Mock HTTP Server stopped");
+            System.out.println("Enhanced Mock HTTP Server stopped");
         }
     }
 
     // 用户处理器
-    static class UserHandler implements HttpHandler {
+    class UserHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
             if ("GET".equals(exchange.getRequestMethod())) {
                 String path = exchange.getRequestURI().getPath();
-                String userId = path.substring(path.lastIndexOf("/") + 1);
+                String userId = path.substring("/api/user/".length());
 
-                String response = """
-                    {
-                        "id": %s,
-                        "name": "Mock User %s",
-                        "email": "user%s@mock.com",
-                        "phone": "555-0100-%s",
-                        "website": "user%s.example.com",
-                        "address": {
-                            "street": "123 Mock St",
-                            "city": "Mock City"
+                System.out.println("MockServer: GET /api/user/" + userId);
+
+                Map<String, Object> user = userDatabase.get(userId);
+                if (user != null) {
+                    String response = toJson(user);
+                    sendResponse(exchange, response);
+                } else {
+                    sendError(exchange, 404, "User not found: " + userId);
+                }
+            } else {
+                sendError(exchange, 405, "Method Not Allowed");
+            }
+        }
+    }
+
+    // 单个帖子处理器
+    class PostHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                String path = exchange.getRequestURI().getPath();
+                String postId = path.substring("/api/post/".length());
+
+                System.out.println("MockServer: GET /api/post/" + postId);
+
+                Map<String, Object> post = postDatabase.get(postId);
+                if (post != null) {
+                    String response = toJson(post);
+                    sendResponse(exchange, response);
+                } else {
+                    sendError(exchange, 404, "Post not found: " + postId);
+                }
+            } else {
+                sendError(exchange, 405, "Method Not Allowed");
+            }
+        }
+    }
+
+    // 用户帖子列表处理器
+    class UserPostsHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                String query = exchange.getRequestURI().getQuery();
+                String userId = extractUserIdFromQuery(query);
+
+                System.out.println("MockServer: GET /api/posts?userId=" + userId);
+
+                if (userId != null) {
+                    List<String> postIds = userPostsDatabase.get(userId);
+                    if (postIds != null) {
+                        List<Map<String, Object>> posts = new ArrayList<>();
+                        for (String postId : postIds) {
+                            posts.add(postDatabase.get(postId));
                         }
+                        String response = toJson(Map.of("posts", posts));
+                        sendResponse(exchange, response);
+                    } else {
+                        sendResponse(exchange, toJson(Map.of("posts", List.of())));
                     }
-                    """.formatted(userId, userId, userId, userId, userId);
-
-                sendResponse(exchange, response);
+                } else {
+                    sendError(exchange, 400, "Missing userId parameter");
+                }
             } else {
                 sendError(exchange, 405, "Method Not Allowed");
             }
         }
-    }
 
-    // 帖子处理器
-    static class PostHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            if ("GET".equals(exchange.getRequestMethod())) {
-                String path = exchange.getRequestURI().getPath();
-                String postId = path.substring(path.lastIndexOf("/") + 1);
-
-                String response = """
-                    {
-                        "id": %s,
-                        "title": "Mock Post Title %s",
-                        "body": "This is the content of mock post %s. It contains detailed information about various topics.",
-                        "userId": %s,
-                        "tags": ["tech", "graphql", "mock"],
-                        "createdAt": "2024-01-01T10:00:00Z"
-                    }
-                    """.formatted(postId, postId, postId, Integer.parseInt(postId) % 10 + 1);
-
-                sendResponse(exchange, response);
-            } else {
-                sendError(exchange, 405, "Method Not Allowed");
+        private String extractUserIdFromQuery(String query) {
+            if (query != null && query.startsWith("userId=")) {
+                return query.substring("userId=".length());
             }
+            return null;
         }
     }
 
-    // 用户帖子聚合处理器
-    static class UserPostsHandler implements HttpHandler {
-        @Override
-        public void handle(HttpExchange exchange) throws IOException {
-            if ("GET".equals(exchange.getRequestMethod())) {
-                String path = exchange.getRequestURI().getPath();
-                String userId = path.substring(path.lastIndexOf("/") + 1);
-
-                String response = """
-                    {
-                        "user": {
-                            "id": %s,
-                            "name": "Mock User %s",
-                            "email": "user%s@mock.com"
-                        },
-                        "posts": [
-                            {
-                                "id": "%s-1",
-                                "title": "User %s First Post",
-                                "body": "First post content from user %s"
-                            },
-                            {
-                                "id": "%s-2", 
-                                "title": "User %s Second Post",
-                                "body": "Second post content from user %s"
-                            }
-                        ]
-                    }
-                    """.formatted(userId, userId, userId, userId, userId, userId, userId, userId, userId);
-
-                sendResponse(exchange, response);
-            } else {
-                sendError(exchange, 405, "Method Not Allowed");
+    private String toJson(Object obj) {
+        // 简化的JSON序列化
+        if (obj instanceof Map) {
+            Map<?, ?> map = (Map<?, ?>) obj;
+            StringBuilder sb = new StringBuilder("{");
+            boolean first = true;
+            for (Map.Entry<?, ?> entry : map.entrySet()) {
+                if (!first) sb.append(",");
+                sb.append("\"").append(entry.getKey()).append("\":");
+                sb.append(toJson(entry.getValue()));
+                first = false;
             }
+            sb.append("}");
+            return sb.toString();
+        } else if (obj instanceof List) {
+            List<?> list = (List<?>) obj;
+            StringBuilder sb = new StringBuilder("[");
+            boolean first = true;
+            for (Object item : list) {
+                if (!first) sb.append(",");
+                sb.append(toJson(item));
+                first = false;
+            }
+            sb.append("]");
+            return sb.toString();
+        } else if (obj instanceof String) {
+            return "\"" + obj.toString().replace("\"", "\\\"") + "\"";
+        } else {
+            return String.valueOf(obj);
         }
     }
 
-    private static void sendResponse(HttpExchange exchange, String response) throws IOException {
+    private void sendResponse(HttpExchange exchange, String response) throws IOException {
         exchange.getResponseHeaders().set("Content-Type", "application/json");
         exchange.sendResponseHeaders(200, response.getBytes().length);
         try (OutputStream os = exchange.getResponseBody()) {
@@ -141,7 +218,7 @@ public class MockHttpServer {
         }
     }
 
-    private static void sendError(HttpExchange exchange, int code, String message) throws IOException {
+    private void sendError(HttpExchange exchange, int code, String message) throws IOException {
         String response = "{\"error\": \"" + message + "\"}";
         exchange.sendResponseHeaders(code, response.getBytes().length);
         try (OutputStream os = exchange.getResponseBody()) {
