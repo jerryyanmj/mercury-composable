@@ -32,6 +32,7 @@
         <module>examples/rest-spring-3-example</module>
         <module>examples/composable-example</module>
         <module>examples/kotlin-example</module>
+        <module>examples/graphql-example</module>
 
         <!-- Executables for benchmark tests -->
         <module>benchmark/benchmark-client</module>

@@ -1,0 +1,40 @@
+[
+  {
+    "name": "userService",
+    "type": "REST",
+    "baseUrl": "https://jsonplaceholder.typicode.com",
+    "endpoints": {
+      "getUser": {
+        "path": "/users/{id}",
+        "method": "GET",
+        "headers": {
+          "Accept": "application/json"
+        },
+        "responseMapping": {
+          "id": "$.id",
+          "name": "$.name",
+          "email": "$.email",
+          "phone": "$.phone",
+          "website": "$.website"
+        }
+      }
+    }
+  },
+  {
+    "name": "postService",
+    "type": "REST",
+    "baseUrl": "https://jsonplaceholder.typicode.com",
+    "endpoints": {
+      "getPost": {
+        "path": "/posts/{id}",
+        "method": "GET",
+        "responseMapping": {
+          "id": "$.id",
+          "title": "$.title",
+          "content": "$.body",
+          "authorId": "$.userId"
+        }
+      }
+    }
+  }
+]
