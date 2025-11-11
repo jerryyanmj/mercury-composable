@@ -37,14 +37,101 @@ public class SchemaManager {
             SchemaGenerator schemaGenerator = new SchemaGenerator();
             GraphQLSchema graphQLSchema = schemaGenerator.makeExecutableSchema(typeRegistry, runtimeWiring);
 
+            System.out.println("=== Schema Info ===");
+            System.out.println("Query type fields: " + graphQLSchema.getQueryType().getFieldDefinitions());
+            System.out.println("User type fields: " + graphQLSchema.getType("User"));
+            System.out.println("Post type fields: " + graphQLSchema.getType("Post"));
+            System.out.println("UserWithPosts type fields: " + graphQLSchema.getType("UserWithPosts"));
+
             return GraphQL.newGraphQL(graphQLSchema).build();
         } catch (Exception e) {
             throw new RuntimeException("Failed to build GraphQL schema: " + e.getMessage(), e);
         }
     }
 
+    private String buildSchemaDefinition2() {
+        StringBuilder schema = new StringBuilder();
+
+        schema.append("""
+        type User {
+            id: ID!
+            name: String
+            email: String
+            phone: String
+            website: String
+        }
+        
+        type Post {
+            id: ID!
+            title: String
+            content: String
+            authorId: ID!
+        }
+        
+        """);
+
+        // 然后定义 Query 类型
+        schema.append("type Query {\n");
+
+        Set<String> definedFields = new HashSet<>();
+        boolean hasFields = false;
+
+        for (QueryDefinition query : queryRegistry.getAllQueries()) {
+            String querySignature = extractQuerySignature(query);
+            if (querySignature != null && !querySignature.trim().isEmpty()) {
+                String fieldName = extractFieldNameFromSignature(querySignature);
+                // 确保字段名不重复
+                if (fieldName != null && !definedFields.contains(fieldName)) {
+                    schema.append("  ").append(querySignature).append("\n");
+                    definedFields.add(fieldName);
+                    hasFields = true;
+                }
+            }
+        }
+
+        // 如果没有解析到任何字段，添加一个默认字段防止空 Query
+        if (!hasFields) {
+            schema.append("  defaultField: String\n");
+        }
+
+        schema.append("}\n");
+
+        return schema.toString();
+    }
+
     private String buildSchemaDefinition() {
         StringBuilder schema = new StringBuilder();
+        schema.append("type Query {\n");
+
+        System.out.println("=== Schema Generation Debug ===");
+        System.out.println("QueryRegistry has " + queryRegistry.getAllQueries().size() + " queries");
+
+        boolean hasFields = false;
+        for (QueryDefinition query : queryRegistry.getAllQueries()) {
+            System.out.println("Processing query: " + query.getName());
+            System.out.println("Query string: " + query.getQueryString());
+
+            String querySignature = extractQuerySignature(query);
+            System.out.println("Extracted signature: " + querySignature);
+
+            if (querySignature != null && !querySignature.trim().isEmpty()) {
+                schema.append("  ").append(querySignature).append("\n");
+                hasFields = true;
+                System.out.println("Added to Schema: " + querySignature);
+            } else {
+                System.out.println("No signature extracted for query: " + query.getName());
+            }
+        }
+
+        // 如果没有解析到任何字段，添加一个默认字段防止空 Query
+        if (!hasFields) {
+            System.out.println("WARNING: No query fields found in registry!");
+            System.out.println("Registered queries: " + queryRegistry.getAllQueries().size());
+            schema.append("  defaultField: String\n");
+        }
+
+        schema.append("}\n");
+
 
         // 首先定义类型
         schema.append("""
@@ -80,33 +167,12 @@ public class SchemaManager {
             }
         """);
 
-        // 然后定义 Query 类型
-        schema.append("type Query {\n");
+        String finalSchema = schema.toString();
+        System.out.println("=== Final Generated Schema ===");
+        System.out.println(finalSchema);
+        System.out.println("=== End Schema ===");
 
-        Set<String> definedFields = new HashSet<>();
-        boolean hasFields = false;
-
-        for (QueryDefinition query : queryRegistry.getAllQueries()) {
-            String querySignature = extractQuerySignature(query);
-            if (querySignature != null && !querySignature.trim().isEmpty()) {
-                String fieldName = extractFieldNameFromSignature(querySignature);
-                // 确保字段名不重复
-                if (fieldName != null && !definedFields.contains(fieldName)) {
-                    schema.append("  ").append(querySignature).append("\n");
-                    definedFields.add(fieldName);
-                    hasFields = true;
-                }
-            }
-        }
-
-        // 如果没有解析到任何字段，添加一个默认字段防止空 Query
-        if (!hasFields) {
-            schema.append("  defaultField: String\n");
-        }
-
-        schema.append("}\n");
-
-        return schema.toString();
+        return finalSchema;
     }
 
     private RuntimeWiring buildRuntimeWiring() {
@@ -181,22 +247,11 @@ public class SchemaManager {
     }
 
     private String inferReturnType(QueryDefinition query) {
-        if (query.getDataSourceType() != null) {
-            switch (query.getDataSourceType()) {
-                case USER:
-                    return "User";
-                case POST:
-                    return "Post";
-                case USER_WITH_POSTS:
-                    return "UserWithPosts";  // 确保返回正确的类型
-                default:
-                    return "User";
-            }
-        }
-
-        // 备用推断逻辑
         String queryString = query.getQueryString();
-        if (queryString.contains("latestPost")) {
+        String queryName = query.getName();
+
+        // 基于查询名称和内容推断返回类型
+        if (queryName.contains("WithPosts")) {
             return "UserWithPosts";
         } else if (queryString.contains("title") || queryString.contains("content")) {
             return "Post";

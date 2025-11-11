@@ -32,6 +32,11 @@ public class GraphQLHandler {
                 throw new RuntimeException("Query not found: " + request.getQueryName());
             }
 
+            System.out.println("=== GraphQL Execution Debug ===");
+            System.out.println("Query Name: " + request.getQueryName());
+            System.out.println("Query String: " + queryDef.getQueryString());
+            System.out.println("Variables: " + request.getVariables());
+
             // 2. 执行 GraphQL 查询
             ExecutionInput executionInput = ExecutionInput.newExecutionInput()
                     .query(queryDef.getQueryString())
@@ -39,7 +44,19 @@ public class GraphQLHandler {
                     .build();
 
             return graphQL.executeAsync(executionInput)
-                    .thenApply(ExecutionResult::toSpecification)
+                    .thenApply(result -> {
+                        if (result.getErrors() != null && !result.getErrors().isEmpty()) {
+                            System.out.println("GraphQL Execution Errors:");
+                            result.getErrors().forEach(error -> {
+                                System.out.println("  - " + error.getMessage());
+                                System.out.println("  - Locations: " + error.getLocations());
+                                if (error.getExtensions() != null) {
+                                    System.out.println("  - Extensions: " + error.getExtensions());
+                                }
+                            });
+                        }
+                        return result.toSpecification();
+                    })
                     .thenApply(this::toJson);
 
         } catch (Exception e) {

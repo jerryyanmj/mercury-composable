@@ -1,14 +1,14 @@
 package com.example.graphql.datasource;
 
-import com.example.graphql.config.ConfigManager;
+import com.example.graphql.config.DataSourceConfigManager;
 import com.example.graphql.config.DataSourceConfig;
 import com.example.graphql.model.QueryDefinition;
 import graphql.schema.DataFetcher;
 
 public class ConfigurableDataFetcherFactory implements DataFetcherFactory {
-    private final ConfigManager configManager;
+    private final DataSourceConfigManager configManager;
 
-    public ConfigurableDataFetcherFactory(ConfigManager configManager) {
+    public ConfigurableDataFetcherFactory(DataSourceConfigManager configManager) {
         this.configManager = configManager;
     }
 

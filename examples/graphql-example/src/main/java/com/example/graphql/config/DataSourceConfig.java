@@ -1,3 +1,4 @@
+// com/example/graphql/config/DataSourceConfig.java
 package com.example.graphql.config;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
@@ -28,5 +29,7 @@ public class DataSourceConfig {
     public String getType() { return type; }
     public String getBaseUrl() { return baseUrl; }
     public Map<String, EndpointConfig> getEndpoints() { return endpoints; }
-    public EndpointConfig getEndpoint(String name) { return endpoints.get(name); }
+    public EndpointConfig getEndpoint(String name) {
+        return endpoints != null ? endpoints.get(name) : null;
+    }
 }

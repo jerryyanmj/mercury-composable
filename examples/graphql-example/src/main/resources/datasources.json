@@ -1,11 +1,10 @@
-[
-  {
-    "name": "userService",
+{
+  "userService": {
     "type": "REST",
-    "baseUrl": "https://jsonplaceholder.typicode.com",
+    "baseUrl": "http://localhost:9090",
     "endpoints": {
       "getUser": {
-        "path": "/users/{id}",
+        "path": "/api/user/{id}",
         "method": "GET",
         "headers": {
           "Accept": "application/json"
@@ -14,27 +13,41 @@
           "id": "$.id",
           "name": "$.name",
           "email": "$.email",
+          "fullName": "$.fullName",
+          "hobbies": "$.hobbies",
           "phone": "$.phone",
-          "website": "$.website"
+          "address": "$.address"
         }
       }
     }
   },
-  {
-    "name": "postService",
+  "postService": {
     "type": "REST",
-    "baseUrl": "https://jsonplaceholder.typicode.com",
+    "baseUrl": "http://localhost:9090",
     "endpoints": {
       "getPost": {
-        "path": "/posts/{id}",
+        "path": "/api/post/{id}",
         "method": "GET",
         "responseMapping": {
           "id": "$.id",
           "title": "$.title",
-          "content": "$.body",
-          "authorId": "$.userId"
+          "content": "$.content",
+          "createdAt": "$.createdAt",
+          "updatedAt": "$.updatedAt",
+          "author": "$.author",
+          "tags": "$.tags"
+        }
+      },
+      "getPostsByUser": {
+        "path": "/api/posts?userId={userId}",
+        "method": "GET",
+        "responseMapping": {
+          "id": "$.id",
+          "title": "$.title",
+          "content": "$.content",
+          "createdAt": "$.createdAt"
         }
       }
     }
   }
-]
+}

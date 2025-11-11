@@ -1,0 +1,26 @@
+{
+  "queries": [
+    {
+      "name": "getUserFull",
+      "queryString": "query GetUserFull($id: ID!) { getUserFull(id: $id) { id name email fullName hobbies phone address } }",
+      "dataSources": {
+        "user": "userService.getUser"
+      }
+    },
+    {
+      "name": "getUserWithPosts",
+      "queryString": "query GetUserWithPosts($id: ID!) { getUserWithPosts(id: $id) { id name email posts { id title } } }",
+      "dataSources": {
+        "user": "userService.getUser",
+        "posts": "postService.getPostsByUser"
+      }
+    },
+    {
+      "name": "getPostFull",
+      "queryString": "query GetPostFull($id: ID!) { getPostFull(id: $id) { id title content createdAt author tags } }",
+      "dataSources": {
+        "post": "postService.getPost"
+      }
+    }
+  ]
+}

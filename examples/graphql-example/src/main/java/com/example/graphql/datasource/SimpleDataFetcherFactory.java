@@ -16,24 +16,15 @@ public class SimpleDataFetcherFactory implements DataFetcherFactory {
             // 实际应该根据查询配置调用对应的 REST API
             String id = environment.getArgument("id");
 
-//            return Map.of(
-//                    "id", id,
-//                    "name", "User " + id,
-//                    "email", "user" + id + "@example.com",
-//                    "posts", java.util.List.of(
-//                            Map.of("id", "1", "title", "First Post", "content", "Hello World"),
-//                            Map.of("id", "2", "title", "Second Post", "content", "GraphQL is awesome")
-//                    )
-//            );
+            System.out.println("Executing query: " + query.getName() + " for id: " + id);
 
-            DataSourceType dataSourceType = query.getDataSourceType();
-
-            return switch (dataSourceType) {
-                case USER -> getUserData(id);
-                case POST -> getPostData(id);
-                case USER_WITH_POSTS -> getUserWithPostsData(id);
-                default -> throw new IllegalArgumentException("Unknown data source type: " + dataSourceType);
-            };
+            if (query.getName().contains("WithPosts")) {
+                return getUserWithPostsData(id);
+            } else if (query.getName().contains("Post")) {
+                return getPostData(id);
+            } else {
+                return getUserData(id);
+            }
         };
     }
 

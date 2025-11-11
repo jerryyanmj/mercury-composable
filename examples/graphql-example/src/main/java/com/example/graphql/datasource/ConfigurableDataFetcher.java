@@ -63,10 +63,14 @@ public class ConfigurableDataFetcher implements DataFetcher<CompletableFuture<Ma
                     throw new RuntimeException("HTTP error: " + response.statusCode() + " - " + response.body());
                 }
 
+                System.out.println("Response received: " + response.body());
+
                 // 解析响应并映射字段
                 return mapResponse(response.body(), endpoint.getResponseMapping());
 
             } catch (Exception e) {
+                System.err.println("Error fetching data: " + e.getMessage());
+                e.printStackTrace();
                 throw new RuntimeException("Failed to fetch data from data source: " + dataSource.getName(), e);
             }
         });
@@ -86,25 +90,75 @@ public class ConfigurableDataFetcher implements DataFetcher<CompletableFuture<Ma
         JsonNode root = objectMapper.readTree(responseBody);
         Map<String, Object> result = new HashMap<>();
 
+        System.out.println("Mapping response with mappings: " + fieldMappings);
+
         for (Map.Entry<String, String> mapping : fieldMappings.entrySet()) {
             String graphQLField = mapping.getKey();
             String jsonPath = mapping.getValue();
 
-            // 简单的 JSON 路径解析（支持 $.field 格式）
-            JsonNode value = root.at(jsonPath.startsWith("$.") ? jsonPath : "$." + jsonPath);
+            // 转换 JSONPath ($.field) 到 JSON Pointer (/field)
+            String jsonPointer = convertJsonPathToPointer(jsonPath);
+
+            System.out.println("Mapping field: " + graphQLField + " from path: " + jsonPath + " -> " + jsonPointer);
+
+            JsonNode value = root.at(jsonPointer);
             if (!value.isMissingNode()) {
-                if (value.isTextual()) {
-                    result.put(graphQLField, value.asText());
-                } else if (value.isNumber()) {
-                    result.put(graphQLField, value.asInt());
-                } else if (value.isBoolean()) {
-                    result.put(graphQLField, value.asBoolean());
-                } else {
-                    result.put(graphQLField, value);
-                }
+                Object fieldValue = extractValue(value);
+                result.put(graphQLField, fieldValue);
+                System.out.println("Mapped " + graphQLField + " = " + fieldValue);
+            } else {
+                System.out.println("Field not found: " + jsonPointer);
             }
         }
 
+        System.out.println("Final mapped result: " + result);
         return result;
+    }
+
+    private String convertJsonPathToPointer(String jsonPath) {
+        // 转换 $.field.subfield 到 /field/subfield
+        // 转换 $.field[0] 到 /field/0
+        if (jsonPath.startsWith("$.")) {
+            String path = jsonPath.substring(2); // 移除 "$."
+            // 将点分隔符转换为斜杠
+            path = path.replace('.', '/');
+            // 确保以斜杠开头
+            if (!path.startsWith("/")) {
+                path = "/" + path;
+            }
+            return path;
+        } else if (jsonPath.startsWith("$[")) {
+            // 处理数组情况
+            return jsonPath.substring(1); // 移除 "$" -> "/[0]" 等
+        } else {
+            // 默认情况，直接使用
+            return jsonPath.startsWith("/") ? jsonPath : "/" + jsonPath;
+        }
+    }
+
+    private Object extractValue(JsonNode node) {
+        if (node.isTextual()) {
+            return node.asText();
+        } else if (node.isNumber()) {
+            if (node.isInt()) {
+                return node.asInt();
+            } else if (node.isLong()) {
+                return node.asLong();
+            } else {
+                return node.asDouble();
+            }
+        } else if (node.isBoolean()) {
+            return node.asBoolean();
+        } else if (node.isArray()) {
+            // 处理数组
+            return objectMapper.convertValue(node, Object.class);
+        } else if (node.isObject()) {
+            // 处理对象
+            return objectMapper.convertValue(node, Object.class);
+        } else if (node.isNull()) {
+            return null;
+        } else {
+            return node.toString();
+        }
     }
 }
