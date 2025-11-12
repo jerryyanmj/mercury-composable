@@ -21,6 +21,7 @@ public class MockHttpServer {
     // 模拟数据存储
     private final Map<String, Map<String, Object>> userDatabase = new HashMap<>();
     private final Map<String, Map<String, Object>> postDatabase = new HashMap<>();
+    private final Map<String, Map<String, Object>> postRatingDatabase = new HashMap<>();
     private final Map<String, List<String>> userPostsDatabase = new HashMap<>();
 
     public MockHttpServer(int port) {
@@ -58,6 +59,14 @@ public class MockHttpServer {
                         "author", "author_" + userId,
                         "tags", List.of("tag" + j, "tech", "graphql")
                 ));
+                postRatingDatabase.put(postIdStr, Map.of(
+                        "id", "rating_" + postId,
+                        "postId", postId,
+                        "averageRating", calculateAverageRating(postIdStr),
+                        "totalRatings", calculateTotalRatings(postIdStr),
+                        "createdAt", "2024-01-15T10:30:00Z",
+                        "updatedAt", "2024-01-20T14:45:00Z"
+                ));
                 userPostIds.add(postIdStr);
                 postId++;
             }
@@ -77,6 +86,7 @@ public class MockHttpServer {
         // 注册API端点
         server.createContext("/api/user/", new UserHandler());
         server.createContext("/api/post/", new PostHandler());
+        server.createContext("/api/post-rating/", new PostRatingHandler());
         server.createContext("/api/posts", new UserPostsHandler());
 
         server.start();
@@ -84,6 +94,7 @@ public class MockHttpServer {
         System.out.println("Available endpoints:");
         System.out.println("  GET /api/user/{id}");
         System.out.println("  GET /api/post/{id}");
+        System.out.println("  GET /api/post-rating/{id}");
         System.out.println("  GET /api/posts?userId={userId}");
     }
 
@@ -140,6 +151,28 @@ public class MockHttpServer {
         }
     }
 
+    class PostRatingHandler implements HttpHandler {
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            if ("GET".equals(exchange.getRequestMethod())) {
+                String path = exchange.getRequestURI().getPath();
+                String postId = path.substring("/api/post-rating/".length());
+
+                System.out.println("MockServer: GET /api/post-rating/" + postId);
+
+                Map<String, Object> post = postRatingDatabase.get(postId);
+                if (post != null) {
+                    String response = toJson(post);
+                    sendResponse(exchange, response);
+                } else {
+                    sendError(exchange, 404, "Post not found: " + postId);
+                }
+            } else {
+                sendError(exchange, 405, "Method Not Allowed");
+            }
+        }
+    }
+
     // 用户帖子列表处理器
     class UserPostsHandler implements HttpHandler {
         @Override
@@ -157,10 +190,10 @@ public class MockHttpServer {
                         for (String postId : postIds) {
                             posts.add(postDatabase.get(postId));
                         }
-                        String response = toJson(Map.of("posts", posts));
+                        String response = toJson(posts);
                         sendResponse(exchange, response);
                     } else {
-                        sendResponse(exchange, toJson(Map.of("posts", List.of())));
+                        sendResponse(exchange, toJson(List.of()));
                     }
                 } else {
                     sendError(exchange, 400, "Missing userId parameter");
@@ -224,5 +257,15 @@ public class MockHttpServer {
         try (OutputStream os = exchange.getResponseBody()) {
             os.write(response.getBytes());
         }
+    }
+
+    private double calculateAverageRating(String postId) {
+        int hash = postId.hashCode();
+        return 3.5 + (Math.abs(hash % 16) / 10.0); // 3.5 到 5.0 之间的值
+    }
+
+    private int calculateTotalRatings(String postId) {
+        int hash = postId.hashCode();
+        return Math.abs(hash % 100) + 5; // 5 到 105 之间的值
     }
 }

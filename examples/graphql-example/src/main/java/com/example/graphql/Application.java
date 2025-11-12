@@ -22,6 +22,16 @@ public class Application {
     private static MockHttpServer mockServer;
 
     public static void main(String[] args) throws Exception {
+        mockServer = new MockHttpServer(9090);
+        mockServer.start();
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (mockServer != null) {
+                mockServer.stop();
+            }
+        }));
+
+        Thread.sleep(3000);
+
         DataSourceConfigManager dataSourceConfigManager = new DataSourceConfigManager();
         dataSourceConfigManager.loadDataSources("/datasources.json");
 
@@ -66,13 +76,7 @@ public class Application {
         SimpleGraphQLServer server = new SimpleGraphQLServer(8080, graphQLHandler);
         server.start();
 
-        mockServer = new MockHttpServer(9090);
-        mockServer.start();
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            if (mockServer != null) {
-                mockServer.stop();
-            }
-        }));
+
     }
 
     private static void registerSampleQueries(QueryRegistry registry) {

@@ -21,6 +21,21 @@
       "dataSources": {
         "post": "postService.getPost"
       }
+    },
+    {
+      "name": "getPostRating",
+      "queryString": "query GetPostRating($id: ID!) { getPostRating(id: $id) { id postId averageRating totalRatings } }",
+      "dataSources": {
+        "rating": "postService.getPostRating"
+      }
+    },
+    {
+      "name": "getPostWithRating",
+      "queryString": "query GetPostRating($id: ID!) { getPostWithRating(id: $id) { id title averageRating totalRatings } }",
+      "dataSources": {
+        "post": "postService.getPost",
+        "rating": "postService.getPostRating"
+      }
     }
   ]
 }

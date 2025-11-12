@@ -6,7 +6,7 @@ public class QueryDefinition {
     private String name;
     private String queryString;
     private Map<String, Object> variableSchema;
-    private Map<String, String> dataSources; // 新增：数据源映射
+    private Map<String, String> dataSources;
     private long createdAt;
 
     // 默认构造函数（用于 JSON 反序列化）

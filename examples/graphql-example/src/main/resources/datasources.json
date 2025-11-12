@@ -40,6 +40,18 @@
           "tags": "$.tags"
         }
       },
+      "getPostRating": {
+        "path": "/api/post-rating/{id}",
+        "method": "GET",
+        "responseMapping": {
+          "id": "$.id",
+          "postId": "$.postId",
+          "totalRatings": "$.totalRatings",
+          "createdAt": "$.createdAt",
+          "updatedAt": "$.updatedAt",
+          "averageRating": "$.averageRating"
+        }
+      },
       "getPostsByUser": {
         "path": "/api/posts?userId={userId}",
         "method": "GET",

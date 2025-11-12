@@ -14,6 +14,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -79,8 +80,14 @@ public class ConfigurableDataFetcher implements DataFetcher<Object> {
                 System.out.println("Found endpoint: " + endpointName + ", path: " + endpoint.getPath());
 
                 // 获取数据并合并到结果中
-                Map<String, Object> sourceData = fetchFromDataSource(dataSource, endpoint, environment);
-                result.putAll(sourceData);
+                var responseData = fetchFromDataSource(dataSource, endpoint, environment);
+
+                if (responseData instanceof Map) {
+                    System.out.println("Raw response keys: " + ((Map<?, ?>) responseData).keySet());
+                    result.putAll((Map<String, Object>) responseData);
+                } else if (responseData instanceof List) {
+                    result.put(sourceKey, responseData);
+                }
             }
 
             System.out.println("Final combined result: " + result.keySet());
@@ -88,31 +95,33 @@ public class ConfigurableDataFetcher implements DataFetcher<Object> {
 
         } catch (Exception e) {
             System.err.println("Error in ConfigurableDataFetcher for query " + query.getName() + ": " + e.getMessage());
-            return getDefaultData(environment); // 出错时回退到默认数据
+            return getDefaultData(environment);
         }
     }
 
-    private Map<String, Object> fetchFromDataSource(DataSourceConfig dataSource, EndpointConfig endpoint, DataFetchingEnvironment environment) {
+    private Object fetchFromDataSource(DataSourceConfig dataSource, EndpointConfig endpoint, DataFetchingEnvironment environment) {
         try {
             String id = environment.getArgument("id");
 
-            // 构建请求 URL（模拟 - 实际应该使用 HTTP 客户端）
             String path = endpoint.getPath().replace("{id}", id).replace("{userId}", id);
             String url = dataSource.getBaseUrl() + path;
 
             System.out.println("Mock calling: " + endpoint.getMethod() + " " + url);
 
-            // 模拟 HTTP 调用 - 返回模拟数据
-            // 在实际实现中，这里会使用 httpClient 发送真实请求
-            return getMockDataForEndpoint(dataSource.getName(), endpoint.getPath(), id);
+            Map<String, String> headers = endpoint.getHeaders() != null ?
+                    endpoint.getHeaders() : Map.of("Accept", "application/json");
 
+            return HttpFetcher.fetchHttp(
+                    url,
+                    endpoint.getMethod(),
+                    headers
+            );
         } catch (Exception e) {
             System.err.println("Failed to fetch from data source: " + dataSource.getName() + ", error: " + e.getMessage());
             return Map.of();
         }
     }
 
-    // 在 ConfigurableDataFetcher.java 中修复 getMockDataForEndpoint 方法
     private Map<String, Object> getMockDataForEndpoint(String serviceName, String endpointPath, String id) {
         System.out.println("Getting mock data for: " + serviceName + " - " + endpointPath + " - id: " + id);
 
@@ -122,7 +131,6 @@ public class ConfigurableDataFetcher implements DataFetcher<Object> {
             return Map.of("id", "error_" + id, "name", "Error: serviceName is null");
         }
 
-        // 根据服务名和端点路径返回对应的模拟数据
         if ("userService".equals(serviceName) && endpointPath.contains("/api/user/")) {
             return Map.of(
                     "id", id,
@@ -144,7 +152,6 @@ public class ConfigurableDataFetcher implements DataFetcher<Object> {
                     "tags", java.util.List.of("config", "graphql")
             );
         } else if ("postService".equals(serviceName) && endpointPath.contains("/api/posts?")) {
-            // 用户帖子列表
             return Map.of(
                     "posts", java.util.List.of(
                             Map.of("id", "config_post_1_" + id, "title", "Config Post 1 for " + id),
@@ -158,9 +165,8 @@ public class ConfigurableDataFetcher implements DataFetcher<Object> {
     }
 
     private Object getDefaultData(DataFetchingEnvironment environment) {
-        // 回退到 SimpleDataFetcherFactory 的逻辑
+        // Fall back to default data
         String id = environment.getArgument("id");
-
         if (query.getName().contains("WithPosts")) {
             return new SimpleDataFetcherFactory().getUserWithPostsData(id);
         } else if (query.getName().contains("Post")) {

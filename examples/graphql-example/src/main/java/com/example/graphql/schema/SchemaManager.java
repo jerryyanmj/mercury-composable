@@ -155,6 +155,28 @@ public class SchemaManager {
                 tags: [String]
             }
 
+            type PostRating {
+                id: ID!
+                postId: String
+                totalRatings: Float
+                createdAt: String
+                updatedAt: String
+                averageRating: Float
+            }
+
+            type PostWithRating {
+                id: ID!
+                postId: String
+                title: String
+                content: String
+                author: String
+                tags: [String]
+                totalRatings: Float
+                createdAt: String
+                updatedAt: String
+                averageRating: Float
+            }
+
             type UserWithPosts {
                 id: ID!
                 name: String
@@ -253,8 +275,12 @@ public class SchemaManager {
         // 基于查询名称和内容推断返回类型
         if (queryName.contains("WithPosts")) {
             return "UserWithPosts";
+        } else if (queryString.contains("Rating") && queryString.contains("title")) {
+            return "PostWithRating";
         } else if (queryString.contains("title") || queryString.contains("content")) {
             return "Post";
+        } else if (queryString.contains("Rating")) {
+            return "PostRating";
         } else {
             return "User";
         }
