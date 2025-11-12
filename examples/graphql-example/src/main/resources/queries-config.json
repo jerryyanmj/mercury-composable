@@ -18,6 +18,14 @@
       }
     },
     {
+      "name": "getPostsByUser",
+      "returnSchema": "[Post]",
+      "queryString": "query GetPostsByUser($id: ID!) { getPostsByUser(id: $id) {  id title } }",
+      "dataSources": {
+        "posts": "postService.getPostsByUser"
+      }
+    },
+    {
       "name": "getPostFull",
       "returnSchema": "Post",
       "queryString": "query GetPostFull($id: ID!) { getPostFull(id: $id) { id title content createdAt author tags } }",

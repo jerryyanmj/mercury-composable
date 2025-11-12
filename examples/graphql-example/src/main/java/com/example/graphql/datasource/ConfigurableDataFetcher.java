@@ -79,7 +79,6 @@ public class ConfigurableDataFetcher implements DataFetcher<Object> {
 
                 System.out.println("Found endpoint: " + endpointName + ", path: " + endpoint.getPath());
 
-                // 获取数据并合并到结果中
                 var responseData = fetchFromDataSource(dataSource, endpoint, environment);
 
                 if (responseData instanceof Map) {
@@ -91,6 +90,11 @@ public class ConfigurableDataFetcher implements DataFetcher<Object> {
             }
 
             System.out.println("Final combined result: " + result.keySet());
+
+            if (result.size() == 1 && result.get(result.keySet().toArray(new String[0])[0]) instanceof List<?>) {
+                return result.get(result.keySet().toArray(new String[0])[0]);
+            }
+
             return result;
 
         } catch (Exception e) {
