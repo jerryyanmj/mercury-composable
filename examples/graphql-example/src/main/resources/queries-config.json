@@ -9,7 +9,7 @@
     },
     {
       "name": "getUserWithPosts",
-      "queryString": "query GetUserWithPosts($id: ID!) { getUserWithPosts(id: $id) { id name email posts { id title } } }",
+      "queryString": "query GetUserWithPosts($id: ID!) { getUserWithPosts(id: $id) { id name email posts { id title } totalCount } }",
       "dataSources": {
         "user": "userService.getUser",
         "posts": "postService.getPostsByUser"

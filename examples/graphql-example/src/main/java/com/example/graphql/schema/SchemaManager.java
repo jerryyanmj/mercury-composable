@@ -1,5 +1,6 @@
 package com.example.graphql.schema;
 
+import com.example.graphql.datasource.CountFetcher;
 import com.example.graphql.datasource.DataFetcherFactory;
 import com.example.graphql.model.QueryDefinition;
 import com.example.graphql.registry.QueryRegistry;
@@ -186,6 +187,7 @@ public class SchemaManager {
                 phone: String
                 address: String
                 posts: [Post]
+                totalCount: Int
             }
         """);
 
@@ -202,7 +204,7 @@ public class SchemaManager {
 
         Set<String> registeredFields = new HashSet<>();
 
-        // 为每个查询配置 DataFetcher
+        // Register DataFetcher
         for (QueryDefinition query : queryRegistry.getAllQueries()) {
             String fieldName = extractFieldName(query.getQueryString());
             if (fieldName != null && !registeredFields.contains(fieldName)) {
@@ -214,11 +216,16 @@ public class SchemaManager {
             }
         }
 
-        // 如果没有配置任何 DataFetcher，添加一个默认的
+        // Add a default one
         if (registeredFields.isEmpty()) {
             wiringBuilder.type("Query", builder ->
                     builder.dataFetcher("defaultField", environment -> "Default value"));
         }
+
+        // Add count
+        wiringBuilder.type("UserWithPosts", builder ->
+            builder.dataFetcher("totalCount", new CountFetcher())
+        );
 
         return wiringBuilder.build();
     }
