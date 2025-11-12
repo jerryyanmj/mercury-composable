@@ -8,24 +8,25 @@ public class QueryDefinition {
     private Map<String, Object> variableSchema;
     private Map<String, String> dataSources;
     private long createdAt;
+    private String returnSchema;
 
-    // 默认构造函数（用于 JSON 反序列化）
     public QueryDefinition() {
         this.createdAt = System.currentTimeMillis();
         this.variableSchema = Map.of("id", Map.of("type", "string", "required", true));
     }
 
     // 全参数构造函数
-    public QueryDefinition(String name, String queryString, Map<String, String> dataSources) {
+    public QueryDefinition(String name, String queryString, String returnSchema, Map<String, String> dataSources) {
         this();
         this.name = name;
         this.queryString = queryString;
+        this.returnSchema = returnSchema;
         this.dataSources = dataSources != null ? dataSources : Map.of();
     }
 
     // 简化构造函数（向后兼容）
-    public QueryDefinition(String name, String queryString) {
-        this(name, queryString, Map.of());
+    public QueryDefinition(String name, String queryString, String returnSchema) {
+        this(name, queryString, returnSchema, Map.of());
     }
 
     // Getters and Setters
@@ -53,7 +54,6 @@ public class QueryDefinition {
         this.variableSchema = variableSchema != null ? variableSchema : Map.of();
     }
 
-    // 新增：数据源映射的 getter 和 setter
     public Map<String, String> getDataSources() {
         return dataSources != null ? dataSources : Map.of();
     }
@@ -70,6 +70,14 @@ public class QueryDefinition {
         this.createdAt = createdAt;
     }
 
+    public String getReturnSchema() {
+        return returnSchema;
+    }
+
+    public void setReturnSchema(String returnSchema) {
+        this.returnSchema = returnSchema;
+    }
+
     // 辅助方法：检查是否有数据源配置
     public boolean hasDataSources() {
         return dataSources != null && !dataSources.isEmpty();
@@ -84,6 +92,7 @@ public class QueryDefinition {
     public String toString() {
         return "QueryDefinition{" +
                 "name='" + name + '\'' +
+                ", returnSchema='" + returnSchema + '\'' +
                 ", queryString='" + queryString + '\'' +
                 ", dataSources=" + dataSources +
                 ", variableSchema=" + variableSchema +

@@ -2,6 +2,7 @@
   "queries": [
     {
       "name": "getUserFull",
+      "returnSchema": "User",
       "queryString": "query GetUserFull($id: ID!) { getUserFull(id: $id) { id name email fullName hobbies phone address } }",
       "dataSources": {
         "user": "userService.getUser"
@@ -9,6 +10,7 @@
     },
     {
       "name": "getUserWithPosts",
+      "returnSchema": "UserWithPosts",
       "queryString": "query GetUserWithPosts($id: ID!) { getUserWithPosts(id: $id) { id name email posts { id title } totalCount } }",
       "dataSources": {
         "user": "userService.getUser",
@@ -17,6 +19,7 @@
     },
     {
       "name": "getPostFull",
+      "returnSchema": "Post",
       "queryString": "query GetPostFull($id: ID!) { getPostFull(id: $id) { id title content createdAt author tags } }",
       "dataSources": {
         "post": "postService.getPost"
@@ -24,6 +27,7 @@
     },
     {
       "name": "getPostRating",
+      "returnSchema": "PostRating",
       "queryString": "query GetPostRating($id: ID!) { getPostRating(id: $id) { id postId averageRating totalRatings } }",
       "dataSources": {
         "rating": "postService.getPostRating"
@@ -31,6 +35,7 @@
     },
     {
       "name": "getPostWithRating",
+      "returnSchema": "PostWithRating",
       "queryString": "query GetPostRating($id: ID!) { getPostWithRating(id: $id) { id title averageRating totalRatings } }",
       "dataSources": {
         "post": "postService.getPost",

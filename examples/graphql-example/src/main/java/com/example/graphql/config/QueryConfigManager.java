@@ -19,7 +19,6 @@ public class QueryConfigManager {
                 return;
             }
 
-            // 读取配置文件
             JsonNode root = objectMapper.readTree(is);
             JsonNode queriesNode = root.get("queries");
 
@@ -28,6 +27,7 @@ public class QueryConfigManager {
                 for (JsonNode queryNode : queriesNode) {
                     String name = queryNode.get("name").asText();
                     String queryString = queryNode.get("queryString").asText();
+                    String returnSchema = queryNode.get("returnSchema").asText();
                     JsonNode dataSourcesNode = queryNode.get("dataSources");
 
                     Map<String, String> dataSources = null;
@@ -36,7 +36,7 @@ public class QueryConfigManager {
                                 objectMapper.getTypeFactory().constructMapType(Map.class, String.class, String.class));
                     }
 
-                    QueryDefinition query = new QueryDefinition(name, queryString, dataSources);
+                    QueryDefinition query = new QueryDefinition(name, queryString, returnSchema, dataSources);
                     queryRegistry.registerQuery(query);
                     loadedCount++;
 
@@ -47,7 +47,6 @@ public class QueryConfigManager {
 
         } catch (Exception e) {
             System.err.println("Failed to load query config: " + configPath + ", error: " + e.getMessage());
-            // 不抛出异常，保持向后兼容
         }
     }
 }

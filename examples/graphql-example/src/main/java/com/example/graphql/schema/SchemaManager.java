@@ -124,7 +124,6 @@ public class SchemaManager {
             }
         }
 
-        // 如果没有解析到任何字段，添加一个默认字段防止空 Query
         if (!hasFields) {
             System.out.println("WARNING: No query fields found in registry!");
             System.out.println("Registered queries: " + queryRegistry.getAllQueries().size());
@@ -265,8 +264,6 @@ public class SchemaManager {
     }
 
     private String extractFieldName(String queryString) {
-        // 使用查询配置的名称作为字段名，而不是从查询字符串中提取
-        // 这样可以确保字段名唯一且有意义
         for (QueryDefinition query : queryRegistry.getAllQueries()) {
             if (query.getQueryString().equals(queryString)) {
                 return query.getName();
@@ -276,20 +273,6 @@ public class SchemaManager {
     }
 
     private String inferReturnType(QueryDefinition query) {
-        String queryString = query.getQueryString();
-        String queryName = query.getName();
-
-        // 基于查询名称和内容推断返回类型
-        if (queryName.contains("WithPosts")) {
-            return "UserWithPosts";
-        } else if (queryString.contains("Rating") && queryString.contains("title")) {
-            return "PostWithRating";
-        } else if (queryString.contains("title") || queryString.contains("content")) {
-            return "Post";
-        } else if (queryString.contains("Rating")) {
-            return "PostRating";
-        } else {
-            return "User";
-        }
+        return query.getReturnSchema();
     }
 }

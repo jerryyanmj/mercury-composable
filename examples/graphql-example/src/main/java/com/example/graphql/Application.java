@@ -81,11 +81,11 @@ public class Application {
 
     private static void registerSampleQueries(QueryRegistry registry) {
         QueryDefinition userSimple = new QueryDefinition("getUserSimple",
-                "query GetUserSimple($id: ID!) { getUserSimple(id: $id) { id name } }");
+                "query GetUserSimple($id: ID!) { getUserSimple(id: $id) { id name } }", "User");
         registry.registerQuery(userSimple);
 
         QueryDefinition postSimple = new QueryDefinition("getPostSimple",
-                "query GetPostSimple($id: ID!) { getPostSimple(id: $id) { id title } }");
+                "query GetPostSimple($id: ID!) { getPostSimple(id: $id) { id title } }", "Post");
         registry.registerQuery(postSimple);
 
     }
