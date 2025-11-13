@@ -1,6 +1,7 @@
 package com.example.graphql.registry;
 
 import com.example.graphql.model.QueryDefinition;
+
 import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;

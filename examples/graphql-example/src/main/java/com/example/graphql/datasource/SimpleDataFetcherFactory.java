@@ -12,8 +12,6 @@ public class SimpleDataFetcherFactory implements DataFetcherFactory {
     @Override
     public DataFetcher<?> createDataFetcher(QueryDefinition query) {
         return environment -> {
-            // 简单的模拟数据返回
-            // 实际应该根据查询配置调用对应的 REST API
             String id = environment.getArgument("id");
 
             System.out.println("Executing query: " + query.getName() + " for id: " + id);

@@ -1,24 +1,24 @@
 // com/example/graphql/mock/EnhancedMockHttpServer.java
 package com.example.graphql.mock;
 
-import com.sun.net.httpserver.HttpServer;
-import com.sun.net.httpserver.HttpHandler;
 import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpHandler;
+import com.sun.net.httpserver.HttpServer;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.InetSocketAddress;
-import java.util.concurrent.Executors;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.Executors;
 
 public class MockHttpServer {
     private HttpServer server;
     private final int port;
 
-    // 模拟数据存储
+    // Data storage
     private final Map<String, Map<String, Object>> userDatabase = new HashMap<>();
     private final Map<String, Map<String, Object>> postDatabase = new HashMap<>();
     private final Map<String, Map<String, Object>> postRatingDatabase = new HashMap<>();
@@ -30,7 +30,6 @@ public class MockHttpServer {
     }
 
     private void initializeMockData() {
-        // 初始化用户数据
         for (int i = 1; i <= 5; i++) {
             String userId = String.valueOf(i);
             userDatabase.put(userId, Map.of(
@@ -44,7 +43,6 @@ public class MockHttpServer {
             ));
         }
 
-        // 初始化帖子数据
         int postId = 1;
         for (int userId = 1; userId <= 5; userId++) {
             List<String> userPostIds = new ArrayList<>();
@@ -105,7 +103,6 @@ public class MockHttpServer {
         }
     }
 
-    // 用户处理器
     class UserHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -128,7 +125,6 @@ public class MockHttpServer {
         }
     }
 
-    // 单个帖子处理器
     class PostHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -173,7 +169,6 @@ public class MockHttpServer {
         }
     }
 
-    // 用户帖子列表处理器
     class UserPostsHandler implements HttpHandler {
         @Override
         public void handle(HttpExchange exchange) throws IOException {
@@ -212,7 +207,6 @@ public class MockHttpServer {
     }
 
     private String toJson(Object obj) {
-        // 简化的JSON序列化
         if (obj instanceof Map) {
             Map<?, ?> map = (Map<?, ?>) obj;
             StringBuilder sb = new StringBuilder("{");

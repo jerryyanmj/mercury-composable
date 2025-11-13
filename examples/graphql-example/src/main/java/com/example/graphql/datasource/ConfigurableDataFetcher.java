@@ -4,36 +4,25 @@ import com.example.graphql.config.DataSourceConfig;
 import com.example.graphql.config.DataSourceConfigManager;
 import com.example.graphql.config.EndpointConfig;
 import com.example.graphql.model.QueryDefinition;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.schema.DataFetcher;
 import graphql.schema.DataFetchingEnvironment;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 public class ConfigurableDataFetcher implements DataFetcher<Object> {
     private final QueryDefinition query;
     private final DataSourceConfigManager configManager;
-    private final HttpClient httpClient;
-    private final ObjectMapper objectMapper;
 
     public ConfigurableDataFetcher(QueryDefinition query, DataSourceConfigManager configManager) {
         this.query = query;
         this.configManager = configManager;
-        this.httpClient = HttpClient.newHttpClient();
-        this.objectMapper = new ObjectMapper();
     }
 
     @Override
     public Object get(DataFetchingEnvironment environment) {
-        // 如果查询没有配置数据源，回退到默认行为
+        // Fallback to default if query not found (poc purpose)
         if (!query.hasDataSources()) {
             System.out.println("Query " + query.getName() + " has no data source configuration, using default behavior");
             return getDefaultData(environment);
@@ -46,14 +35,13 @@ public class ConfigurableDataFetcher implements DataFetcher<Object> {
         try {
             Map<String, Object> result = new HashMap<>();
 
-            // 为每个配置的数据源获取数据
+            // Fetch data from source
             for (Map.Entry<String, String> dataSourceEntry : query.getDataSources().entrySet()) {
                 String sourceKey = dataSourceEntry.getKey();
                 String dataSourceRef = dataSourceEntry.getValue();
 
                 System.out.println("Processing data source: " + sourceKey + " -> " + dataSourceRef);
 
-                // 解析数据源引用（格式：serviceName.endpointName）
                 String[] parts = dataSourceRef.split("\\.");
                 if (parts.length != 2) {
                     System.err.println("Invalid data source reference: " + dataSourceRef);

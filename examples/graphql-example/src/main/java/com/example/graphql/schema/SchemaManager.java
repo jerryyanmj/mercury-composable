@@ -5,12 +5,12 @@ import com.example.graphql.datasource.DataFetcherFactory;
 import com.example.graphql.model.QueryDefinition;
 import com.example.graphql.registry.QueryRegistry;
 import graphql.GraphQL;
+import graphql.schema.DataFetcher;
 import graphql.schema.GraphQLSchema;
 import graphql.schema.idl.RuntimeWiring;
 import graphql.schema.idl.SchemaGenerator;
 import graphql.schema.idl.SchemaParser;
 import graphql.schema.idl.TypeDefinitionRegistry;
-import graphql.schema.DataFetcher;
 
 import java.util.HashSet;
 import java.util.Set;
@@ -28,7 +28,7 @@ public class SchemaManager {
 
     public GraphQL buildGraphQL() {
         try {
-            // 构建动态 Schema
+            // Dynamic Schema Construction
             String schemaDefinition = buildSchemaDefinition();
             System.out.println("Generated Schema:\n" + schemaDefinition);
 
@@ -90,7 +90,6 @@ public class SchemaManager {
             }
         }
 
-        // 如果没有解析到任何字段，添加一个默认字段防止空 Query
         if (!hasFields) {
             schema.append("  defaultField: String\n");
         }
@@ -236,28 +235,24 @@ public class SchemaManager {
 
     private String extractQuerySignature(QueryDefinition query) {
         String queryString = query.getQueryString();
-        String queryName = query.getName();
+        String fieldName = query.getName();
 
-        // 使用查询配置的名称作为字段名，确保唯一性
-        String fieldName = queryName;
-
-        // 从查询字符串中提取参数信息
         Pattern paramPattern = Pattern.compile("\\$\\w+\\s*:\\s*(\\w+!?)");
         Matcher paramMatcher = paramPattern.matcher(queryString);
 
-        String paramType = "ID!"; // 默认参数类型
+        String paramType = "ID!";
         if (paramMatcher.find()) {
             paramType = paramMatcher.group(1);
         }
 
-        // 根据查询内容推断返回类型
-        String returnType = inferReturnType(query);
+        // Derive return schema
+        String returnType = query.getReturnSchema();
 
         return String.format("%s(id: %s): %s", fieldName, paramType, returnType);
     }
 
     private String extractFieldNameFromSignature(String signature) {
-        // 从签名中提取字段名，例如 "getUser(id: ID!): User" -> "getUser"
+        // query name can be retrieved from the signature %s(id: %s): %s
         if (signature == null) return null;
         int parenIndex = signature.indexOf('(');
         return parenIndex > 0 ? signature.substring(0, parenIndex).trim() : signature.trim();
@@ -270,9 +265,5 @@ public class SchemaManager {
             }
         }
         return null;
-    }
-
-    private String inferReturnType(QueryDefinition query) {
-        return query.getReturnSchema();
     }
 }

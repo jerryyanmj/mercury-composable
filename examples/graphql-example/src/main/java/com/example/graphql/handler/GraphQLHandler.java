@@ -6,7 +6,6 @@ import com.example.graphql.registry.QueryRegistry;
 import com.example.graphql.schema.SchemaManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.ExecutionInput;
-import graphql.ExecutionResult;
 import graphql.GraphQL;
 
 import java.util.concurrent.CompletableFuture;
@@ -26,7 +25,7 @@ public class GraphQLHandler {
 
     public CompletableFuture<String> execute(GraphQLRequest request) {
         try {
-            // 1. 从注册表获取查询定义
+            // Get Query from registry
             QueryDefinition queryDef = queryRegistry.getQuery(request.getQueryName());
             if (queryDef == null) {
                 throw new RuntimeException("Query not found: " + request.getQueryName());
@@ -37,7 +36,6 @@ public class GraphQLHandler {
             System.out.println("Query String: " + queryDef.getQueryString());
             System.out.println("Variables: " + request.getVariables());
 
-            // 2. 执行 GraphQL 查询
             ExecutionInput executionInput = ExecutionInput.newExecutionInput()
                     .query(queryDef.getQueryString())
                     .variables(request.getVariables())

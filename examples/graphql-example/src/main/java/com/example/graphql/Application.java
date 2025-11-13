@@ -6,8 +6,6 @@ import com.example.graphql.config.EndpointConfig;
 import com.example.graphql.config.QueryConfigManager;
 import com.example.graphql.datasource.ConfigurableDataFetcherFactory;
 import com.example.graphql.datasource.DataFetcherFactory;
-import com.example.graphql.datasource.DataSourceType;
-import com.example.graphql.datasource.SimpleDataFetcherFactory;
 import com.example.graphql.handler.GraphQLHandler;
 import com.example.graphql.mock.MockHttpServer;
 import com.example.graphql.model.QueryDefinition;

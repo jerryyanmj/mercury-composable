@@ -1,4 +1,8 @@
 package com.example.graphql.datasource;
+
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -6,8 +10,6 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class HttpFetcher {
     private static final HttpClient httpClient = HttpClient.newBuilder()
@@ -18,12 +20,10 @@ public class HttpFetcher {
 
     public static Object fetchHttp(String url, String method, Map<String, String> headers) {
         try {
-            // 构建请求
             HttpRequest.Builder requestBuilder = HttpRequest.newBuilder()
                     .uri(URI.create(url))
                     .timeout(Duration.ofSeconds(30));
 
-            // 设置方法
             switch (method.toUpperCase()) {
                 case "GET":
                     requestBuilder.GET();
@@ -35,7 +35,6 @@ public class HttpFetcher {
                     requestBuilder.GET();
             }
 
-            // 设置 headers
             if (headers != null) {
                 for (Map.Entry<String, String> header : headers.entrySet()) {
                     requestBuilder.header(header.getKey(), header.getValue());
@@ -44,25 +43,19 @@ public class HttpFetcher {
 
             HttpRequest request = requestBuilder.build();
 
-            // 发送请求
             HttpResponse<String> response = httpClient.send(
                     request,
                     HttpResponse.BodyHandlers.ofString()
             );
 
-            // 检查响应状态
             if (response.statusCode() >= 200 && response.statusCode() < 300) {
                 String responseBody = response.body().trim();
 
-                // 根据响应内容判断是对象还是数组
                 if (responseBody.startsWith("[")) {
-                    // 解析为数组/列表
                     return objectMapper.readValue(responseBody, new TypeReference<List<Object>>() {});
                 } else if (responseBody.startsWith("{")) {
-                    // 解析为对象/Map
                     return objectMapper.readValue(responseBody, new TypeReference<Map<String, Object>>() {});
                 } else {
-                    // 其他类型，返回原始字符串
                     return responseBody;
                 }
             } else {

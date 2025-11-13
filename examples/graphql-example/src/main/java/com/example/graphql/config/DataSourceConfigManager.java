@@ -1,8 +1,5 @@
-// com/example/graphql/config/DataSourceConfigManager.java
 package com.example.graphql.config;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.io.InputStream;
@@ -23,11 +20,9 @@ public class DataSourceConfigManager {
 
             System.out.println("Loading data sources from: " + configPath);
 
-            // 读取配置文件为数组格式
             List<DataSourceConfig> configList = objectMapper.readValue(is,
                     objectMapper.getTypeFactory().constructCollectionType(List.class, DataSourceConfig.class));
 
-            // 将数组转换为 Map
             for (DataSourceConfig config : configList) {
                 if (config.getName() != null) {
                     dataSources.put(config.getName(), config);

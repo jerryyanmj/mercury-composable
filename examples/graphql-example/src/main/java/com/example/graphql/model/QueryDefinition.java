@@ -15,7 +15,6 @@ public class QueryDefinition {
         this.variableSchema = Map.of("id", Map.of("type", "string", "required", true));
     }
 
-    // 全参数构造函数
     public QueryDefinition(String name, String queryString, String returnSchema, Map<String, String> dataSources) {
         this();
         this.name = name;
@@ -24,7 +23,6 @@ public class QueryDefinition {
         this.dataSources = dataSources != null ? dataSources : Map.of();
     }
 
-    // 简化构造函数（向后兼容）
     public QueryDefinition(String name, String queryString, String returnSchema) {
         this(name, queryString, returnSchema, Map.of());
     }
@@ -78,12 +76,10 @@ public class QueryDefinition {
         this.returnSchema = returnSchema;
     }
 
-    // 辅助方法：检查是否有数据源配置
     public boolean hasDataSources() {
         return dataSources != null && !dataSources.isEmpty();
     }
 
-    // 辅助方法：获取特定数据源
     public String getDataSource(String key) {
         return dataSources != null ? dataSources.get(key) : null;
     }
