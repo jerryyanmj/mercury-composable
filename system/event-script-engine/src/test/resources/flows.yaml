@@ -37,7 +37,10 @@ flows:
   - 'children/child-one.yml'
   - 'children/child-two.yml'
   - 'children/child-three.yml'
+  - 'children/echo-flow.yml'
   - 'http-client-by-config.yml'
   - 'autostart.yml'
+  - 'pluggableFunctions/arithmetic.yml'
+  - 'pluggableFunctions/types.yml'
 
 location: 'classpath:/flows/'

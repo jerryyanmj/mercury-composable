@@ -38,7 +38,6 @@ import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class EventEmitter {
     private static final Logger log = LoggerFactory.getLogger(EventEmitter.class);
@@ -85,8 +84,6 @@ public class EventEmitter {
     private boolean multicastEnabled = false;
     private boolean journalEnabled = false;
     private boolean eventHttpEnabled = false;
-    private boolean warm = false;
-    private static final AtomicInteger warmUpCounter = new AtomicInteger(0);
     private static final EventEmitter INSTANCE = new EventEmitter();
 
     private EventEmitter() {
@@ -722,25 +719,13 @@ public class EventEmitter {
         /*
          * The "event.script.manager" and "task.executor" are reserved function route names
          * for Event Script. The system will run them directly using virtual threads for
-         * performance optimization after warming up the virtual thread system.
+         * performance optimization.
          *
          * Since these two functions are event routers themselves, functional isolation,
          * serialization and I/O immutability are guaranteed.
-         *
-         * Therefore, it is safe to eliminate additional processing overheads.
          */
         if (TASK_EXECUTOR.equals(route) || EVENT_MANAGER.equals(route)) {
-            if (warm) {
-                Platform.getInstance().getVirtualThreadExecutor().submit(() ->
-                        runTaskExecutor(out, target.getManager().getService().getFunction()));
-            } else {
-                system.send(route, out.toBytes());
-                var counter = warmUpCounter.incrementAndGet();
-                if (counter > 8) {
-                    warm = true;
-                    log.info("Virtual thread optimization completed");
-                }
-            }
+            runTaskExecutor(out, target.getManager().getService().getFunction());
         } else {
             system.send(route, out.toBytes());
         }

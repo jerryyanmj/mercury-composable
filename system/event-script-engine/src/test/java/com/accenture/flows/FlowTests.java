@@ -40,15 +40,43 @@ import org.slf4j.LoggerFactory;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.InputStream;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.IntStream;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class FlowTests extends TestBase {
     private static final Logger log = LoggerFactory.getLogger(FlowTests.class);
     private static final String HTTP_CLIENT = "async.http.request";
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void httpClientByCodeTest() throws ExecutionException, InterruptedException {
+        final long timeout = 8000;
+        AsyncHttpRequest request = new AsyncHttpRequest();
+        request.setTargetHost(HOST).setMethod("POST")
+                .setHeader("accept", "application/json")
+                .setHeader("content-type", "application/json")
+                .setHeader("authorization", "Bearer demo123\r\n\r\n")
+                .setUrl("/api/echo/test");
+        request.setBody(Map.of("hello", "world"));
+        PostOffice po = new PostOffice("unit.test", "10A", "TEST /http/client/by/config");
+        EventEnvelope req = new EventEnvelope().setTo(HTTP_CLIENT).setBody(request);
+        EventEnvelope result = po.request(req, timeout).get();
+        assertInstanceOf(Map.class, result.getBody());
+        MultiLevelMap map = new MultiLevelMap((Map<String, Object>) result.getBody());
+        assertEquals("test", map.getElement("parameters.path.demo"));
+        assertInstanceOf(Map.class, map.getElement("body"));
+        assertEquals(Map.of("hello", "world"), map.getElement("body"));
+        assertEquals("Bearer demo123", map.getElement("headers.authorization"));
+        assertEquals("application/json", map.getElement("headers.accept"));
+        assertEquals("application/json", map.getElement("headers.content-type"));
+        assertEquals("async-http-client", map.getElement("headers.user-agent"));
+    }
 
     @SuppressWarnings("unchecked")
     @Test
@@ -60,7 +88,7 @@ class FlowTests extends TestBase {
                 .setHeader("content-type", "application/json")
                 .setUrl("/api/http/client/by/config/test");
         request.setBody(Map.of("hello", "world"));
-        PostOffice po = new PostOffice("unit.test", "10", "TEST /http/client/by/config");
+        PostOffice po = new PostOffice("unit.test", "10B", "TEST /http/client/by/config");
         EventEnvelope req = new EventEnvelope().setTo(HTTP_CLIENT).setBody(request);
         EventEnvelope result = po.request(req, timeout).get();
         assertInstanceOf(Map.class, result.getBody());
@@ -69,6 +97,10 @@ class FlowTests extends TestBase {
         assertEquals("world", map.getElement("parameters.query.hello"));
         assertInstanceOf(Map.class, map.getElement("body"));
         assertEquals(Map.of("hello", "world"), map.getElement("body"));
+        assertEquals("Bearer demo123", map.getElement("headers.authorization"));
+        assertEquals("application/json", map.getElement("headers.accept"));
+        assertEquals("application/json", map.getElement("headers.content-type"));
+        assertEquals("async-http-client", map.getElement("headers.user-agent"));
     }
 
     @SuppressWarnings("unchecked")
@@ -90,16 +122,16 @@ class FlowTests extends TestBase {
 
     @Test
     void externalStateMachineTest() throws InterruptedException, ExecutionException {
-        executeExtStateMachine("/api/ext/state/");
+        executeExtStateMachine("/api/ext/state/", "ext-101");
     }
 
     @Test
     void externalStateMachineFlowTest() throws InterruptedException, ExecutionException {
-        executeExtStateMachine("/api/ext/state/flow/");
+        executeExtStateMachine("/api/ext/state/flow/", "ext-102");
     }
 
     @SuppressWarnings("unchecked")
-    void executeExtStateMachine(String uriPath) throws InterruptedException, ExecutionException {
+    void executeExtStateMachine(String uriPath, String traceId) throws InterruptedException, ExecutionException {
         final long timeout = 8000;
         String placeholder = "test";
         var payload = Map.of("hello", "world");
@@ -107,7 +139,7 @@ class FlowTests extends TestBase {
         request1.setTargetHost(HOST).setMethod("PUT").setHeader("accept", "application/json")
                 .setHeader("content-type", "application/json").setBody(payload);
         request1.setUrl(uriPath+placeholder);
-        EventEmitter po = EventEmitter.getInstance();
+        PostOffice po = new PostOffice("unit.test", traceId, uriPath);
         EventEnvelope req1 = new EventEnvelope().setTo(HTTP_CLIENT).setBody(request1);
         EventEnvelope res1 = po.request(req1, timeout).get();
         assert res1 != null;
@@ -131,6 +163,10 @@ class FlowTests extends TestBase {
         Map<String, Object> result2 = (Map<String, Object>) res2.getBody();
         assertEquals(placeholder, result2.get("user"));
         assertEquals(payload, result2.get("payload"));
+        // we can also programmatically call the external state machine
+        var result = po.request(new EventEnvelope().setTo("v1.ext.state.machine")
+                                .setHeader("type", "clear").setHeader("key", "*"), 5000).get();
+        assertEquals(true, result.getBody());
     }
 
     @SuppressWarnings("unchecked")
@@ -541,6 +577,27 @@ class FlowTests extends TestBase {
     @SuppressWarnings("unchecked")
     @Test
     void parentGreetingTest() throws InterruptedException, ExecutionException {
+        // setup monitor for the task "my.greeting.task" in the flow "greetings"
+        final BlockingQueue<Map<String, Object>> before = new ArrayBlockingQueue<>(1);
+        final BlockingQueue<Map<String, Object>> after = new ArrayBlockingQueue<>(1);
+        var platform = Platform.getInstance();
+        var mock = new EventScriptMock("parent-greetings");
+        var functionRoute = mock.setMonitorBeforeTask("another.flow", "before.task.monitor")
+                                .setMonitorAfterTask("another.flow", "after.task.monitor")
+                                .getFunctionRoute("another.flow");
+        log.info("Monitoring {}", functionRoute);
+        TypedLambdaFunction<Map<String, Object>, Void> f1 =
+                (headers, input, instance) -> {
+                    before.add(input);
+                    return null;
+                };
+        platform.registerPrivate("before.task.monitor", f1, 1);
+        TypedLambdaFunction<Map<String, Object>, Void> f2 =
+                (headers, input, instance) -> {
+                    after.add(input);
+                    return null;
+                };
+        platform.registerPrivate("after.task.monitor", f2, 1);
         final long timeout = 8000;
         String placeholder = "test";
         AsyncHttpRequest request = new AsyncHttpRequest();
@@ -570,6 +627,29 @@ class FlowTests extends TestBase {
         assertEquals(placeholder, result.get("demo2"));
         // input mapping 'input.header -> header' relays all HTTP headers
         assertEquals("parent-greetings", result.get("demo3"));
+        var beforeMap = before.poll(timeout, TimeUnit.MILLISECONDS);
+        var afterMap = after.poll(timeout, TimeUnit.MILLISECONDS);
+        assertNotNull(beforeMap);
+        assertNotNull(afterMap);
+        // clean up
+        mock.clearMonitors("another.flow");
+        platform.release("before.task.monitor");
+        platform.release("after.task.monitor");
+        // assert monitored key-values
+        checkBeforeAfterDatasets(new MultiLevelMap(beforeMap), new MultiLevelMap(afterMap));
+    }
+
+    void checkBeforeAfterDatasets(MultiLevelMap mmBefore, MultiLevelMap mmAfter) {
+        // mmBefore contains state_machine (input and model), input_mapping and header
+        assertEquals("parent-greetings", mmBefore.getElement("state_machine.input.header.x-flow-id"));
+        assertEquals("GET", mmBefore.getElement("state_machine.input.method"));
+        assertEquals(12345, mmBefore.getElement("input_mapping.long_number"));
+        assertEquals("test", mmBefore.getElement("input_mapping.user"));
+        assertEquals("async-http-client", mmBefore.getElement("header.user-agent"));
+        assertEquals("ok", mmBefore.getElement("header.demo"));
+        // mmAfter contains input, output, model, status, header, result
+        assertEquals("event-script-tests", mmAfter.getElement("model.parent.name"));
+        assertEquals("hello", mmAfter.getElement("model.parent.hello"));
     }
 
     @SuppressWarnings("unchecked")
@@ -883,10 +963,15 @@ class FlowTests extends TestBase {
         forkJoin("/api/fork-n-join-flows/", true);
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     void forkJoinWithDynamicModeListTest() throws InterruptedException, ExecutionException {
-        var mockForkedTask = "mock.echo.me";
+        var mockForkTask = "mock.echo.me";
+        var mockJoinTask = "mock.join.task";
         ConcurrentMap<String, Integer> itemsAndIndexes = new ConcurrentHashMap<>();
+        // the mock.echo.one will receive the item and index values.
+        // after execution of each instance of mock.echo.one, the event script will send the item
+        // to an external state machine
         TypedLambdaFunction<Map<String, Object>, Object> f1 =
                 (headers, input, instance) -> {
                     Object item = input.get("item");
@@ -896,20 +981,50 @@ class FlowTests extends TestBase {
                     }
                     return input;
                 };
-        Platform.getInstance().registerPrivate(mockForkedTask, f1, 10);
-        var mock = new EventScriptMock("fork-n-join-with-dynamic-model-test");
-        mock.assignFunctionRoute("echo.me", mockForkedTask);
-        forkJoin("/api/fork-n-join-with-dynamic-model/", false);
+        // The mock.join.task will receive the result set from the flow "fork-n-join-with-dynamic-model-test"
+        // Inside the join task, it will make a Post Office call to retrieve the consolidated items
+        TypedLambdaFunction<Map<String, Object>, Object> f2 =
+                (headers, input, instance) -> {
+                    var po = new PostOffice(headers, instance);
+                    var result = po.request(new EventEnvelope().setTo("v1.ext.state.machine")
+                                                               .setHeader("key", "append")
+                                                               .setHeader("type", "get"), 5000).get();
+                    // add the consolidated result set to the original input
+                    input.put("append", result.getBody());
+                    return input;
+                };
+        Platform.getInstance().registerPrivate(mockForkTask, f1, 10);
+        Platform.getInstance().registerPrivate(mockJoinTask, f2, 10);
+        var mock1 = new EventScriptMock("fork-n-join-with-dynamic-model-test");
+
+        mock1.assignFunctionRoute("join.task", mockJoinTask);
+        var mock2 = new EventScriptMock("echo-flow");
+        mock2.assignFunctionRoute("echo.me", mockForkTask);
+
+        var result = forkJoin("/api/fork-n-join-with-dynamic-model/", false);
         assertEquals(5, itemsAndIndexes.size());
         assertEquals(0, itemsAndIndexes.get("one"));
         assertEquals(1, itemsAndIndexes.get("two"));
         assertEquals(2, itemsAndIndexes.get("three"));
         assertEquals(3, itemsAndIndexes.get("four"));
         assertEquals(4, itemsAndIndexes.get("five"));
+        var data = result.get("append");
+        assertInstanceOf(List.class, data);
+        var list1 = (List<String>) data;
+        assertEquals(5, list1.size());
+        log.info("Consolidated items {} must include one, two, three, four and five", list1);
+        var expected = Set.of("one", "two", "three", "four", "five");
+        // comparing the items as a set because the order is random due to parallelism
+        assertEquals(expected, new HashSet<>(list1));
+        var serialized = result.get("serialized");
+        assertInstanceOf(List.class, serialized);
+        var list2 = (List<String>) data;
+        assertEquals(5, list2.size());
+        assertEquals(expected, new HashSet<>(list2));
     }
 
     @SuppressWarnings("unchecked")
-    void forkJoin(String apiPath, boolean exception) throws InterruptedException, ExecutionException {
+    Map<String, Object> forkJoin(String apiPath, boolean exception) throws InterruptedException, ExecutionException {
         final int UNAUTHORIZED = 401;
         final long timeout = 8000;
         String placeholder = "test";
@@ -931,6 +1046,7 @@ class FlowTests extends TestBase {
                     "type", "error",
                     "status", UNAUTHORIZED), res.getBody());
             assertEquals(UNAUTHORIZED, res.getStatus());
+            return Collections.EMPTY_MAP;
         } else {
             Map<String, Object> result = (Map<String, Object>) res.getBody();
             PoJo pw = SimpleMapper.getInstance().getMapper().readValue(result, PoJo.class);
@@ -938,6 +1054,7 @@ class FlowTests extends TestBase {
             assertEquals(placeholder, pw.user);
             assertEquals("hello-world-one", pw.key1);
             assertEquals("hello-world-two", pw.key2);
+            return result;
         }
     }
 
@@ -1316,5 +1433,97 @@ class FlowTests extends TestBase {
                 flowExecutor.request("unit.test", traceId, "INTERNAL /flow/test",
                                         flowId, dataset, correlationId, timeout));
         assertEquals(error, ex.getMessage());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void shouldHandleArithmeticPluggableFunction() throws InterruptedException, ExecutionException {
+        final long timeout = 8000;
+        AsyncHttpRequest request = new AsyncHttpRequest();
+        request.setTargetHost(HOST)
+                .setMethod("GET")
+                .setHeader("accept", "application/json")
+                .setUrl("/api/pluggableFunctions/arithmetic");
+        EventEmitter po = EventEmitter.getInstance();
+        EventEnvelope req = EventEnvelope.of().setTo(HTTP_CLIENT).setBody(request);
+        EventEnvelope res = po.request(req, timeout).get();
+        assertNotNull(res);
+        assertInstanceOf(Map.class, res.getBody());
+        Map<String, Object> result = (Map<String, Object>) res.getBody();
+        assertNotNull(result);
+        assertEquals(11, result.get("sum"));
+        assertEquals(1, result.get("difference"));
+        assertEquals(12, result.get("product"));
+        assertEquals(3, result.get("quotient"));
+        assertEquals(7, result.get("incremented"));
+        assertEquals(5, result.get("decremented"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void shouldHandleConversionTypesPluggableFunction() throws InterruptedException, ExecutionException {
+        final long timeout = 8000;
+        AsyncHttpRequest request = new AsyncHttpRequest();
+        request.setTargetHost(HOST)
+                .setMethod("GET")
+                .setHeader("accept", "application/json")
+                .setUrl("/api/pluggableFunctions/types");
+        EventEmitter po = EventEmitter.getInstance();
+        EventEnvelope req = EventEnvelope.of().setTo(HTTP_CLIENT).setBody(request);
+        EventEnvelope res = po.request(req, timeout).get();
+        assertNotNull(res);
+        assertInstanceOf(Map.class, res.getBody());
+        Map<String, Object> result = (Map<String, Object>) res.getBody();
+        assertNotNull(result);
+        assertFalse(result.isEmpty());
+        assertEquals("Hello", result.get("string"));
+        assertEquals(256, result.get("integer"));
+        assertEquals(256, result.get("integer_convert"));
+        assertEquals(9223372036854775807L, result.get("long"));
+        assertEquals(9223372036854775807L, result.get("long_convert"));
+        assertEquals(128.5, result.get("float"));
+        assertEquals(128.5, result.get("float_convert"));
+        assertEquals(256.75d, result.get("double"));
+        assertEquals(256.75d, result.get("double_convert"));
+        // break into another function to satisfy SonarQube requirement
+        checkTypeAssertion(result);
+    }
+
+    private void checkTypeAssertion(Map<String, Object> result) {
+        assertEquals(true, result.get("bool_true"));
+        assertEquals(false, result.get("bool_false"));
+        assertEquals(true, result.get("bool_convert"));
+        assertEquals(false, result.get("and"));
+        assertEquals(true, result.get("or"));
+        assertEquals(true, result.get("not"));
+        assertEquals("Hello", result.get("positive_ternary"));
+        assertEquals(" World!", result.get("negative_ternary"));
+        assertEquals(true, result.get("positive_eq"));
+        assertEquals(false, result.get("negative_eq"));
+        assertEquals(true, result.get("greater_than_positive"));
+        assertEquals(false, result.get("greater_than_negative"));
+        assertEquals(true, result.get("less_than_positive"));
+        assertEquals(false, result.get("less_than_negative"));
+        assertEquals("World!", result.get("substring_one"));
+        assertEquals("World", result.get("substring_two"));
+        assertEquals("Hello World!", result.get("concat"));
+        var b64String = "SGVsbG8=";
+        var bytes = Base64.getDecoder().decode(b64String);
+        List<Integer> byteList = IntStream.range(0, bytes.length)
+                .map(i -> (int) bytes[i])
+                .boxed()
+                .toList();
+        assertEquals(byteList, result.get("to_b64_bytes"));
+        assertEquals(b64String, result.get("to_bytestring"));
+        assertTrue((Boolean) result.get("isNull"));
+        assertTrue((Boolean) result.get("isNotNull"));
+        UUID id = UUID.fromString((String) result.get("uuid"));
+        assertNotNull(id);
+        String date = (String) result.get("currentTime");
+        assertNotNull(date);
+        ZonedDateTime time = ZonedDateTime.parse(date, DateTimeFormatter.ISO_DATE_TIME);
+        assertNotNull(time);
+        assertEquals(5, result.get("arr_length"));
+        assertEquals(5, result.get("str_length"));
     }
 }

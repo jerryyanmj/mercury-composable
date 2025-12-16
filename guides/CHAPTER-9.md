@@ -207,6 +207,13 @@ Optionally, you can specify an `envInstances` parameter. This tells the system t
 application.properties (or application.yml) to configure the number of workers for the function. When the parameter
 defined in "envInstances" is not found, the "instances" parameter is used as the default value.
 
+You can override special services such as `no.op`, `reslience.handler`, and `simple.exception.handler` using the
+following properties:
+
+ - `worker.instances.no.op`
+ - `worker.instances.resilience.handler`
+ - `worker.instances.simple.exception.handler`
+
 ## Inspect event metadata
 
 There are some reserved metadata such as route name ("my_route"), trace ID ("my_trace_id") and trace path
@@ -684,6 +691,6 @@ API changes.
 For enterprise clients, technical support is available. Please contact your Accenture representative for details.
 <br/>
 
-|                Chapter-8                |                   Home                    |
-|:---------------------------------------:|:-----------------------------------------:|
-| [Minimalist Service Mesh](CHAPTER-8.md) | [Table of Contents](TABLE-OF-CONTENTS.md) | 
+|            Chapter-8            |                   Home                    |         CHAPTER-10          |
+|:-------------------------------:|:-----------------------------------------:|:---------------------------:|
+| [Event over HTTP](CHAPTER-6.md) | [Table of Contents](TABLE-OF-CONTENTS.md) | [Mini-Graph](CHAPTER-10.md) |

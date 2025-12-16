@@ -19,12 +19,10 @@
 package com.accenture.automation;
 
 import com.accenture.models.*;
+import com.accenture.utils.TypeConversionUtils;
 import org.platformlambda.core.annotations.EventInterceptor;
 import org.platformlambda.core.annotations.PreLoad;
-import org.platformlambda.core.models.EventEnvelope;
-import org.platformlambda.core.models.Kv;
-import org.platformlambda.core.models.TypedLambdaFunction;
-import org.platformlambda.core.models.VarSegment;
+import org.platformlambda.core.models.*;
 import org.platformlambda.core.serializers.SimpleMapper;
 import org.platformlambda.core.system.EventEmitter;
 import org.platformlambda.core.system.Platform;
@@ -56,6 +54,9 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
     private static final String FIRST_TASK = "first_task";
     private static final String FLOW_ID = "flow_id";
     private static final String PARENT = "parent";
+    private static final String ROOT = "root";
+    private static final String STATE_MACHINE = "state_machine";
+    private static final String INPUT_MAPPING = "input_mapping";
     private static final String FLOW_PROTOCOL = "flow://";
     private static final String TYPE = "type";
     private static final String PUT = "put";
@@ -73,6 +74,9 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
     private static final String RESULT = "result";
     private static final String DATA_TYPE = "datatype";
     private static final String HEADER = "header";
+    private static final String BODY = "body";
+    private static final String RETRY = "@retry";
+    private static final String TASK = "task";
     private static final String CODE = "code";
     private static final String STACK_TRACE = "stack";
     private static final String DECISION = "decision";
@@ -135,6 +139,7 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
     private static final String AND_TYPE = "and(";
     private static final String OR_TYPE = "or(";
     private final int maxModelArraySize;
+    private static final String SIMPLE_PLUGIN_PREFIX = "f:";
 
     private enum OPERATION {
         SIMPLE_COMMAND,
@@ -225,6 +230,12 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
             log.error("Unable to process callback {}:{} - missing task in {}", flowName, refId, caller);
             return;
         }
+        if (ref != null) {
+            var taskMetrics = flowInstance.metrics.get(ref.uuid);
+            if (taskMetrics != null) {
+                taskMetrics.complete();
+            }
+        }
         int statusCode = event.getStatus();
         if (statusCode >= 400 || event.isException()) {
             handleFunctionException(event, flowInstance, task, seq, statusCode);
@@ -232,7 +243,7 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
         }
         // clear top level exception state
         flowInstance.setExceptionAtTopLevel(false);
-        handleCallback(from, flowInstance, task, event, seq);
+        handleCallback(ref, from, flowInstance, task, event, seq);
     }
 
     private void handleFunctionException(EventEnvelope event, FlowInstance flowInstance, Task task,
@@ -262,6 +273,7 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
                 flowInstance.setExceptionAtTopLevel(true);
             }
             Map<String, Object> error = new HashMap<>();
+            error.put(TASK, task.service);
             error.put(CODE, statusCode);
             error.put(MESSAGE, event.getError());
             String stackTrace = event.getStackTrace();
@@ -294,15 +306,19 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
     }
 
     private void endFlow(FlowInstance flowInstance, boolean normal) {
-        flowInstance.close();
         Flows.closeFlowInstance(flowInstance.id);
         // clean up task references and release memory
-        flowInstance.pendingTasks.keySet().forEach(taskRefs::remove);
+        flowInstance.metrics.keySet().forEach(taskRefs::remove);
         String traceId = flowInstance.getTraceId();
         String logId = traceId != null? traceId : flowInstance.id;
         long diff = Math.max(0, System.currentTimeMillis() - flowInstance.getStartMillis());
         String formatted = Utility.getInstance().elapsedTime(diff);
-        List<String> taskList = new ArrayList<>(flowInstance.tasks);
+        List<TaskMetrics> taskList = new ArrayList<>(flowInstance.tasks);
+        List<Map<String, Object>> taskInfo = new ArrayList<>();
+        taskList.forEach(info ->
+                taskInfo.add(Map.of("name", info.getRoute(), "spent", info.getElapsed())));
+        // clean up flowInstance states
+        flowInstance.close();
         int totalExecutions = taskList.size();
         var payload = new HashMap<String, Object>();
         var metrics = new HashMap<String, Object>();
@@ -313,7 +329,7 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
         metrics.put("id", logId);
         metrics.put("service", TaskExecutor.SERVICE_NAME);
         metrics.put("from", EventScriptManager.SERVICE_NAME);
-        metrics.put("exec_time", diff);
+        metrics.put("exec_time", (float) diff);
         metrics.put("start", util.date2str(new Date(flowInstance.getStartMillis())));
         metrics.put("path", flowInstance.getTracePath());
         metrics.put(STATUS, normal? 200 : 400);
@@ -323,12 +339,12 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
         }
         annotations.put("execution", "Run " + totalExecutions +
                         " task" + (totalExecutions == 1? "" : "s") + " in " + formatted);
-        annotations.put("tasks", taskList);
+        annotations.put("tasks", taskInfo);
         annotations.put("flow", flowInstance.getFlow().id);
         EventEmitter.getInstance().send(new EventEnvelope().setTo(DISTRIBUTED_TRACING).setBody(payload));
     }
 
-    private void handleCallback(String from, FlowInstance flowInstance, Task task, EventEnvelope event, int seq) {
+    private void handleCallback(TaskReference ref, String from, FlowInstance flowInstance, Task task, EventEnvelope event, int seq) {
         Map<String, Object> combined = new HashMap<>();
         combined.put(INPUT, flowInstance.dataset.get(INPUT));
         combined.put(MODEL, flowInstance.dataset.get(MODEL));
@@ -363,7 +379,7 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
             handleEndTask(flowInstance, task, md.consolidated);
         }
         if (DECISION.equals(executionType)) {
-            handleDecisionTask(flowInstance, task, md.consolidated);
+            handleDecisionTask(ref, flowInstance, task, md.consolidated.getElement(DECISION));
         }
         // consolidated dataset should be mapped to model for normal tasks
         if (SEQUENTIAL.equals(executionType)) {
@@ -381,12 +397,27 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
     }
 
     private void performOutputDataMapping(OutputMappingMetadata md, FlowInstance flowInstance, Task task) {
-        List<String> mapping = task.output;
-        for (String entry: mapping) {
-            md.sep = entry.lastIndexOf(MAP_TO);
-            if (md.sep > 0) {
-                doOutputDataMappingEntry(md, entry, flowInstance, task);
+        /*
+         * Java virtual thread system is backed by multiple kernel threads.
+         * Therefore, to ensure the state machine is updated in a thread safe manner,
+         * this block applies a thread-safety lock per flow instance.
+         */
+        flowInstance.outputSafety.lock();
+        try {
+            List<String> mapping = task.output;
+            for (String entry : mapping) {
+                md.sep = entry.lastIndexOf(MAP_TO);
+                if (md.sep > 0) {
+                    doOutputDataMappingEntry(md, entry, flowInstance, task);
+                }
             }
+        } finally {
+            flowInstance.outputSafety.unlock();
+        }
+        // has output data mapping monitor?
+        var monitor = task.getMonitorAfterTask();
+        if (monitor != null) {
+            EventEmitter.getInstance().send(monitor, filterModelRoot(md.consolidated.getMap()));
         }
     }
 
@@ -619,8 +650,7 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
         endFlow(flowInstance, true);
     }
 
-    private void handleDecisionTask(FlowInstance flowInstance, Task task, MultiLevelMap map) {
-        Object decisionValue = map.getElement(DECISION);
+    private void handleDecisionTask(TaskReference ref, FlowInstance flowInstance, Task task, Object decisionValue) {
         List<String> nextTasks = task.nextSteps;
         final int decisionNumber;
         if (decisionValue instanceof Boolean) {
@@ -637,7 +667,36 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
             abortFlow(flowInstance, 500,
                     "Task "+task.service+" returned invalid decision ("+decisionValue+")");
         } else {
-            executeTask(flowInstance, nextTasks.get(decisionNumber - 1));
+            decideNextTask(ref, flowInstance, task, nextTasks, decisionNumber);
+        }
+    }
+
+    private void decideNextTask(TaskReference ref, FlowInstance flowInstance, Task task,
+                                List<String> nextTasks, int decisionNumber) {
+        var nextList = getDecision(nextTasks.get(decisionNumber - 1));
+        if (decisionNumber == 1 && RETRY.equals(nextList.getFirst())) {
+            if (ref.errorTask != null) {
+                executeTask(flowInstance, ref.errorTask);
+            } else if (nextList.size() > 1) {
+                executeTask(flowInstance, nextList.get(1));
+            } else {
+                log.error("Flow {}:{} {} does not have a previous task {}",
+                        flowInstance.getFlow().id, flowInstance.id, task.service, nextList);
+                abortFlow(flowInstance, 500,
+                        "Task "+task.service+" does not have a previous task "+nextList);
+            }
+        } else {
+            executeTask(flowInstance, nextList.getFirst());
+        }
+    }
+
+    private List<String> getDecision(String text) {
+        if (text.contains("|")) {
+            var nextList = util.split(text, "| ");
+            Collections.sort(nextList);
+            return nextList;
+        } else {
+            return List.of(text);
         }
     }
 
@@ -797,20 +856,19 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
     }
 
     private void executeTask(FlowInstance flowInstance, String processName, int seq, Map<String, Object> error, int dynamicListIndex, String dynamicListKey) {
-        Task task = flowInstance.getFlow().tasks.get(processName);
+        var task = flowInstance.getFlow().tasks.get(processName);
         if (task == null) {
             log.error("Unable to process flow {}:{} - missing task '{}'",
                     flowInstance.getFlow().id, flowInstance.id, processName);
             abortFlow(flowInstance, 500, SERVICE_AT +processName+" not defined");
             return;
         }
-        // add the task to the flow-instance
-        String functionRoute = task.getFunctionRoute();
-        flowInstance.tasks.add(task.service.equals(functionRoute)? functionRoute : task.service+"("+functionRoute+")");
+        String errorTask = null;
         Map<String, Object> combined = new HashMap<>();
         combined.put(INPUT, flowInstance.dataset.get(INPUT));
         combined.put(MODEL, flowInstance.dataset.get(MODEL));
-        if (error != null) {
+        if (error != null && error.get(TASK) instanceof String et) {
+            errorTask = et;
             combined.put(ERROR, error);
         }
         var md = new InputMappingMetadata(combined);
@@ -822,42 +880,42 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
         } else if (task.getDelayVar() != null) {
             deferred = getDelayedVariable(md, flowInstance, task);
         }
-        final Platform platform = Platform.getInstance();
-        final String uuid = util.getDateUuid();
-        final TaskReference ref = new TaskReference(flowInstance.id, task.service);
+        final var uuid = util.getDateUuid();
+        final var ref = new TaskReference(uuid, flowInstance.id, task.service, errorTask);
         taskRefs.put(uuid, ref);
-        flowInstance.pendingTasks.put(uuid, true);
-        final String compositeCid = seq > 0? uuid + "#" + seq : uuid;
+        // add task metrics and pending status to the flow-instance
+        var functionRoute = task.getFunctionRoute();
+        var taskMetrics = new TaskMetrics(task.service, functionRoute);
+        flowInstance.metrics.put(uuid, taskMetrics);
+        flowInstance.tasks.add(taskMetrics);
+        final var compositeCid = seq > 0? uuid + "#" + seq : uuid;
         if (functionRoute.startsWith(FLOW_PROTOCOL)) {
-            String flowId = functionRoute.substring(FLOW_PROTOCOL.length());
-            Flow subFlow = Flows.getFlow(flowId);
+            var flowId = functionRoute.substring(FLOW_PROTOCOL.length());
+            var subFlow = Flows.getFlow(flowId);
             if (subFlow == null) {
                 log.error("Unable to process flow {}:{} - missing sub-flow {}",
                         flowInstance.getFlow().id, flowInstance.id, functionRoute);
                 abortFlow(flowInstance, 500, functionRoute+" not defined");
                 return;
             }
+            Map<String, Object> dataset = new HashMap<>();
+            dataset.put(BODY, md.target.getMap());
             if (!md.optionalHeaders.isEmpty()) {
-                md.target.setElement(HEADER, md.optionalHeaders);
+                dataset.put(HEADER, md.optionalHeaders);
             }
-            EventEnvelope forward = new EventEnvelope().setTo(EventScriptManager.SERVICE_NAME)
-                    .setHeader(PARENT, flowInstance.id)
-                    .setHeader(FLOW_ID, flowId).setBody(md.target.getMap()).setCorrelationId(util.getUuid());
-            PostOffice po = new PostOffice(functionRoute, flowInstance.getTraceId(), flowInstance.getTracePath());
-            po.asyncRequest(forward, subFlow.ttl, false).onSuccess(response -> {
-                EventEnvelope event = new EventEnvelope()
-                        .setTo(TaskExecutor.SERVICE_NAME + "@" + platform.getOrigin())
-                        .setCorrelationId(compositeCid).setStatus(response.getStatus())
-                        .setHeaders(response.getHeaders()).setBody(response.getBody());
-                po.send(event);
-            });
+            // execute a subflow
+            var forward = new EventEnvelope().setTo(EventScriptManager.SERVICE_NAME)
+                                                .setReplyTo(TaskExecutor.SERVICE_NAME)
+                                                .setHeader(PARENT, flowInstance.id)
+                                                .setHeader(FLOW_ID, flowId).setBody(dataset)
+                                                .setCorrelationId(compositeCid);
+            var po = new PostOffice(functionRoute, flowInstance.getTraceId(), flowInstance.getTracePath());
+            po.send(forward);
         } else {
-            PostOffice po = new PostOffice(TaskExecutor.SERVICE_NAME,
+            var po = new PostOffice(TaskExecutor.SERVICE_NAME,
                                             flowInstance.getTraceId(), flowInstance.getTracePath());
-            EventEnvelope event = new EventEnvelope().setTo(functionRoute)
-                    .setCorrelationId(compositeCid)
-                    .setReplyTo(TaskExecutor.SERVICE_NAME + "@" + platform.getOrigin())
-                    .setBody(md.target.getMap());
+            var event = new EventEnvelope().setTo(functionRoute).setReplyTo(TaskExecutor.SERVICE_NAME)
+                                            .setCorrelationId(compositeCid).setBody(md.target.getMap());
             md.optionalHeaders.forEach(event::setHeader);
             // execute task by sending event
             if (deferred > 0) {
@@ -866,6 +924,19 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
                 po.send(event);
             }
         }
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> filterModelRoot(Map<String, Object> stateMachine) {
+        // do a shallow copy and remove the alias model.root
+        Map<String, Object> result = new HashMap<>(stateMachine);
+        var original = result.get(MODEL);
+        if (original instanceof Map) {
+            Map<String, Object> filtered = new HashMap<>((Map<String, Object>) original);
+            filtered.remove(ROOT);
+            result.put(MODEL, filtered);
+        }
+        return result;
     }
 
     private long getDelayedVariable(InputMappingMetadata md, FlowInstance flowInstance, Task task) {
@@ -887,12 +958,30 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
 
     private void performInputDataMapping(InputMappingMetadata md, FlowInstance flowInstance, Task task,
                                          int dynamicListIndex, String dynamicListKey) {
-        List<String> mapping = task.input;
-        for (String entry: mapping) {
-            int sep = entry.lastIndexOf(MAP_TO);
-            if (sep > 0) {
-                doInputDataMappingEntry(md, flowInstance, task, entry, sep, dynamicListIndex, dynamicListKey);
+        /*
+         * Java virtual thread system is backed by multiple kernel threads.
+         * Therefore, to ensure the state machine is updated in a thread safe manner,
+         * this block applies a thread-safety lock per flow instance.
+         */
+        flowInstance.inputSafety.lock();
+        try {
+            List<String> mapping = task.input;
+            for (String entry: mapping) {
+                int sep = entry.lastIndexOf(MAP_TO);
+                if (sep > 0) {
+                    doInputDataMappingEntry(md, flowInstance, task, entry, sep, dynamicListIndex, dynamicListKey);
+                }
             }
+        } finally {
+            flowInstance.inputSafety.unlock();
+        }
+        // has input data mapping monitor?
+        var monitor = task.getMonitorBeforeTask();
+        if (monitor != null) {
+            EventEmitter.getInstance().send(monitor,
+                    Map.of(STATE_MACHINE, filterModelRoot(flowInstance.dataset),
+                            HEADER, md.optionalHeaders,
+                            INPUT_MAPPING, md.target.getMap()));
         }
     }
 
@@ -902,12 +991,14 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
         md.rhs = substituteDynamicIndex(entry.substring(sep+2).trim(), md.source, true);
         boolean inputLike = md.lhs.startsWith(INPUT_NAMESPACE) || md.lhs.equalsIgnoreCase(INPUT) ||
                 md.lhs.equals(DATA_TYPE) ||
-                md.lhs.startsWith(MODEL_NAMESPACE) || md.lhs.startsWith(ERROR_NAMESPACE);
+                md.lhs.startsWith(MODEL_NAMESPACE) || md.lhs.startsWith(ERROR_NAMESPACE) ||
+                md.lhs.startsWith(SIMPLE_PLUGIN_PREFIX);
         if (md.lhs.startsWith(INPUT_HEADER_NAMESPACE)) {
             md.lhs = md.lhs.toLowerCase();
         }
         if (md.rhs.startsWith(EXT_NAMESPACE)) {
-            final Object value = inputLike? getLhsElement(md.lhs, md.source) : getConstantValue(md.lhs);
+            final Object value = inputLike? getInputDataMappingLhsValue(md, dynamicListIndex, dynamicListKey) :
+                                            getConstantValue(md.lhs);
             callExternalStateMachine(flowInstance, task, md.rhs, value);
         } else if (md.rhs.startsWith(MODEL_NAMESPACE)) {
             setInputDataMappingModelVar(md, flowInstance, inputLike);
@@ -1078,12 +1169,41 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
     private Object getLhsElement(String lhs, MultiLevelMap source) {
         int colon = getModelTypeIndex(lhs);
         String selector = colon == -1? lhs : lhs.substring(0, colon).trim();
+        if (isPluggableFunction(selector)) {
+            return getValueFromSimplePlugin(selector, source);
+        }
         Object value = source.getElement(selector);
         if (colon != -1) {
             String type = lhs.substring(colon+1).trim();
             return getValueByType(type, value, "LHS '"+lhs+"'", source);
         }
         return value;
+    }
+
+    private boolean isPluggableFunction(String selector){
+        return selector != null && selector.startsWith("f:");
+    }
+
+    private Object getValueFromSimplePlugin(String selector, MultiLevelMap source){
+        int prefix = selector.indexOf(SIMPLE_PLUGIN_PREFIX);
+        int startParen = selector.indexOf("(");
+        int endParen = selector.lastIndexOf(")");
+        if (prefix >= 0 && startParen > 0 && endParen > 0) {
+            String pluginName = selector.substring(prefix+2, startParen);
+            String pluginParams = selector.substring(startParen+1, endParen);
+            List<String> params = Utility.getInstance().split(pluginParams, ",");
+            Object[] input = params.stream()
+                                    .map(String::trim)
+                                    .map(source::getElement)
+                                    .toArray();
+            PluginFunction plugin = SimplePluginLoader.getSimplePluginByName(pluginName);
+            if (plugin == null) {
+                log.error("SimplePlugin '{}' not found", pluginName);
+                throw new IllegalArgumentException("Unable to process SimplePlugin: " + selector);
+            }
+            return plugin.calculate(input);
+        }
+        return null;
     }
 
     private Object getDynamicListItem(String dynamicListKey, int dynamicListIndex, MultiLevelMap source) {
@@ -1241,7 +1361,7 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
                     } else if (selection == OPERATION.AND_COMMAND || selection == OPERATION.OR_COMMAND) {
                         return getLogicalOperation(value, command, data, selection);
                     } else if (selection == OPERATION.BOOLEAN_COMMAND) {
-                        return getBooleanValue(value, command);
+                        return TypeConversionUtils.getBooleanValue(value, command);
                     }
                 } else {
                     throw new IllegalArgumentException("missing close bracket");
@@ -1256,10 +1376,10 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
     private Object handleSimpleOperation(String type, Object value) {
         switch (type) {
             case TEXT_SUFFIX -> {
-                return getTextValue(value);
+                return TypeConversionUtils.getTextValue(value);
             }
             case BINARY_SUFFIX -> {
-                return getBinaryValue(value);
+                return TypeConversionUtils.getBinaryValue(value);
             }
             case BOOLEAN_SUFFIX -> {
                 return TRUE.equalsIgnoreCase(String.valueOf(value));
@@ -1283,55 +1403,14 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
                 return util.getUuid4();
             }
             case LENGTH_SUFFIX -> {
-                return getLength(value);
+                return TypeConversionUtils.getLength(value);
             }
             case B64_SUFFIX -> {
-                return getB64(value);
+                return TypeConversionUtils.getB64(value);
             }
             default -> throw new IllegalArgumentException("matching type must be " +
                         "substring(start, end), concat, boolean, !, and, or, text, binary, uuid or b64");
         }
-    }
-
-    private String getTextValue(Object value) {
-        return switch (value) {
-            case String str -> str;
-            case byte[] b -> util.getUTF(b);
-            case Map<?, ?> map -> SimpleMapper.getInstance().getMapper().writeValueAsString(map);
-            default -> String.valueOf(value);
-        };
-    }
-
-    private byte[] getBinaryValue(Object value) {
-        return switch (value) {
-            case byte[] b -> b;
-            case String str -> util.getUTF(str);
-            case Map<?, ?> map -> SimpleMapper.getInstance().getMapper().writeValueAsBytes(map);
-            default -> util.getUTF(String.valueOf(value));
-        };
-    }
-
-    private int getLength(Object value) {
-        return switch (value) {
-            case null -> 0;
-            case byte[] b -> b.length;
-            case String str -> str.length();
-            case List<?> item -> item.size();
-            default -> String.valueOf(value).length();
-        };
-    }
-
-    private Object getB64(Object value) {
-        if (value instanceof byte[] b) {
-            return util.bytesToBase64(b);
-        } else if (value instanceof String str) {
-            try {
-                return util.base64ToBytes(str);
-            } catch (IllegalArgumentException e) {
-                throw new IllegalArgumentException("invalid base64 text");
-            }
-        }
-        return value;
     }
 
     private String getSubstring(Object value, String command) {
@@ -1381,31 +1460,6 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
             return selection == OPERATION.AND_COMMAND ? v1 && v2 : v1 || v2;
         } else {
             throw new IllegalArgumentException("'" + command + "' is not a model variable");
-        }
-    }
-
-    private boolean getBooleanValue(Object value, String command) {
-        List<String> parts = util.split(command, ",=");
-        List<String> filtered = new ArrayList<>();
-        parts.forEach(d -> {
-            var txt = d.trim();
-            if (!txt.isEmpty()) {
-                filtered.add(txt);
-            }
-        });
-        if (!filtered.isEmpty() && filtered.size() < 3) {
-            // Enforce value to a text string where null value will become "null".
-            // Therefore, null value or "null" string in the command is treated as the same.
-            String str = String.valueOf(value);
-            boolean condition = filtered.size() == 1 || TRUE.equalsIgnoreCase(filtered.get(1));
-            String target = filtered.getFirst();
-            if (str.equals(target)) {
-                return condition;
-            } else {
-                return !condition;
-            }
-        } else {
-            throw new IllegalArgumentException("invalid syntax");
         }
     }
 
@@ -1463,17 +1517,25 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private void setRhsElement(Object value, String rhs, MultiLevelMap target) {
-        boolean updated = false;
         int colon = getModelTypeIndex(rhs);
         String selector = colon == -1? rhs : rhs.substring(0, colon).trim();
         if (colon != -1) {
             String type = rhs.substring(colon+1).trim();
             Object matched = getValueByType(type, value, "RHS '"+rhs+"'", target);
             target.setElement(selector, matched);
-            updated = true;
-        }
-        if (!updated) {
+        } else {
+            if (selector.startsWith(MODEL_NAMESPACE)) {
+                if (value instanceof Map) {
+                    target.setElement(selector, util.deepCopy((Map<String, Object>) value));
+                    return;
+                }
+                if (value instanceof List) {
+                    target.setElement(selector, util.deepCopy((List<Object>) value));
+                    return;
+                }
+            }
             target.setElement(selector, value);
         }
     }
@@ -1614,7 +1676,7 @@ public class TaskExecutor implements TypedLambdaFunction<EventEnvelope, Void> {
         }
     }
 
-    private record TaskReference(String flowInstanceId, String processId) { }
+    private record TaskReference(String uuid, String flowInstanceId, String processId, String errorTask) { }
 
     private static class OutputMappingMetadata {
         MultiLevelMap consolidated;

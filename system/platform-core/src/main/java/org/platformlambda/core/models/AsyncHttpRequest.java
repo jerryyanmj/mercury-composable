@@ -129,7 +129,7 @@ public class AsyncHttpRequest {
 
     public AsyncHttpRequest setHeader(String key, String value) {
         // filter out CR and LF
-        var v = value == null? "" : value.replace("\r", "").replace("\n", " ");
+        var v = value == null? "" : value.replace("\r", "").replace("\n", "");
         headers.put(key, v);
         return this;
     }
@@ -317,6 +317,10 @@ public class AsyncHttpRequest {
         return this;
     }
 
+    public boolean isContentLengthDefined() {
+        return contentLength != -1;
+    }
+
     public int getContentLength() {
         return Math.max(0, contentLength);
     }
@@ -336,7 +340,7 @@ public class AsyncHttpRequest {
 
     public AsyncHttpRequest setSessionInfo(String key, String value) {
         // filter out CR and LF
-        var v = value == null? "" : value.replace("\r", "").replace("\n", " ");
+        var v = value == null? "" : value.replace("\r", "").replace("\n", "");
         session.put(key, v);
         return this;
     }
@@ -381,7 +385,7 @@ public class AsyncHttpRequest {
 
     public AsyncHttpRequest setPathParameter(String key, String value) {
         // filter out CR and LF
-        var v = value == null? "" : value.replace("\r", "").replace("\n", " ");
+        var v = value == null? "" : value.replace("\r", "").replace("\n", "");
         pathParams.put(key, v);
         return this;
     }
@@ -637,6 +641,7 @@ public class AsyncHttpRequest {
         if (input instanceof AsyncHttpRequest source) {
             copy(source);
         } else if (input instanceof Map<?, ?> map) {
+            copyHeadersFromMap(map);
             copyKeyValuesFromMap(map);
             copyFileMetadataFromMap(map);
             if (map.containsKey(PARAMETERS)) {
@@ -672,17 +677,25 @@ public class AsyncHttpRequest {
         this.queryParams = source.queryParams;
     }
 
-    @SuppressWarnings("unchecked")
+    private void copyHeadersFromMap(Map<?, ?> map) {
+        if (map.get(HTTP_HEADERS) instanceof Map<?, ?> m) {
+            for (var entry : m.entrySet()) {
+                setHeader(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+            }
+        }
+        if (map.get(HTTP_COOKIES) instanceof Map<?, ?> c) {
+            for (var entry : c.entrySet()) {
+                setCookie(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+            }
+        }
+        if (map.get(HTTP_SESSION) instanceof Map<?, ?> s) {
+            for (var entry : s.entrySet()) {
+                setSessionInfo(String.valueOf(entry.getKey()), String.valueOf(entry.getValue()));
+            }
+        }
+    }
+
     private void copyKeyValuesFromMap(Map<?, ?> map) {
-        if (map.get(HTTP_HEADERS) instanceof Map) {
-            headers = (Map<String, String>) map.get(HTTP_HEADERS);
-        }
-        if (map.get(HTTP_COOKIES) instanceof Map) {
-            cookies = (Map<String, String>) map.get(HTTP_COOKIES);
-        }
-        if (map.get(HTTP_SESSION) instanceof Map) {
-            session = (Map<String, String>) map.get(HTTP_SESSION);
-        }
         if (map.get(HTTP_METHOD) instanceof String httpMethod) {
             method = httpMethod;
         }

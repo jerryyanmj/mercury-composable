@@ -312,7 +312,7 @@ rest:
     tracing: true
 
   - service: "echo.endpoint"
-    methods: ['PUT']
+    methods: ['POST']
     url: "/api/echo/{demo}"
     timeout: 10s
     tracing: true
@@ -322,6 +322,24 @@ rest:
     url: "/api/http/client/by/config/{demo}"
     flow: 'http-client-by-config'
     timeout: 10s
+    tracing: true
+
+  - service: "http.flow.adapter"
+    methods: ['GET']
+    url: "/api/pluggableFunctions/arithmetic"
+    flow: 'arithmetic'
+    timeout: 10s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  - service: "http.flow.adapter"
+    methods: [ 'GET' ]
+    url: "/api/pluggableFunctions/types"
+    flow: 'type-conversion'
+    timeout: 10s
+    cors: cors_1
+    headers: header_1
     tracing: true
 #
 # CORS HEADERS for pre-flight (HTTP OPTIONS) and normal responses

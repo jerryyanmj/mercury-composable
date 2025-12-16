@@ -31,18 +31,20 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.regex.Pattern;
 
 /**
  * This is reserved for system use.
  * DO NOT use this directly in your application code.
  * <p>
  * Event Script should start right after essential services
- * Therefore, we set sequence number to 2 and essential services to 0.
+ * Therefore, essential services should be set to 0 and CompileFlows should be set to 5 to allow for future improvements.
+ * All other user-services should start after 5
  * <p>
  * If you have a reason to execute another BeforeApplication module before
  * Event Script starts, you can set it to 1.
  */
-@BeforeApplication(sequence=2)
+@BeforeApplication(sequence=5)
 public class CompileFlows implements EntryPoint {
     private static final Logger log = LoggerFactory.getLogger(CompileFlows.class);
     private static final String INPUT = "input";
@@ -62,8 +64,11 @@ public class CompileFlows implements EntryPoint {
     private static final String FLOW_PROTOCOL = "flow://";
     private static final String INPUT_NAMESPACE = "input.";
     private static final String OUTPUT_NAMESPACE = "output.";
+    private static final String BODY = "body";
+    private static final String BODY_PREFIX = "body.";
     private static final String MODEL = "model";
     private static final String PARENT = "parent";
+    private static final String ROOT = "root";
     private static final String MODEL_NAMESPACE = "model.";
     private static final String NEGATE_MODEL = "!model.";
     private static final String RESULT_NAMESPACE = "result.";
@@ -104,6 +109,8 @@ public class CompileFlows implements EntryPoint {
     private static final String INVALID_TASK = "invalid task";
     private static final String[] EXECUTION_TYPES = {DECISION, RESPONSE, END,
                                                      SEQUENTIAL, PARALLEL, PIPELINE, FORK, SINK};
+    private static final String PLUGGABLE_FUNCTION_REGEX = "f:(?<pluginName>.+)\\(.*\\)";
+    static final Pattern PLUGGABLE_FUNCTION_PATTERN = Pattern.compile(PLUGGABLE_FUNCTION_REGEX);
     /**
      * This main class is only used when testing the app from the IDE.
      *
@@ -245,7 +252,7 @@ public class CompileFlows implements EntryPoint {
 
     private boolean validOutputMapping(String name, List<String> outputList, Task task, FlowConfigMetadata md) {
         boolean isDecisionTask = DECISION.equals(md.execution);
-        List<String> filteredOutputMapping = filterDataMapping(outputList);
+        List<String> filteredOutputMapping = filterDataMapping(outputList, false);
         for (String line : filteredOutputMapping) {
             if (validOutput(line, isDecisionTask)) {
                 task.output.add(line);
@@ -263,7 +270,8 @@ public class CompileFlows implements EntryPoint {
     }
 
     private boolean validInputMapping(String name, List<String> inputList, Task task, FlowConfigMetadata md) {
-        List<String> filteredInputMapping = filterDataMapping(inputList);
+        List<String> filteredInputMapping = filterDataMapping(inputList,
+                                                              task.getFunctionRoute().startsWith(FLOW_PROTOCOL));
         for (String line : filteredInputMapping) {
             if (validInput(line)) {
                 int sep = line.lastIndexOf(MAP_TO);
@@ -673,32 +681,61 @@ public class CompileFlows implements EntryPoint {
         return found;
     }
 
-    private List<String> filterDataMapping(List<String> entries) {
+    private List<String> filterDataMapping(List<String> entries, boolean isSubFlowInput) {
         List<String> result = new ArrayList<>();
         for (String line: entries) {
             var entry = line.trim();
             if (entry.startsWith(TEXT_TYPE)) {
                 // text constant supports 2-part mapping format only because text constant can include any characters
-                result.add(filterMapping(entry));
+                result.add(filterMapping(isSubFlowInput? removeRedundantBodyPrefix(entry) : entry));
             } else {
-                List<String> parts = new ArrayList<>();
-                while (entry.contains(MAP_TO)) {
-                    var sep = entry.indexOf(MAP_TO);
-                    var first = entry.substring(0, sep).trim();
-                    parts.add(first);
-                    entry = entry.substring(sep + 2).trim();
-                }
-                parts.add(entry);
-                if (parts.size() == 2) {
-                    result.add(filterMapping(parts.getFirst() + SPACED_MAP_TO + parts.get(1)));
-                } else if (parts.size() == 3) {
-                    handleThreePartMapping(parts, result);
-                } else {
-                    result.add("Syntax must be (LHS -> RHS) or (LHS -> model.variable -> RHS)");
-                }
+                filterParts(entry, result, isSubFlowInput);
             }
         }
         return result;
+    }
+
+    private void filterParts(String entry, List<String> result, boolean isSubFlowInput) {
+        List<String> parts = getParts(entry);
+        if (parts.size() == 2) {
+            var twoParts = parts.getFirst() + SPACED_MAP_TO + parts.get(1);
+            result.add(filterMapping(isSubFlowInput? removeRedundantBodyPrefix(twoParts) : twoParts));
+        } else if (parts.size() == 3) {
+            handleThreePartMapping(parts, result);
+        } else {
+            result.add("Syntax must be (LHS -> RHS) or (LHS -> model.variable -> RHS)");
+        }
+    }
+
+    private List<String> getParts(String text) {
+        var entry = text;
+        List<String> parts = new ArrayList<>();
+        while (entry.contains(MAP_TO)) {
+            var sep = entry.indexOf(MAP_TO);
+            var first = entry.substring(0, sep).trim();
+            parts.add(first);
+            entry = entry.substring(sep + 2).trim();
+        }
+        parts.add(entry);
+        return parts;
+    }
+
+    private String removeRedundantBodyPrefix(String entry) {
+        int sep = entry.indexOf(MAP_TO);
+        if (sep > 0) {
+            var lhs = entry.substring(0, sep).trim();
+            var rhs = entry.substring(sep + 2).trim();
+            if (rhs.equals(BODY)) {
+                var result = lhs + " -> *";
+                log.warn("Deprecated 'body' syntax - mapping adjusted to '{}'", result);
+                return result;
+            } else if (rhs.startsWith(BODY_PREFIX)) {
+                var result = lhs + SPACED_MAP_TO + rhs.substring(BODY_PREFIX.length());
+                log.warn("Deprecated 'body.' namespace - mapping adjusted to '{}'", result);
+                return result;
+            }
+        }
+        return entry;
     }
 
     private void handleThreePartMapping(List<String> parts, List<String> result) {
@@ -760,22 +797,43 @@ public class CompileFlows implements EntryPoint {
         if (sep > 0) {
             String lhs = input.substring(0, sep).trim();
             String rhs = input.substring(sep+2).trim();
-            if (validModel(lhs) && validModel(rhs) && !lhs.equals(rhs)) {
-                if (lhs.equals(INPUT) || lhs.startsWith(INPUT_NAMESPACE) ||
-                        lhs.startsWith(MODEL_NAMESPACE) || lhs.startsWith(ERROR_NAMESPACE)) {
-                    return true;
-                } else if (lhs.startsWith(MAP_TYPE) && lhs.endsWith(CLOSE_BRACKET)) {
-                    return validKeyValues(lhs);
-                } else {
-                    return (lhs.startsWith(TEXT_TYPE) ||
-                            lhs.startsWith(FILE_TYPE) || lhs.startsWith(CLASSPATH_TYPE) ||
-                            lhs.startsWith(INTEGER_TYPE) || lhs.startsWith(LONG_TYPE) ||
-                            lhs.startsWith(FLOAT_TYPE) || lhs.startsWith(DOUBLE_TYPE) ||
-                            lhs.startsWith(BOOLEAN_TYPE)) && lhs.endsWith(CLOSE_BRACKET);
-                }
+            if (isPluggableFunction(rhs)) {
+                return false;
+            } else if (isPluggableFunction(lhs)) {
+                return isValidPluggableFunction(lhs);
+            } else if (validModel(lhs) && validModel(rhs) && !lhs.equals(rhs)) {
+                return validInputLhs(lhs);
             }
         }
         return false;
+    }
+
+    private boolean validInputLhs(String lhs) {
+        if (lhs.equals(INPUT) || lhs.startsWith(INPUT_NAMESPACE) ||
+                lhs.startsWith(MODEL_NAMESPACE) || lhs.startsWith(ERROR_NAMESPACE)) {
+            return true;
+        } else if (lhs.startsWith(MAP_TYPE) && lhs.endsWith(CLOSE_BRACKET)) {
+            return validKeyValues(lhs);
+        } else {
+            return (lhs.startsWith(TEXT_TYPE) ||
+                    lhs.startsWith(FILE_TYPE) || lhs.startsWith(CLASSPATH_TYPE) ||
+                    lhs.startsWith(INTEGER_TYPE) || lhs.startsWith(LONG_TYPE) ||
+                    lhs.startsWith(FLOAT_TYPE) || lhs.startsWith(DOUBLE_TYPE) ||
+                    lhs.startsWith(BOOLEAN_TYPE)) && lhs.endsWith(CLOSE_BRACKET);
+        }
+    }
+
+    private boolean isValidPluggableFunction(String lhs){
+        var matcher = PLUGGABLE_FUNCTION_PATTERN.matcher(lhs);
+        if (!matcher.find()) {
+            return false;
+        }
+        String pluginName = matcher.group("pluginName");
+        return SimplePluginLoader.containsSimplePlugin(pluginName);
+    }
+
+    private boolean isPluggableFunction(String lhs){
+        return lhs.matches(PLUGGABLE_FUNCTION_REGEX); // Should match f:func(...args), where args is optional
     }
 
     private boolean validModel(String key) {
@@ -788,10 +846,12 @@ public class CompileFlows implements EntryPoint {
             if (MODEL.equals(parts.getFirst())) {
                 return false;
             }
-            // model.parent to access the whole parent namespace is not allowed
+            // Both model.parent and model.root point to the same root state machine.
+            // Accessing the whole parent namespace is not allowed.
             if (parts.getFirst().startsWith(MODEL_NAMESPACE)) {
                 List<String> segments = util.split(parts.getFirst(), ".");
-                return segments.size() != 1 && (segments.size() != 2 || !PARENT.equals(segments.get(1)));
+                return segments.size() != 1 && (segments.size() != 2 ||
+                        (!PARENT.equals(segments.get(1)) && !ROOT.equals(segments.get(1))));
             }
             return true;
         }

@@ -39,7 +39,6 @@ import org.platformlambda.core.annotations.PreLoad;
 import org.platformlambda.core.annotations.WebSocketService;
 import org.platformlambda.core.models.*;
 import org.platformlambda.core.util.*;
-import org.platformlambda.core.websocket.server.MinimalistHttpHandler;
 import org.platformlambda.core.websocket.server.WsHandshakeHandler;
 import org.platformlambda.core.websocket.server.WsRequestHandler;
 import org.slf4j.Logger;
@@ -526,27 +525,19 @@ public class AppStarter {
                                     config.getProperty("server.port", "8085"))));
             final boolean sslEnabled = "true".equals(config.getProperty("rest.server.ssl-enabled", "false"));
             if (port > 0) {
-                final ConcurrentMap<String, AsyncContextHolder> contexts;
                 // create a dedicated vertx event loop instance for the HTTP server
                 final Vertx vertx = Vertx.vertx();
                 final String sslCertPath = config.getProperty("rest.server.ssl.cert");
                 final String sslKeyPath = config.getProperty("rest.server.ssl.key");
                 final HttpServerOptions options = getHttpServerOptions(sslEnabled, sslCertPath, sslKeyPath);
                 final HttpServer server = vertx.createHttpServer(options);
-                if (rest) {
-                    // Compile endpoints to be used by the REST automation system
-                    renderRestEndpoints();
-                    // Start HTTP request and response handlers
-                    HttpRouter gateway = new HttpRouter();
-                    contexts = gateway.getContexts();
-                    server.requestHandler(new HttpRequestHandler(gateway));
-                } else {
-                    // start minimalist HTTP handlers to provide actuator endpoints
-                    contexts = null;
-                    server.requestHandler(new MinimalistHttpHandler());
-                }
+                // Compile endpoints to be used by the REST automation system
+                renderRestEndpoints();
+                // Start HTTP request and response handlers
+                HttpRouter gateway = new HttpRouter();
+                server.requestHandler(new HttpRequestHandler(gateway));
                 setWebsocketHandler(server);
-                startServer(server, port, contexts);
+                startServer(server, port, gateway.getContexts());
             }
         }
     }
@@ -566,24 +557,22 @@ public class AppStarter {
         var platform = Platform.getInstance();
         var startupMonitor = "loader." + platform.getOrigin();
         LambdaFunction f = (headers, input, instance) -> {
-            String diff = NumberFormat.getInstance().format(System.currentTimeMillis() - startTime);
-            log.info("Modules loaded in {} ms", diff);
             platform.release(startupMonitor);
+            String diff = NumberFormat.getInstance().format(System.currentTimeMillis() - startTime);
+            warmUpVirtualThreadSystem();
+            log.info("Modules loaded in {} ms", diff);
             return null;
         };
         platform.registerPrivate(startupMonitor, f, 1);
         server.listen(port).onSuccess(service -> {
             EventEmitter.getInstance().send(startupMonitor, "ready");
-            if (contexts != null) {
-                platform.registerPrivate(AsyncHttpClient.ASYNC_HTTP_RESPONSE,
-                        new AsyncHttpResponse(contexts), 200);
-                // start timeout handler
-                Housekeeper housekeeper = new Housekeeper(contexts);
-                platform.getVertx().setPeriodic(HOUSEKEEPING_INTERVAL,
-                        t -> housekeeper.removeExpiredConnections());
-                log.info("AsyncHttpContext housekeeper started");
-                log.info("Reactive HTTP server running on port-{}", service.actualPort());
-            }
+            platform.registerPrivate(AsyncHttpClient.ASYNC_HTTP_RESPONSE, new AsyncHttpResponse(contexts), 500);
+            // start timeout handler
+            Housekeeper housekeeper = new Housekeeper(contexts);
+            platform.getVertx().setPeriodic(HOUSEKEEPING_INTERVAL,
+                    t -> housekeeper.removeExpiredConnections());
+            log.info("AsyncHttpContext housekeeper started");
+            log.info("Reactive HTTP server running on port-{}", service.actualPort());
             if (!wsLambdas.isEmpty()) {
                 log.info("Websocket server running on port-{}", service.actualPort());
             }
@@ -591,6 +580,15 @@ public class AppStarter {
             log.error("Unable to start - {}", ex.getMessage());
             System.exit(-1);
         });
+    }
+
+    private void warmUpVirtualThreadSystem() {
+        // send a few events to the "no.op" composable function where each execution consumes a new virtual thread
+        var po = EventEmitter.getInstance();
+        for (int i=0; i < 16; i++) {
+            po.send(new EventEnvelope().setTo("no.op").setBody(Map.of("type", "warm-up", "seq", i)));
+        }
+        log.info("Virtual thread optimization completed");
     }
 
     /**
@@ -639,6 +637,7 @@ public class AppStarter {
     private ConfigReader getRestConfig() {
         Utility util = Utility.getInstance();
         AppConfigReader reader = AppConfigReader.getInstance();
+        boolean rest = "true".equals(reader.getProperty("rest.automation", "false"));
         List<String> paths = util.split(reader.getProperty("yaml.rest.automation",
                 "classpath:/rest.yaml"), ", ");
         Map<String, Boolean> uniqueKeys = new HashMap<>();
@@ -652,7 +651,9 @@ public class AppStarter {
                 config = new ConfigReader(p);
                 log.info("Loading config from {}", p);
             } catch (IllegalArgumentException e) {
-                log.warn("Unable to load REST entries from {} - {}", p, e.getMessage());
+                if (rest) {
+                    log.warn("Unable to load REST entries from {} - {}", p, e.getMessage());
+                }
                 continue;
             }
             // load configuration for static content filters, cors and headers
@@ -688,9 +689,6 @@ public class AppStarter {
         }
         if (staticContentFilter.containsKey(STATIC_CONTENT)) {
             mm.setElement(STATIC_CONTENT, staticContentFilter.get(STATIC_CONTENT));
-        }
-        if (mm.isEmpty()) {
-            log.error("There are no REST endpoints found in {}", paths);
         }
         return new ConfigReader().load(mm.getMap());
     }

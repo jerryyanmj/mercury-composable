@@ -18,6 +18,7 @@
 
 package org.platformlambda.automation.http;
 
+import io.netty.channel.ChannelOption;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.ssl.SslContext;
 import io.netty.handler.ssl.util.InsecureTrustManagerFactory;
@@ -87,23 +88,26 @@ public class AsyncHttpClient implements TypedLambdaFunction<EventEnvelope, Void>
     private static final String X_TTL = "x-ttl";
     private static final String CONTENT_TYPE = "content-type";
     private static final String CONTENT_LENGTH = "content-length";
-    private static final String X_CONTENT_LENGTH = "X-Content-Length";
-    private static final String USER_AGENT = "User-Agent";
+    private static final String X_CONTENT_LENGTH = "x-content-length";
+    private static final String USER_AGENT = "user-agent";
     private static final String USER_AGENT_NAME = "async-http-client";
     private static final int DEFAULT_TTL_SECONDS = 30;  // 30 seconds
     /*
-     * Some headers must be dropped because they are not relevant for HTTP relay
-     * e.g. "content-encoding" and "transfer-encoding" will break HTTP response rendering.
+     * Some headers are ignored because they may interfere with the underlying HttpClient
      */
-    private static final String[] MUST_DROP_HEADERS = { "content-encoding", "transfer-encoding", "host", "connection",
-                                                        "upgrade-insecure-requests", "accept-encoding", "user-agent",
+    private static final String[] HEADERS_TO_IGNORE = { CONTENT_LENGTH, USER_AGENT, X_STREAM_ID,
+                                                        "content-encoding", "transfer-encoding", "host", "connection",
+                                                        "upgrade-insecure-requests", "accept-encoding",
                                                         "sec-fetch-mode", "sec-fetch-site", "sec-fetch-user" };
     private final File tempDir;
+    private final int connectTimeout;
 
     public AsyncHttpClient() {
-        // create temp upload directory
-        AppConfigReader reader = AppConfigReader.getInstance();
-        String temp = reader.getProperty("app.temp.dir", "/tmp/composable/java/temp-streams");
+        Utility util = Utility.getInstance();
+        AppConfigReader config = AppConfigReader.getInstance();
+        var timeout = config.getProperty("http.client.connection.timeout", "5000");
+        connectTimeout = Math.max(2000, util.str2int(timeout));
+        String temp = config.getProperty("app.temp.dir", "/tmp/composable/java/temp-streams");
         tempDir = new File(temp);
         if (!tempDir.exists() && tempDir.mkdirs()) {
             log.info("Temporary work directory {} created", tempDir);
@@ -201,8 +205,10 @@ public class AsyncHttpClient implements TypedLambdaFunction<EventEnvelope, Void>
         HttpMetadata md = new HttpMetadata();
         validateUrl(request, md);
         String uri = normalizeUrl(request, md);
-        po.annotateTrace(DESTINATION, md.url.getScheme() + "://" + md.url.getHost() + ":" + md.port + md.rawUri);
-        HttpClient client = HttpClient.create().headers(h -> updateHttpHeaders(po, request, h));
+        po.annotateTrace(DESTINATION, request.getTargetHost() + md.rawUri);
+        HttpClient client = HttpClient.create()
+                            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, connectTimeout)
+                            .headers(h -> updateHttpHeaders(po, request, h));
         int timeout = request.getTimeoutSeconds();
         client.responseTimeout(Duration.ofSeconds(timeout));
         if (md.secure) {
@@ -312,9 +318,6 @@ public class AsyncHttpClient implements TypedLambdaFunction<EventEnvelope, Void>
             throw new IllegalArgumentException("Unable to resolve target host as domain or IP address");
         }
         md.port = md.url.getPort();
-        if (md.port < 0) {
-            md.port = md.secure? 443 : 80;
-        }
         String path = md.url.getPath();
         if (!path.isEmpty()) {
             throw new IllegalArgumentException("Target host must not contain URI path");
@@ -357,18 +360,20 @@ public class AsyncHttpClient implements TypedLambdaFunction<EventEnvelope, Void>
     }
 
     private void updateHttpHeaders(PostOffice po, AsyncHttpRequest request, HttpHeaders http) {
+        // set user-agent for this HTTP client
         http.set(USER_AGENT, USER_AGENT_NAME);
-        int len = request.getContentLength();
-        if (len > 0 && request.getStreamRoutes().isEmpty()) {
-            http.set(CONTENT_LENGTH, len);
+        // set content-length, including zero, if needed
+        var method = request.getMethod();
+        if (request.isContentLengthDefined() && request.getStreamRoutes().isEmpty() &&
+                (POST.equals(method) || PUT.equals(method) || PATCH.equals(method))) {
+            http.set(CONTENT_LENGTH, request.getContentLength());
         }
         Map<String, String> reqHeaders = request.getHeaders();
         // convert authentication session info into HTTP request headers
         Map<String, String> sessionInfo = request.getSessionInfo();
         reqHeaders.putAll(sessionInfo);
         for (Map.Entry<String, String> kv: reqHeaders.entrySet()) {
-            // x-stream-id is not transported because the stream will be consumed by the AsyncHttpClient itself
-            if (allowedHeader(kv.getKey()) && !kv.getKey().equals(X_STREAM_ID)) {
+            if (permittedHttpHeader(kv.getKey())) {
                 http.set(kv.getKey(), kv.getValue());
             }
         }
@@ -403,8 +408,8 @@ public class AsyncHttpClient implements TypedLambdaFunction<EventEnvelope, Void>
         EventEmitter.getInstance().send(response);
     }
 
-    private boolean allowedHeader(String header) {
-        for (String h: MUST_DROP_HEADERS) {
+    private boolean permittedHttpHeader(String header) {
+        for (String h: HEADERS_TO_IGNORE) {
             if (header.equalsIgnoreCase(h)) {
                 return false;
             }

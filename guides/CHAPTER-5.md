@@ -23,7 +23,7 @@ public class MainApp implements EntryPoint {
 You must have at least one "main application" module because it is mandatory.
 
 > *Note*: Please adjust the parameter "web.component.scan" in application.properties 
-  to point to your user application package(s) in your source code project.
+          to point to your user application package(s) in your source code project.
 
 If your application does not require additional startup logic, you may just print a greeting message.
 
@@ -147,30 +147,6 @@ Note that the PostOffice instance can be created with tracing information in a U
 The above example tells the system that the sender is "unit.test", the trace ID is 12345
 and the trace path is "POST /api/hello/world".
 
-### Convenient utility classes
-
-The Utility and MultiLevelMap classes are convenient tools for unit tests. In the above example, we use the
-Utility class to convert a date object into a UTC timestamp. It is because date object is serialized as a UTC
-timestamp in an event.
-
-The MultiLevelMap supports reading an element using the convenient "dot and bracket" format.
-
-For example, given a map like this:
-```json
-{
-  "body":
-  {
-    "time": "2023-03-27T18:10:34.234Z",
-    "hello": [1, 2, 3]
-  }
-}
-```
-
-| Example | Command                         | Result                   |
-|:-------:|:--------------------------------|:-------------------------|
-|    1    | map.getElement("body.time")     | 2023-03-27T18:10:34.234Z |
-|    2    | map.getElement("body.hello[2]") | 3                        |
-
 ## Your second unit test
 
 Let's do a unit test for PoJo. In this second unit test, it sends a RPC request to the "hello.pojo" function that
@@ -206,6 +182,39 @@ Note that you can use the built-in serialization API to restore a PoJo like this
 ```java
 SamplePoJo pojo = response.getBody(SamplePoJo.class)
 ```
+
+## Convenient utility classes
+
+The `Utility` and `MultiLevelMap` classes are convenient tools for unit tests. In the above example, we use the
+Utility class to convert a date object into a UTC timestamp. It is because date object is serialized as a UTC
+timestamp in an event.
+
+The `MultiLevelMap` supports reading an element using the convenient "dot and bracket" format.
+
+For example, given a map like this:
+```json
+{
+  "body":
+  {
+    "time": "2023-03-27T18:10:34.234Z",
+    "hello": [1, 2, 3],
+    "complex": [
+      {"key": "value1"},
+      {"key": "value2"}
+    ]
+  }
+}
+```
+
+| Example | Command                                | Result                   |
+|:-------:|:---------------------------------------|:-------------------------|
+|    1    | map.getElement("body.time")            | 2023-03-27T18:10:34.234Z |
+|    2    | map.getElement("body.hello[2]")        | 3                        |
+|    3    | map.getElement("body.complex[1].key")  | value2                   |
+|    4    | map.getElements("body.complex[*].key") | [ value1, value2 ]       |
+
+Example-4 above uses the "getElements" in plural form to indicate that it is retrieving a list of elements
+using a "wildcard" index. For simplicity, it does not support more than one wildcard index in the search path.
 
 ## Event Flow mocking framework
 
@@ -281,12 +290,12 @@ when the test finishes.
     }
 ```
 
-When the event flow finishes, you will see an "end-of-flow" log like this. It shows that the function
+When the event flow finishes, you will see an "end-of-flow" report like this. It shows that the function
 route for the "echo.one" task has been changed to "my.mock.function". This end-of-flow log is useful
 during application development and tests so that the developer knows exactly which function has been
 executed.
 
-```json
+```log
 Flow for-loop-test (0afcf555fc4141f4a16393422e468dc9) completed. Run 11 tasks in 28 ms. 
 [ sequential.one, 
   echo.one(my.mock.function), 
@@ -299,6 +308,36 @@ Flow for-loop-test (0afcf555fc4141f4a16393422e468dc9) completed. Run 11 tasks in
   echo.two(no.op), 
   echo.three(no.op), 
   echo.four(no.op) ]
+```
+
+## Inspecting the state machine using EventScriptMock
+
+The state machine of a "flow instance" is not accessible directly by a user task. To inspect the state machine
+in a unit test, you can use the `setMonitorBeforeTask` and `setMonitorAfterTask` methods. The former tells the
+system to send a copy of the state machine to a composable function after "input data mapping" but before entering
+a task. The latter sends a copy of the state machine to a composable function after a task is completed.
+
+The following code segment from a unit test illustrates this feature. The function "before.task.monitor" will get
+a copy of the state machine before "my.task" executes. Similarly, the function "after.task.monitor" will obtain
+a copy of the state machine after "my.task" finishes execution.
+
+```java
+var platform = Platform.getInstance();
+var mock = new EventScriptMock("parent-greetings");
+TypedLambdaFunction<Map<String, Object>, Void> f1 =
+        (headers, input, instance) -> {
+            before.add(input);
+            return null;
+        };
+platform.registerPrivate("before.task.monitor", f1, 1);
+TypedLambdaFunction<Map<String, Object>, Void> f2 =
+        (headers, input, instance) -> {
+            after.add(input);
+            return null;
+        };
+platform.registerPrivate("after.task.monitor", f2, 1);
+mock.setMonitorBeforeTask("my.task", "before.task.monitor")
+    .setMonitorAfterTask("my.task", "after.task.monitor");
 ```
 
 ## Deployment
@@ -383,6 +422,86 @@ containing the performance metrics data and a "journal" section with the request
 
 > *IMPORTANT*: journaling may contain sensitive personally identifiable data and secrets. Please check
   security compliance before storing them into access restricted audit data store.
+
+## Performance tuning
+
+The composable framework is designed for high concurrency using virtual threads and new channel I/O (NIO).
+
+As a result, it can generate a massive volume of outgoing traffic to your system of records. If not managed properly,
+massive parallelism can actually degrade overall performance because it can become a form of unintended
+"denial of service" attack.
+
+Composable applications are, by definition, cloud native. You can scale your applications horizontally.
+
+In addition, composable functions in each application instance can be scaled vertically using Java virtual thread
+technology. Back-pressure is automated so your application usually does not need to do advanced coding to do flow
+control.
+
+For each composable function, you can define concurrency using the "instances" parameter in the "PreLoad" class
+annotation. Note that if the function makes outgoing calls to an external dependency that is slow, it can consume
+"worker" threads very quickly because the "workers" are waiting for a response from the external dependency.
+
+Therefore, you should increase the concurrency count to adjust for your performance requirement.
+
+If you configure parallel processing, especially when using the parallel pipeline method, it can spin up instances
+of composable functions in an "uncontrolled" manner. It would result in making too many parallel requests to an
+external dependency. For external system that runs using legacy technology, it can easily be overwhelmed,
+resulting in performance bottleneck. It can block the calling functions from a composable application and
+thus the outcome can be suboptimal.
+
+When configuring parallel calls, please consider end-to-end connectivity and potential bottlenecks.
+
+Since event flow instances are already running in parallel, configuring parallel requests within a single event flow
+would reduce performance. An orderly executed pipeline would be faster than a parallel pipeline that is
+"uncontrolled". On the other hands, fork-n-join uses a predetermined number of parallel tasks and it is easier
+to control parallelism.
+
+Performance tuning is an art than a science. A holistic view of end-to-end performance and careful configuration
+of parallelism would yield good outcome.
+
+## Performance metrics
+
+The built-in telemetry system offers basic performance metrics that can be visualized with a telemetry dashboard.
+
+For more advanced performance metrics, you may refer to the "end-of-flow" performance report. It states the
+sequence of task execution and their elapsed time that includes execution time of a function, routing overheads
+and all system overheads. It may look like this when you configure "log.format=json" in application.properties.
+
+```json
+{
+  "level": "INFO",
+  "time": "2025-08-27 18:39:25.683",
+  "source": "org.platformlambda.core.services.Telemetry.handleEvent(Telemetry.java:81)",
+  "thread": 336,
+  "message": {
+    "trace": {
+      "path": "GET /api/profile/100",
+      "service": "task.executor",
+      "success": true,
+      "origin": "20250828c022812c67294a63871942c568a9e277",
+      "exec_time": 7.0,
+      "start": "2025-08-28T01:39:25.674Z",
+      "from": "event.script.manager",
+      "id": "9c0934a98dcf4ab1ae4b5b7b389f6d31",
+      "status": 200
+    },
+    "annotations": {
+      "execution": "Run 2 tasks in 7 ms",
+      "tasks": [
+        {
+          "name": "v1.get.profile",
+          "spent": 2.982
+        },
+        {
+          "name": "v1.decrypt.fields",
+          "spent": 1.313
+        }
+      ],
+      "flow": "get-profile"
+    }
+  }
+}
+```
 <br/>
 
 |              Chapter-4              |                   Home                    |          Chapter-6          |

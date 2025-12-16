@@ -27,11 +27,18 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
-@PreLoad(route="simple.exception.handler", instances=10)
+import static com.accenture.utils.EventScriptConstants.ENV_INSTANCES_PREFIX;
+
+@PreLoad(route=SimpleExceptionHandler.ROUTE, instances=250, envInstances = SimpleExceptionHandler.ENV_INSTANCE_PROPERTY)
 public class SimpleExceptionHandler implements TypedLambdaFunction<Map<String, Object>, Map<String, Object>> {
     private static final Logger log = LoggerFactory.getLogger(SimpleExceptionHandler.class);
 
+    public static final String ROUTE = "simple.exception.handler";
+    public static final String ENV_INSTANCE_PROPERTY = ENV_INSTANCES_PREFIX + SimpleExceptionHandler.ROUTE;
+
     private static final String TYPE = "type";
+    private static final String TASK = "task";
+    private static final String STACK = "stack";
     private static final String ERROR = "error";
     private static final String STATUS = "status";
     private static final String MESSAGE = "message";
@@ -39,14 +46,12 @@ public class SimpleExceptionHandler implements TypedLambdaFunction<Map<String, O
     @Override
     public Map<String, Object> handleEvent(Map<String, String> headers, Map<String, Object> input, int instance) {
         if (input.containsKey(STATUS) && input.containsKey(MESSAGE)) {
-            Object stack = input.get("stack");
-            if (stack instanceof String text) {
-                log.error("User defined exception handler got {}, rc={}, error={}, stack={}",
-                        headers, input.get(STATUS), input.get(MESSAGE), text);
-            } else {
-                log.error("User defined exception handler got {}, rc={}, error={}",
-                            headers, input.get(STATUS), input.get(MESSAGE));
-            }
+            Object stack = input.get(STACK);
+            Object task = input.get(TASK);
+            log.error("User defined exception handler received from {}, rc={}, error={}, stack={}",
+                    task instanceof String name? name : "previous task",
+                    input.get(STATUS), input.get(MESSAGE),
+                    stack instanceof String text? text : "N/A");
             Map<String, Object> error = new HashMap<>();
             error.put(STATUS, input.get(STATUS));
             error.put(MESSAGE, input.get(MESSAGE));

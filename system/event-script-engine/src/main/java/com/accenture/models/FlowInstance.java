@@ -31,6 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReentrantLock;
 
 public class FlowInstance {
     private static final Logger log = LoggerFactory.getLogger(FlowInstance.class);
@@ -41,15 +42,18 @@ public class FlowInstance {
     private static final String CID_TAG = "cid";
     private static final String TRACE = "trace";
     private static final String PARENT = "parent";
+    private static final String ROOT = "root";
 
     // dataset is the state machine that holds the original input and the latest model
     public final ConcurrentMap<String, Object> dataset = new ConcurrentHashMap<>();
     public final AtomicInteger pipeCounter = new AtomicInteger(0);
     public final ConcurrentMap<Integer, PipeInfo> pipeMap = new ConcurrentHashMap<>();
-    public final Queue<String> tasks = new ConcurrentLinkedQueue<>();
-    public final ConcurrentMap<String, Boolean> pendingTasks = new ConcurrentHashMap<>();
+    public final Queue<TaskMetrics> tasks = new ConcurrentLinkedQueue<>();
+    public final ConcurrentMap<String, TaskMetrics> metrics = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, Object> shared = new ConcurrentHashMap<>();
     private final long start = System.currentTimeMillis();
+    public final ReentrantLock inputSafety = new ReentrantLock();
+    public final ReentrantLock outputSafety = new ReentrantLock();
     public final String id = Utility.getInstance().getUuid();
     public final String cid;
     public final String replyTo;
@@ -81,22 +85,25 @@ public class FlowInstance {
         model.put(INSTANCE, id);
         model.put(CID_TAG, cid);
         model.put(FLOW, flowId);
-        // this is a sub-flow if parent flow instance is available
+        // "parent" and "root" are aliases to the shared state machine in the root
         if (parentId == null) {
             this.parentId = null;
             model.put(PARENT, shared);
+            model.put(ROOT, shared);
         } else {
+            // this is a sub-flow if parent flow instance is available
             var parent = resolveParent(parentId);
             if (parent != null) {
                 model.put(PARENT, parent.shared);
+                model.put(ROOT, parent.shared);
                 this.parentId = parent.id;
                 log.info("{}:{} extends {}:{}", this.getFlow().id, this.id, parent.getFlow().id, parent.id);
             }
         }
         this.dataset.put(MODEL, model);
         EventEmitter po = EventEmitter.getInstance();
-        EventEnvelope timeoutTask = new EventEnvelope();
-        timeoutTask.setTo(TaskExecutor.SERVICE_NAME).setCorrelationId(id).setHeader(TIMEOUT, true);
+        EventEnvelope timeoutTask = new EventEnvelope().setTo(TaskExecutor.SERVICE_NAME)
+                                            .setCorrelationId(id).setHeader(TIMEOUT, true);
         this.timeoutWatcher = po.sendLater(timeoutTask, new Date(System.currentTimeMillis() + template.ttl));
     }
 
@@ -148,6 +155,13 @@ public class FlowInstance {
         if (running) {
             running = false;
             EventEmitter.getInstance().cancelFutureEvent(timeoutWatcher);
+            setResponded(true);
+            // explicitly release memory
+            dataset.clear();
+            pipeMap.clear();
+            tasks.clear();
+            metrics.clear();
+            shared.clear();
         }
     }
 

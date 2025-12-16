@@ -425,14 +425,13 @@ As shown in Figure 1, you can run one or more sub-flows inside a primary flow.
 > Figure 1 - Hierarchy of flows
 
 To do this, you can use the flow protocol identifier (`flow://`) to indicate that the task is a flow.
-
-For example, when running the following task, "flow://my-sub-flow" will be executed like a regular task.
+Note that the syntax for input and output data mapping for subflow is the same as a regular task.
 
 ```yaml
 tasks:
   - input:
       - 'input.path_parameter.user -> header.user'
-      - 'input.body -> body'
+      - 'input.body -> *'
     process: 'flow://my-sub-flow'
     output:
       - 'result -> model.pojo'
@@ -452,11 +451,27 @@ In the input/output data mapping sections, the configuration management system p
 state machine using the namespace `model.parent.` to be shared by the primary flow and all sub-flows that
 are instantiated from it.
 
-*Important*:
+Just like a task, a subflow has "input" and "output". You can map data to the "input" of a subflow using
+the namespaces "body" and "header" where they are maps of key-values. Inside a task of the subflow, 
+the body and header namespaces can be accessed for their key-values like this:
 
-1. The input data mapping for a "sub-flow" task should contain only the "header" and "body" arguments
-   to be mapped in the "input" namespace.
-2. The "body" argument must be a map of key-values. Otherwise, it will be ignored.
+```yaml
+  - input:
+      - 'input.header.user -> header.user'
+      - 'input.body -> *'
+    process: 'first.task.in.subflow'
+    output:
+      - 'result -> model.parent.subflow_result'
+    description: 'Execute a task in a subflow'
+    execution: end
+```
+
+Since the parent flow and subflows has a shared state machine, passing "body" and "header" key-values
+to the "input" of a subflow is optional. You can pass key-values between the parent and subflows
+using the shared state machine easily.
+
+> *Note*: The namespace `model.root.` is an alias of `model.parent.` This would reduce ambiguity
+          if you prefer to use "root" referring to the parent flow that creates one or more subflows.
 
 ## Tasks and data mapping
 
@@ -474,6 +489,7 @@ To handle this level of modularity, the system provides configurable input/outpu
 | Type                              | Keyword and/or namespace     | LHS / RHS  | Mappings |
 |:----------------------------------|:-----------------------------|------------|----------|
 | Flow input dataset                | `input.`                     | left       | input    |
+| Flow error dataset                | `error.`                     | left.      | input    |
 | Flow output dataset               | `output.`                    | right      | output   |
 | Function input body               | no namespace required        | right      | input    |
 | Function input or output headers  | `header` or `header.`        | both       | I/O      |
@@ -483,17 +499,29 @@ To handle this level of modularity, the system provides configurable input/outpu
 | Decision value                    | `decision`                   | right      | output   |
 | State machine dataset             | `model.`                     | both       | I/O      |
 | Parent state machine dataset      | `model.parent.`              | both       | I/O      |
+| Alias for parent state machine    | `model.root.`                | both       | I/O      |
 | External state machine key-value  | `ext:`                       | right      | I/O      |
 
 For state machine (model and model.parent namespaces), the system prohibits access to the whole
 namespace. You should only access specific key-values in the model or model.parent namespaces.
 
-The namespace `model.parent.` is shared by the primary flow and all sub-flows that are instantiated from it.
+The namespace `model.root.` or `model.parent.` is shared by the primary flow and all sub-flows
+that are instantiated from it.
 
 When your function returns a PoJo, the `datatype` field in the left-hand-side will contain
 the class name of the PoJo. This allows you to save the class name in the state machine and
 pass it to another task that needs to reconstruct the PoJo class. This is used when your
 function may return different PoJo classes for different scenarios.
+
+The error dataset is available in the input data mapping of an exception handler that attaches
+to a task or the generic exception handler that attaches to the flow itself.
+
+The error dataset includes the following:
+
+1. error.task - this is the task name of the task that throws exception
+2. error.status - the status code of the exception
+3. error.message - the error message
+4. error.stack - stack trace if any
 
 The external state machine namespace uses the namespace `ext:` to indicate that the key-value is external.
 
@@ -534,7 +562,7 @@ from the key "some.key" in base configuration and the environment variable "ENV_
 ```
 
 > *Note*: The comma character is used as a separator for each key-value pair. If the value contains a comma,
-  the system cannot parse the key-values correctly. In this case, please use the 2nd method below.
+          the system cannot parse the key-values correctly. In this case, please use the 2nd method below.
 
 *2. Mapping values from application.yml*
 
@@ -565,11 +593,6 @@ to a file in the local file system. If the left-hand-side (LHS) resolved value i
 will be deleted. This allows you to clean up temporary files before your flow finishes.
 
 An optional prefix "append" may be used to tell the system to append file content instead of overwriting it.
-
-> *Note*: The local file system write operation is not thread-safe. If you have parallel tasks appending
-          to the same file, the integrity of file content is not guaranteed. One way to ensure thread
-          safety is to use singleton pattern. This can be done by setting the number of instances of the
-          task writing to the local file system to 1.
 
 *Decision value*
 
@@ -778,7 +801,17 @@ operation such as multiple AND, OR and NEGATE operators, you can configure multi
 operation.
 
 For string concatenation, you may concat a model variable with one or more model variables and
-text constants. The latter uses the "text(some value)" format.
+text constants. A more convenient alternative to string concatenation is the use of "runtime model
+variables". You can replace the "concat" method with "runtime model variable" method as follows:
+
+```yaml
+# assuming the bearer token value is in model.token
+- 'text(Bearer ) -> model.bearer'
+- 'model.bearer:concat(model.token) -> authorization'
+
+# the above is the same as
+- 'text(Bearer {model.token}) -> authorization'
+```
 
 An interesting use case is a simple decision task using the built-in no-op function.
 For boolean with value matching, you can test if the key-value in the left-hand-side is a null
@@ -856,6 +889,7 @@ For each flow instance, the state machine in the "model" namespace provides the 
 you can use in the input/output data mapping. For example, you can set this for an exception handler to
 log additional information.
 
+
 | Type             | Keyword          | Comment                                    |
 |:-----------------|:-----------------|:-------------------------------------------|
 | Flow ID          | `model.flow`     | The ID of the event flow config            |
@@ -884,6 +918,9 @@ it will resolve as a Map from the function output event envelope's headers.
 Similarly, when function output namespace `header.` is used, the system will resolve the value from a specific
 key of the function output event envelope's headers.
 
+
+Event flow instances are running in parallel. Within a single flow
+
 ### Function input and output
 
 To support flexible input data mapping, the input to a function must be either `Map<String, Object>` or `PoJo`.
@@ -905,7 +942,7 @@ For example, the following entry tells the system to set the value in "model.dat
 ```
 
 > *Note*: If the value from the left hand side is not a map, the system will ignore the input mapping command and
-print out an error message in the application log.
+          print out an error message in the application log.
 
 ### Setting function input headers
 
@@ -1069,8 +1106,8 @@ tasks:
 A special version of the fork-n-join pattern is called `dynamic fork-n-join` which refers to parallel processing
 of multiple instances of the same "next" task for each element in a list.
 
-For example, you have a list of 100 elements in an incoming request and each element would be processed by the
-same backend service. You want to process the 100 elements in parallel by multiple instances of a service wraper
+For example, you have a list of 20 elements in an incoming request and each element would be processed by the
+same backend service. You want to process the 20 elements in parallel by multiple instances of a service wraper
 that connects to the backend service.
 
 The use case can be configured like this:
@@ -1108,12 +1145,8 @@ the list of elements and spin up an instance of the "next" task to retrieve the 
 the element in the list. The two special suffixes are relevant only when adding to the model variable configured
 in the "source" parameter.
 
-*Important*:
-
-1. The model variables with special suffixes '.ITEM' and '.INDEX' are virtual objects for the purpose
-   of mapping as input arguments to a task. They cannot be used as regular model variables.
-2. Dynamic fork-n-join is designed to execute the same task for a list of elements in parallel.
-   It does not support subflow. i.e. the "process" tag of the "next" task cannot be a subflow.
+> *Limitation*: The model variables with special suffixes '.ITEM' and '.INDEX' are computed values for the purpose
+                of mapping as input arguments to a task. They cannot be used as regular model variables.
 
 ### Sink task
 
@@ -1130,24 +1163,31 @@ This task has the tag `execution=sink`.
     execution: sink
 ```
 
-### Special consideration for parallelism
+## Task concurrency
 
-The execution types (parallel and fork-n-join) are designed for parallel processing.
+When an event flow receives an incoming request, a "flow instance" is created with its own state machine
+using the namespace "model". Tasks within a single flow are executed orderly in a flow instance.
 
-Usually, parallel processing would improve performance. However, spinning up a large number of
-concurrent sessions to a slower backend service may create performance bottleneck. In fact, a 
-massive number of concurrent sessions to a single backend would bring down the target service. 
+However, the execution types (parallel and fork-n-join) are designed for parallel processing. Java virtual
+thread system is backed by multiple kernel threads. As a result, you should consider thread safety when
+parallel tasks execute.
+
+While parallel processing would improve performance, spinning up a large number of concurrent tasks to
+make requests to a slower backend service may create performance bottleneck. In fact, a massive number
+of concurrent sessions to a single backend would bring down the target service.
 This is an unintended "denial of service" attack. 
 
-The dynamic fork-n-join execution style should be handled with caution because it can easily
-spin up a large number of parallel instances of the same task.
+To control parallelism, you can set a smaller number of concurrent "instances" for a task
+using the "instances" parameter in the "PreLoad" annotation of the task. For example, if you set
+the maximum instances of a task to 20, the system will not instantiate more than the limit even
+when you have a larger number of event flow instances using the same task route. This allows you
+to manage performance according to available infrastructure resources. This orderly execution is
+guaranteed by the underlying reactive event system.
 
-To control parallelism, you can set a smaller number of concurrent "instances" for the "next" task
-using the "instances" parameter in the "PreLoad" annotation of the task. For example, you have 100
-elements in a list but the maximum instances of the task can be set to 20. This would reduce the
-concurrency to 20, thus allowing you to manage performance according to available infrastructure resources. 
-Therefore, processing 100 elements would require 5 rounds of 20 parallel executions and this orderly
-execution is supported by the underlying reactive event system.
+## State machine thread safety
+
+The state machine is designed to be thread safe during the input/output data mapping phases.
+No special threatment is required when updating the state machine using event script.
 
 ## Pipeline feature
 
@@ -1256,6 +1296,130 @@ In the following example, the system will evaluate both the model.quit and model
         - 'if (model.quit) break'
         - 'if (model.jump) break'
 ```
+
+## Simple Plugins
+
+When working with Event-Script there are certain use-cases that are not supported natively in flows, such as arithmetic
+and conditional expressions. Typically one would create a [TypedLambdaFunction](CHAPTER-2.md#define-a-function) to support
+these type of use-cases.  It may lead to duplication of code and efforts since the same use-case is often reinvented
+multiple times.
+
+To address this, a new concept called `Simple Plugin` has been introduced since version 4.3.36. 
+This allows `Simple` atomic operations to be called directly as part of the input mapping operations of
+an Event-Script `Task.` This is similar to `Tags` in `JSTL` and `Components` in `React`. 
+
+### Allowed packages for simple plugins
+
+`Simple Plugins` must run very quickly - typically fraction of a sub-millisecond. 
+To enforce this, the system limits the types of Java Packages that are allowed to be imported in a Plugin. 
+It will explicitly deny any packages that could potentially interact with I/O, to prevent blocking the event loop.
+
+The allowed packages include:
+`java.lang`, `java.util`, `java.math`, `java.time`, along with all java primtives 
+`short`, `int`, `long`, `boolean`, `float`, `char`, `byte`, and `void`.
+
+### Interface definition
+
+The contract that defines a `SimplePlugin` is split across two Interfaces:
+
+*Annotation*
+
+Used to classload all plugins, any class that wishes to be loaded as a `SimplePlugin` will need to be annotated:
+
+```java
+@Target({ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface SimplePlugin { }
+```
+
+*Interface*
+
+This defines the behavior of the Plugin. The work for the plugin is meant to be done in the 
+`Object calculate(Object... input)` method. Note that the input utilizes variable arguments because,
+for convenience, all parameters that are passed to the function in event-script will be sent to the Plugin.
+
+The `getName` function is used to name the Plugin for consumption later on. If the function is not implemented, 
+the default behavior is to convert the Class Name to camelCase.
+
+```java
+public interface PluginFunction {
+
+    /**
+     * Default interface method for the name of the Plugin
+     * @return The name of runtime class in valid camelCase format
+     */
+    default String getName(){
+        String name =  this.getClass().getSimpleName();
+        return Character.toLowerCase(name.charAt(0)) + name.substring(1);
+    }
+
+    Object calculate(Object... input);
+}
+
+```
+
+### Using Plugins in Event-Script
+
+A plugin function can be configured in the left-hand-side of an input data mapping statement using the `f:` prefix
+with your plugin name. i.e. `f:pluginName(model variables...)`
+
+For example:
+
+```yaml
+  - input:
+      - 'input.body.account_balance -> model.balance'
+      - 'int(3) -> model.discounted_cost'
+      - 'int(5) -> model.unit_cost'
+      - 'f:subtract(model.balance, model.unit_cost)  -> model.balance'
+      - 'f:divide(model.discounted_cost, model.unit_cost)  -> model.discount_amount'
+    process: 'no.op'
+    output: []
+    description: 'This function will subtract the cost of an item from the provided account balance'
+    execution: end
+```
+
+### Built-in Plugins
+
+| Type                | Plugin `name` | Expected Inputs                                                                                                       |
+|:--------------------|:--------------|:----------------------------------------------------------------------------------------------------------------------|
+| **Arithmetic**      | add           | At least two _whole_ numbers                                                                                          |
+| **Arithmetic**      | subtract      | At least two _whole_ numbers                                                                                          |
+| **Arithmetic**      | multiply      | At least two _whole_ numbers                                                                                          |
+| **Arithmetic**      | div           | At least two _whole_ numbers                                                                                          |
+| **Arithmetic**      | mod           | Two individual whole numbers                                                                                          |
+| **Arithmetic**      | increment     | A single _whole_ number                                                                                               |
+| **Arithmetic**      | decrement     | A single _whole_ number                                                                                               |
+| **Generator**       | uuid          | None                                                                                                                  |
+| **Generator**       | dateTime      | None required                                                                                                         |
+| **Logical**         | eq            | At least two Objects                                                                                                  |
+| **Logical**         | isNull        | A single Object                                                                                                       |
+| **Logical**         | ternary       | Three variables, the first variable must evaluate to a Boolean                                                        |
+| **Logical**         | and           | At least two boolean                                                                                                  |
+| **Logical**         | or            | At least two boolean                                                                                                  |
+| **Logical**         | not           | A single boolean                                                                                                      |
+| **Logical**         | gt            | Two individual whole numbers                                                                                          |
+| **Logical**         | lt            | Two individual whole numbers                                                                                          |
+| **Type Conversion** | b64           | Either a base64 encoded String, OR a byte[]                                                                           |
+| **Type Conversion** | binary        | Either a byte[], Map or String                                                                                        |
+| **Type Conversion** | length        | Either a byte[], List or String                                                                                       |
+| **Type Conversion** | substring     | Two to three variables.<br/>The first must be a String;<br/>the second must be an integer;<br/>the third is optional. |
+| **Type Conversion** | concat        | At least two Strings to be concatenated                                                                               |
+| **Type Conversion** | boolean       | A list of variables that can evaluate to a boolean                                                                    |
+| **Type Conversion** | double        | A list of variables that can evaluate to a double                                                                     |
+| **Type Conversion** | float         | A list of variables that can evaluate to a float                                                                      |
+| **Type Conversion** | int           | A list of variables that can evaluate to an integer                                                                   |
+| **Type Conversion** | long          | A list of variables that can evaluate to a long integer                                                               |
+| **Type Conversion** | text          | A list of variables that can evaluate to a String                                                                     |
+
+### Writing your own custom Simple Plugins
+
+You may create your own plugins. The system will scan all packages defined in `web.component.scan` for 
+any classes that have the `@SimplePlugin` annotation. If your plugin is compliant and is available under
+the given package list, then it will automatically be loaded and available on startup.
+If there are any issues with loading your plugin, an error will be shown in the logs on startup.
+
+NOTE: If your plugin uses a package that is not on the allowed packages above, your plugin will not load successfully.
 
 ## Handling exception
 
@@ -1445,16 +1609,28 @@ reaches the "backoff_trigger" threshold of 3. After that, all requests will be a
     description: 'Resilience handler with alternative path and backoff features'
     execution: decision
     next:
-      - 'my.task'
+      - '@retry'
       - 'abort.request'
       - 'alternative.task'
 ```
 
-> *Note*: When the "backoff" feature is enabled, you should configure the resilience handler as a gatekeeper
-          to protect your user function. This allows the system to abort requests during the backoff period.
-
-You may also use this resilience handler as a starting point to write your own exception handler for more
+You may also use this resilience handler as a template to write your own exception handler for more
 complex recovery use cases.
+
+*Important*:
+
+1. If you want the resilience handler to automatically retry the task that throws exception, set
+   "@retry" as the first task in the "next" task list.
+2. When the "backoff" feature is enabled, you should configure the resilience handler as a gatekeeper
+   to protect your user function. i.e. it is the "first.task". This allows the system to abort requests
+   during the backoff period.
+3. If the resilience handler is used as a gatekeeper and there was no exception, it will execute the
+   original task. However, if "@retry" is used as the first next task entry, it cannot resolve the original
+   task since it has never been executed. You can add the original task to the first entry with "|"
+   as a separator. e.g. `@retry | my.task` where "my.task" is the original task. This tells the system to
+   route the request to "my.task" when there is no exception in the first place.
+4. The "@retry" keyword can only be used in the first entry of the "next" task list.
+
 
 ### External state machine
 
@@ -1501,7 +1677,7 @@ to the function implementing the external state machine. The system uses the "ex
 to externalize a state machine's key-value.
 
 > *Note*: The delivery of key-values to the external state machine is asynchronous.
-  Therefore, please assume eventual consistency.
+          Therefore, please assume eventual consistency.
 
 You should implement a user function as the external state machine.
 
