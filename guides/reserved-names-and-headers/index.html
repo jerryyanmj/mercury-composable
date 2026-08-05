@@ -1,0 +1,3277 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Mercury Composable — Accenture's event-driven, composable application platform for Java: platform-core, Event Script, and the active knowledge graph.">
+      
+      
+      
+        <link rel="canonical" href="https://accenture.github.io/mercury-composable/guides/reserved-names-and-headers/">
+      
+      
+        <link rel="prev" href="../../test-reports/suspend-resume-interop/">
+      
+      
+        <link rel="next" href="../actuators-and-http-client/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Reserved Names & Headers - Composable for Java</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../css/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#reserved-names" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="Composable for Java" class="md-header__button md-logo" aria-label="Composable for Java" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 11a1 1 0 0 1 1 1 1 1 0 0 1-1 1 1 1 0 0 1-1-1 1 1 0 0 1 1-1M4.22 4.22C5.65 2.79 8.75 3.43 12 5.56c3.25-2.13 6.35-2.77 7.78-1.34s.79 4.53-1.34 7.78c2.13 3.25 2.77 6.35 1.34 7.78s-4.53.79-7.78-1.34c-3.25 2.13-6.35 2.77-7.78 1.34S3.43 15.25 5.56 12C3.43 8.75 2.79 5.65 4.22 4.22m11.32 4.24c.61.62 1.17 1.25 1.69 1.88 1.38-2.13 1.88-3.96 1.13-4.7-.74-.75-2.57-.25-4.7 1.13.63.52 1.26 1.08 1.88 1.69m-7.08 7.08c-.61-.62-1.17-1.25-1.69-1.88-1.38 2.13-1.88 3.96-1.13 4.7.74.75 2.57.25 4.7-1.13-.63-.52-1.26-1.08-1.88-1.69m-2.82-9.9c-.75.74-.25 2.57 1.13 4.7.52-.63 1.08-1.26 1.69-1.88.62-.61 1.25-1.17 1.88-1.69-2.13-1.38-3.96-1.88-4.7-1.13m4.24 8.48c.7.7 1.42 1.34 2.12 1.91.7-.57 1.42-1.21 2.12-1.91s1.34-1.42 1.91-2.12c-.57-.7-1.21-1.42-1.91-2.12S12.7 8.54 12 7.97c-.7.57-1.42 1.21-2.12 1.91S8.54 11.3 7.97 12c.57.7 1.21 1.42 1.91 2.12m8.48 4.24c.75-.74.25-2.57-1.13-4.7-.52.63-1.08 1.26-1.69 1.88-.62.61-1.25 1.17-1.88 1.69 2.13 1.38 3.96 1.88 4.7 1.13"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            Composable for Java
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Reserved Names & Headers
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m14.3 16-.7-2h-3.2l-.7 2H7.8L11 7h2l3.2 9zM20 8.69V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12zm-9.15 3.96h2.3L12 9z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="deep-purple" data-md-color-accent="cyan"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="deep-purple" data-md-color-accent="cyan"  aria-label="Switch to system preference"  type="radio" name="__palette" id="__palette_2">
+    
+      <label class="md-header__button md-icon" title="Switch to system preference" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12s-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/Accenture/mercury-composable" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Accenture/mercury-composable
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../.." class="md-tabs__link">
+        
+  
+  
+    
+  
+  Home
+
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../getting-started/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Orientation
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../architecture/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Foundations
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../event-driven/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Layer 1 — Event-driven
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../event-script/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Layer 2 — Composable
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../knowledge-graph/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Layer 3 — Knowledge Graph
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../build-test-deploy/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Operate & integrate
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../../arch-decisions/ADR/" class="md-tabs__link">
+          
+  
+  
+    
+  
+  Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="Composable for Java" class="md-nav__button md-logo" aria-label="Composable for Java" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 11a1 1 0 0 1 1 1 1 1 0 0 1-1 1 1 1 0 0 1-1-1 1 1 0 0 1 1-1M4.22 4.22C5.65 2.79 8.75 3.43 12 5.56c3.25-2.13 6.35-2.77 7.78-1.34s.79 4.53-1.34 7.78c2.13 3.25 2.77 6.35 1.34 7.78s-4.53.79-7.78-1.34c-3.25 2.13-6.35 2.77-7.78 1.34S3.43 15.25 5.56 12C3.43 8.75 2.79 5.65 4.22 4.22m11.32 4.24c.61.62 1.17 1.25 1.69 1.88 1.38-2.13 1.88-3.96 1.13-4.7-.74-.75-2.57-.25-4.7 1.13.63.52 1.26 1.08 1.88 1.69m-7.08 7.08c-.61-.62-1.17-1.25-1.69-1.88-1.38 2.13-1.88 3.96-1.13 4.7.74.75 2.57.25 4.7-1.13-.63-.52-1.26-1.08-1.88-1.69m-2.82-9.9c-.75.74-.25 2.57 1.13 4.7.52-.63 1.08-1.26 1.69-1.88.62-.61 1.25-1.17 1.88-1.69-2.13-1.38-3.96-1.88-4.7-1.13m4.24 8.48c.7.7 1.42 1.34 2.12 1.91.7-.57 1.42-1.21 2.12-1.91s1.34-1.42 1.91-2.12c-.57-.7-1.21-1.42-1.91-2.12S12.7 8.54 12 7.97c-.7.57-1.42 1.21-2.12 1.91S8.54 11.3 7.97 12c.57.7 1.21 1.42 1.91 2.12m8.48 4.24c.75-.74.25-2.57-1.13-4.7-.52.63-1.08 1.26-1.69 1.88-.62.61-1.25 1.17-1.88 1.69 2.13 1.38 3.96 1.88 4.7 1.13"/></svg>
+
+    </a>
+    Composable for Java
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/Accenture/mercury-composable" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    Accenture/mercury-composable
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Orientation
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Orientation
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Foundations
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Foundations
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architecture Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../methodology/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Methodology
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../ai-developer-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI Developer Guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../event-driven/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layer 1 — Event-driven
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_4" id="__nav_4_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Layer 1 — Event-driven
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../event-driven/write-your-first-function/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Write your first function
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../event-driven/function-execution/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Function Execution Strategies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../event-driven/ai-agent-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Function AI agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rest-automation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    REST Automation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rest-automation/rest-grammar/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    REST grammar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../rest-automation/ai-agent-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    REST AI agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../event-script/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layer 2 — Composable
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_5" id="__nav_5_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Layer 2 — Composable
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../event-script/syntax/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event Script Syntax
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../event-script/flow-grammar/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flow grammar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../event-script/ai-agent-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flow AI agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../flow-schema-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Flow Configuration Schema
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+          
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+        
+          
+          <div class="md-nav__link md-nav__container">
+            <a href="../knowledge-graph/" class="md-nav__link ">
+              
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Layer 3 — Knowledge Graph
+  
+
+    
+  </span>
+  
+  
+
+            </a>
+            
+              
+              <label class="md-nav__link " for="__nav_6" id="__nav_6_label" tabindex="0">
+                <span class="md-nav__icon md-icon"></span>
+              </label>
+            
+          </div>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_6">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Layer 3 — Knowledge Graph
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../knowledge-graph/build-your-first-graph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build your first graph
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../knowledge-graph/workflow-suspension/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Workflow suspension
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../knowledge-graph/skills-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Built-in skills reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../knowledge-graph/command-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    MiniGraph command grammar
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../knowledge-graph/ai-agent-guide/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    AI agent guide
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../knowledge-graph/composing-the-layers/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Composing the layers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../knowledge-graph/playground-and-companion/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Playground & AI companion
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../knowledge-graph/property-graph/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Minimalist Property Graph
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Operate & integrate
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Operate & integrate
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../build-test-deploy/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Build, Test & Deploy
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../observability/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Observability
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../spring-boot/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Spring Boot Integration
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../event-over-http/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event over HTTP
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../minimalist-kafka/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Minimalist Kafka
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../twin-kafka/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Twin Kafka (dual cluster)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../schema-registry-mock/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Schema Registry Mock
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sync-over-async/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sync-over-Async
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../service-mesh/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Minimalist Service Mesh
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+        
+      
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../arch-decisions/ADR/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Architectural Decision Records
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api-overview/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../annotations-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Annotations Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../configuration-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Configuration Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../event-envelope-reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event Envelope Reference
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../event-envelope-wire-format/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Event Envelope Wire Format
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../registration-metadata-contract/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Registration Metadata Contract
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../test-reports/event-over-http-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report (Java ⇄ Rust)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../test-reports/suspend-resume-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report — Suspend/Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reserved Names & Headers
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reserved Names & Headers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#system-route-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System route names
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optional-user-defined-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optional user defined functions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-op-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No-op function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#simple-exception-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simple exception handler
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reserved-event-header-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reserved event header names
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reserved-http-header-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reserved HTTP header names
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reserved HTTP header names">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trace-id-x-trace-id-and-w3c-traceparent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trace ID (X-Trace-Id and W3C traceparent)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correlation-id-propagation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Correlation ID propagation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transient-data-store" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transient data store
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../actuators-and-http-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Actuators & HTTP Client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code-conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../documentation-conventions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Documentation Conventions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/Accenture/mercury-composable/blob/main/CHANGELOG.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Release Notes
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/Accenture/mercury-composable/blob/main/CONTRIBUTING.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/Accenture/mercury-composable/blob/main/CODE_OF_CONDUCT.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code of Conduct
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="https://github.com/Accenture/mercury-composable/blob/main/INCLUSIVITY.md" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Inclusivity
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#system-route-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        System route names
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#optional-user-defined-functions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Optional user defined functions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-op-function" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No-op function
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#simple-exception-handler" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Simple exception handler
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reserved-event-header-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reserved event header names
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#reserved-http-header-names" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reserved HTTP header names
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Reserved HTTP header names">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#trace-id-x-trace-id-and-w3c-traceparent" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Trace ID (X-Trace-Id and W3C traceparent)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#correlation-id-propagation" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Correlation ID propagation
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#transient-data-store" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Transient data store
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#see-also" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        See also
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="reserved-names">Reserved names<a class="headerlink" href="#reserved-names" title="Permanent link">&para;</a></h1>
+<p><em>Reference: System-reserved route names and HTTP headers that must not be overridden.</em></p>
+<blockquote>
+<p><strong>At a glance</strong></p>
+<ul>
+<li><strong>What</strong> — the route names and HTTP headers the platform reserves for its own routing.</li>
+<li><strong>Why it matters</strong> — overloading a reserved name or header can silently break system routing;
+  this is the do-not-collide list.</li>
+<li><strong>For</strong> developers naming functions and setting headers.</li>
+</ul>
+</blockquote>
+<p>The system reserves some route names and headers for routing purpose.</p>
+<h2 id="system-route-names">System route names<a class="headerlink" href="#system-route-names" title="Permanent link">&para;</a></h2>
+<p>The Mercury foundation code is written using the same core API and each function has a route name.</p>
+<p>The following route names are reserved. Please DO NOT overload them in your application functions
+to avoid breaking the system unintentionally.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Route</th>
+<th style="text-align: left;">Purpose</th>
+<th style="text-align: left;">Modules</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">actuator.services</td>
+<td style="text-align: left;">Actuator endpoint services</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">info.actuator.service</td>
+<td style="text-align: left;">Info actuator endpoint</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">lib.actuator.service</td>
+<td style="text-align: left;">Library actuator endpoint</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">routes.actuator.service</td>
+<td style="text-align: left;">Route info actuator endpoint</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">env.actuator.service</td>
+<td style="text-align: left;">Environment actuator endpoint</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">health.actuator.service</td>
+<td style="text-align: left;">Health actuator endpoint</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">liveness.actuator.service</td>
+<td style="text-align: left;">Liveness actuator endpoint</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">elastic.queue.cleanup</td>
+<td style="text-align: left;">Elastic event buffer clean up task</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">distributed.tracing</td>
+<td style="text-align: left;">Distributed tracing logger</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">system.ws.server.cleanup</td>
+<td style="text-align: left;">Websocket server cleanup service</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">http.auth.handler</td>
+<td style="text-align: left;">REST automation authentication router</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">event.api.service</td>
+<td style="text-align: left;">Event API service</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">temporary.inbox</td>
+<td style="text-align: left;">Event listener for RPC</td>
+<td style="text-align: left;">platform-core</td>
+</tr>
+<tr>
+<td style="text-align: left;">event.script.manager</td>
+<td style="text-align: left;">Instantiate new event flow instance</td>
+<td style="text-align: left;">event-script</td>
+</tr>
+<tr>
+<td style="text-align: left;">task.executor</td>
+<td style="text-align: left;">Perform event choreography</td>
+<td style="text-align: left;">event-script</td>
+</tr>
+<tr>
+<td style="text-align: left;">http.flow.adapter</td>
+<td style="text-align: left;">Built-in flow adapter</td>
+<td style="text-align: left;">event-script</td>
+</tr>
+<tr>
+<td style="text-align: left;">no.op</td>
+<td style="text-align: left;">no-operation placeholder function</td>
+<td style="text-align: left;">event-script</td>
+</tr>
+<tr>
+<td style="text-align: left;">resilience.handler</td>
+<td style="text-align: left;">Resilience handler (retry / circuit breaker) for flows</td>
+<td style="text-align: left;">event-script</td>
+</tr>
+<tr>
+<td style="text-align: left;">system.service.registry</td>
+<td style="text-align: left;">Distributed routing registry</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">system.service.query</td>
+<td style="text-align: left;">Distributed routing query</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">cloud.connector.health</td>
+<td style="text-align: left;">Cloud connector health service</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">cloud.health.inbox</td>
+<td style="text-align: left;">Event listerner for loopback test</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">cloud.manager</td>
+<td style="text-align: left;">Cloud manager service</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">presence.service</td>
+<td style="text-align: left;">Presence signal service</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">presence.housekeeper</td>
+<td style="text-align: left;">Presence keep-alive service</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">cloud.connector</td>
+<td style="text-align: left;">Cloud event emitter</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">init.multiplex.*</td>
+<td style="text-align: left;">reserved for event stream startup</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">completion.multiplex.*</td>
+<td style="text-align: left;">reserved for event stream clean up</td>
+<td style="text-align: left;">Connector</td>
+</tr>
+<tr>
+<td style="text-align: left;">async.http.request</td>
+<td style="text-align: left;">HTTP request event handler</td>
+<td style="text-align: left;">REST automation</td>
+</tr>
+<tr>
+<td style="text-align: left;">async.http.response</td>
+<td style="text-align: left;">HTTP response event handler</td>
+<td style="text-align: left;">REST automation</td>
+</tr>
+<tr>
+<td style="text-align: left;">cron.scheduler</td>
+<td style="text-align: left;">Cron job scheduler</td>
+<td style="text-align: left;">Simple Scheduler</td>
+</tr>
+<tr>
+<td style="text-align: left;">run.scheduled.job</td>
+<td style="text-align: left;">Scheduled job executor</td>
+<td style="text-align: left;">Simple Scheduler</td>
+</tr>
+<tr>
+<td style="text-align: left;">init.service.monitor.*</td>
+<td style="text-align: left;">reserved for event stream startup</td>
+<td style="text-align: left;">Service monitor</td>
+</tr>
+<tr>
+<td style="text-align: left;">completion.service.monitor.*</td>
+<td style="text-align: left;">reserved for event stream clean up</td>
+<td style="text-align: left;">Service monitor</td>
+</tr>
+<tr>
+<td style="text-align: left;">simple.kafka.notification</td>
+<td style="text-align: left;">Publish an event to a Kafka topic (drop-n-forget / fail-fast)</td>
+<td style="text-align: left;">minimalist-kafka</td>
+</tr>
+<tr>
+<td style="text-align: left;">sync.prepare</td>
+<td style="text-align: left;">Sync-over-async facade: register the return route + serialize the request</td>
+<td style="text-align: left;">sync-over-async</td>
+</tr>
+<tr>
+<td style="text-align: left;">sync.await</td>
+<td style="text-align: left;">Sync-over-async facade: block for the asynchronous response</td>
+<td style="text-align: left;">sync-over-async</td>
+</tr>
+<tr>
+<td style="text-align: left;">graph.suspend</td>
+<td style="text-align: left;">Persist workflow state at a graph suspension point</td>
+<td style="text-align: left;">minigraph</td>
+</tr>
+<tr>
+<td style="text-align: left;">graph.resume</td>
+<td style="text-align: left;">Restore workflow state and continue past the suspension point</td>
+<td style="text-align: left;">minigraph</td>
+</tr>
+<tr>
+<td style="text-align: left;">v1.redis.persist.model</td>
+<td style="text-align: left;">Redis store for graph suspend (SETEX with native expiry)</td>
+<td style="text-align: left;">minigraph-state-redis</td>
+</tr>
+<tr>
+<td style="text-align: left;">v1.redis.retrieve.model</td>
+<td style="text-align: left;">Redis store for graph resume (atomic consume-on-retrieve)</td>
+<td style="text-align: left;">minigraph-state-redis</td>
+</tr>
+</tbody>
+</table>
+<p>Routes from the last rows belong to <strong>opt-in extension modules</strong> (<code>minimalist-kafka</code>,
+<code>sync-over-async</code>, <code>minigraph-state-redis</code>) and the knowledge graph engine: they are reserved only
+when that module is on the classpath. <code>sync.prepare</code> and <code>sync.await</code> are the ready-made facade
+tasks an application wires into its own <code>sync-to-async</code> flow (see
+<a href="../event-script/syntax/">Event Script Syntax</a>); like every reserved route, do not register your own
+function under these names. The knowledge graph additionally reserves the node <strong>alias</strong>
+<code>suspend</code> (bound to the <code>graph.suspend</code> skill — traversal jumps to it by name, the <code>root</code>/<code>end</code>
+pattern), the node <strong>property</strong> <code>suspend</code>, and the engine-managed state key <code>model.run</code> — see
+<a href="../knowledge-graph/workflow-suspension/">Workflow Suspension</a>.</p>
+<h2 id="optional-user-defined-functions">Optional user defined functions<a class="headerlink" href="#optional-user-defined-functions" title="Permanent link">&para;</a></h2>
+<p>The following optional route names will be detected by the system for additional user defined features.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Route</th>
+<th style="text-align: left;">Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">additional.info</td>
+<td style="text-align: left;">User application function to return information<br/> about your application status</td>
+</tr>
+<tr>
+<td style="text-align: left;">distributed.trace.forwarder</td>
+<td style="text-align: left;">Function to forward performance metrics to a telemetry<br/> system (ready-made OpenTelemetry/OTLP version: the<br/> <code>opentelemetry-forwarder</code> extension), or your own</td>
+</tr>
+<tr>
+<td style="text-align: left;">transaction.journal.recorder</td>
+<td style="text-align: left;">Custom function to record transaction request-response<br/> payloads into an audit DB</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>additional.info</code> function, if implemented, will be invoked from the "/info" endpoint and its response
+will be merged into the "/info" response.</p>
+<p>For <code>distributed.trace.forwarder</code> and <code>transaction.journal.recorder</code>, please refer to <a href="../build-test-deploy/">Build, Test and Deploy</a>
+for details.</p>
+<h2 id="no-op-function">No-op function<a class="headerlink" href="#no-op-function" title="Permanent link">&para;</a></h2>
+<p>The "no.op" function is used as a placeholder for building skeleton or simple decision function for
+an event flow use case.</p>
+<h2 id="simple-exception-handler">Simple exception handler<a class="headerlink" href="#simple-exception-handler" title="Permanent link">&para;</a></h2>
+<p>The "simple.exception.handler" is a placeholder for a user defined exception handler for rapid prototyping.
+For more sophisticated error handling, please use the "resilience.handler" or write your own composable function
+as an exception handler. For more details, refer to <a href="../event-script/syntax/">Event Script Syntax</a></p>
+<h2 id="reserved-event-header-names">Reserved event header names<a class="headerlink" href="#reserved-event-header-names" title="Permanent link">&para;</a></h2>
+<p>The following event headers are injected by the system as READ only metadata. They are available from the
+input "headers". However, they are not part of the EventEnvelope.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Header</th>
+<th style="text-align: left;">Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">my_route</td>
+<td style="text-align: left;">route name of your function</td>
+</tr>
+<tr>
+<td style="text-align: left;">my_trace_id</td>
+<td style="text-align: left;">trace ID, if any, for the incoming event</td>
+</tr>
+<tr>
+<td style="text-align: left;">my_trace_path</td>
+<td style="text-align: left;">trace path, if any, for the incoming event</td>
+</tr>
+<tr>
+<td style="text-align: left;">my_correlation_id</td>
+<td style="text-align: left;">business correlation-id, if any (the flow's <code>model.cid</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>These are READ only. Do not set them as response headers - the framework injects them and filters them
+out of responses. Read them through the PostOffice API (<code>getRoute</code>, <code>getTraceId</code>, <code>getTracePath</code>,
+<code>getMyCorrelationId</code>) rather than the raw header map.</p>
+<p>You can create a trackable PostOffice using the "headers" and the "instance" parameters in the input arguments
+of your function.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="kd">var</span><span class="w"> </span><span class="n">po</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">PostOffice</span><span class="p">(</span><span class="n">headers</span><span class="p">,</span><span class="w"> </span><span class="n">instance</span><span class="p">);</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="n">String</span><span class="w"> </span><span class="n">businessCorrelationId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">po</span><span class="p">.</span><span class="na">getMyCorrelationId</span><span class="p">();</span><span class="w">   </span><span class="c1">// upstream correlation-id, propagated to this function</span>
+</code></pre></div>
+<h2 id="reserved-http-header-names">Reserved HTTP header names<a class="headerlink" href="#reserved-http-header-names" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Header</th>
+<th style="text-align: left;">Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">X-Stream-Id</td>
+<td style="text-align: left;">Temporal route name for streaming content</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-TTL</td>
+<td style="text-align: left;">Time to live in milliseconds for a streaming content</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-Small-Payload-As-Bytes</td>
+<td style="text-align: left;">This header, if set to true, tells system to render stream content as bytes</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-Event-Api</td>
+<td style="text-align: left;">The system uses this header to indicate that the request is sent over HTTP</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-Async</td>
+<td style="text-align: left;">This header, if set to true, indicates it is a drop-n-forget request</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-Trace-Id</td>
+<td style="text-align: left;">Propagates the trace ID (end-to-end telemetry)</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-Correlation-Id</td>
+<td style="text-align: left;">Business correlation-id (default header name; configurable)</td>
+</tr>
+<tr>
+<td style="text-align: left;">traceparent</td>
+<td style="text-align: left;">W3C Trace Context header carrying trace ID + parent span ID (OpenTelemetry)</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-Content-Length</td>
+<td style="text-align: left;">If present, it is the expected length of a streaming content</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-Raw-Xml</td>
+<td style="text-align: left;">This header, if set to true, tells to system to skip XML rendering</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-Flow-Id</td>
+<td style="text-align: left;">This tells the event manager to select a flow configuration by ID</td>
+</tr>
+<tr>
+<td style="text-align: left;">X-App-Instance</td>
+<td style="text-align: left;">This header is used by some protected actuator REST endpoints</td>
+</tr>
+</tbody>
+</table>
+<h3 id="trace-id-x-trace-id-and-w3c-traceparent">Trace ID (X-Trace-Id and W3C traceparent)<a class="headerlink" href="#trace-id-x-trace-id-and-w3c-traceparent" title="Permanent link">&para;</a></h3>
+<p>The trace ID is for end-to-end telemetry. Two header mechanisms are supported, both accepted inbound and
+emitted outbound:</p>
+<ul>
+<li><strong>X-Trace-Id</strong> - carries the trace ID. When absent inbound, a fresh trace ID is generated at the edge.
+  The header <strong>name</strong> is configurable via <code>http.trace.id.header</code> (HTTP) and <code>kafka.trace.id.header</code>
+  (Kafka; unset by default - traceparent-only), for enterprises with their own convention.</li>
+<li><strong>traceparent</strong> (W3C Trace Context) - carries the trace ID <em>and</em> the caller's span ID. On inbound it
+  <strong>takes precedence</strong> over <code>X-Trace-Id</code>: the trace ID segment becomes the Mercury trace ID and the parent
+  span ID is adopted, so the trace continues from the upstream caller (span lineage across HTTP boundaries).
+  On outbound the system emits <code>traceparent</code> built from this hop's own span, alongside <code>X-Trace-Id</code>.
+  The carrier <strong>name</strong> is configurable via <code>http.traceparent.header</code> / <code>kafka.traceparent.header</code>
+  (default <code>traceparent</code>) - for <strong>backward compatibility with legacy systems only</strong>, e.g. an intermediary
+  that strips the standard header: the same W3C value then travels under <strong>both</strong> names. Inbound, the
+  standard <code>traceparent</code> always wins; the custom name is read only when the standard is absent (its
+  presence means the caller already upgraded to the standard - a residual proprietary value is safely
+  ignored). Departure from the W3C/OpenTelemetry standard is discouraged - treat a custom name as a
+  temporary bridge (see <a href="../observability/#impedance-config">Observability</a>).</li>
+</ul>
+<p>The framework does <strong>not</strong> echo the trace ID (or the correlation-id) back to the HTTP client.</p>
+<blockquote>
+<p>The legacy <code>trace.http.header</code> parameter (which allowed <code>X-Correlation-Id</code> to double as a trace ID) has
+been retired. Use <code>X-Trace-Id</code> / <code>traceparent</code> for the trace ID, and <code>X-Correlation-Id</code> for the
+correlation-id (below) - the two concerns are now separate.</p>
+<p><strong>Don't set <code>X-Trace-Id</code> / <code>traceparent</code> yourself in application code — let the framework handle it.</strong> When a
+call is traced, the platform stamps both headers from the current trace context on every outbound HTTP request
+and overwrites anything you set, so the trace lineage stays correct and the upstream trace propagates
+automatically. Only when a call is <strong>not</strong> traced (<code>tracing: false</code>, or a call made outside a trace) does a
+value you set pass through unchanged — the intended escape hatch for propagating a trace to a third-party
+system or for unit tests.</p>
+</blockquote>
+<h3 id="correlation-id-propagation">Correlation ID propagation<a class="headerlink" href="#correlation-id-propagation" title="Permanent link">&para;</a></h3>
+<p>The correlation-id ties a transaction together across business domains, from upstream through the mid-tier
+to downstream. Its header name is enterprise-specific, so it is <strong>configurable</strong>:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># HTTP: many enterprises use X-Correlation-Id (the default)</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="na">http.correlation.id.header</span><span class="o">=</span><span class="s">X-Correlation-Id</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Kafka: no cross-vendor standard exists, so &quot;cid&quot; is the default</span>
+<a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="na">kafka.correlation.id.header</span><span class="o">=</span><span class="s">cid</span>
+</code></pre></div>
+<blockquote>
+<p><strong>Per-entry overrides (impedance matching).</strong> The keys above (and their trace-id counterparts
+<code>http.trace.id.header</code> / <code>kafka.trace.id.header</code>) are the <strong>global defaults</strong>. A single application often
+integrates with pre-existing or third-party systems that each use their own convention, so an individual
+rest.yaml endpoint or kafka-flow-adapter.yaml binding may override them with the optional
+<code>trace.id.header</code> and <code>correlation.id.header</code> keys - the per-entry value wins over the global one.</p>
+</blockquote>
+<p>Propagation:</p>
+<ul>
+<li><strong>Captured at the edge.</strong> REST automation (HTTP) and the Kafka Flow Adapter read the configured header;
+  when absent, a fresh UUID (no dashes, via <code>util.getUuid()</code>) is generated. This is the <strong>business
+  correlation-id</strong>, distinct from the <strong>internal correlation-id</strong> used to route the reply back to the
+  caller (<code>EventEnvelope.getCorrelationId()</code>/<code>setCorrelationId()</code>) — the internal one is transport
+  plumbing invisible to application code; the business one is the durable, end-to-end identifier.</li>
+<li><strong>Preserved in the flow</strong> as <code>model.cid</code>, and exposed to every function task as the read-only
+  <code>my_correlation_id</code> header (<code>PostOffice.getMyCorrelationId()</code>).</li>
+<li><strong>Carried to any touch point.</strong> Every <code>PostOffice</code> send/RPC/broadcast carries the business
+  correlation-id on an <strong>engine-managed envelope tag</strong> — never as an envelope header — so the
+  correlation-id follows the call graph automatically: across in-memory calls, the cross-instance
+  <strong>event-over-HTTP</strong> hop (the tag rides in the serialized envelope and the peer's engine injects
+  <code>my_correlation_id</code> at delivery for <code>getMyCorrelationId()</code>), and into downstream systems. Metadata is
+  never transported as envelope headers; the <code>my_*</code> keys exist only in the injected input-header copy.</li>
+<li><strong>Echoed on the HTTP response.</strong> REST automation returns the request's business correlation-id
+  (inbound or edge-generated) on the response under the configured header name (default
+  <code>X-Correlation-Id</code>), so an edge caller can correlate without parsing the body. A response header of
+  the same name set by the function takes precedence.</li>
+<li><strong>Handed downstream.</strong> <code>simple.kafka.notification</code> stamps it on the outbound Kafka message (under
+  <code>kafka.correlation.id.header</code>), and <code>AsyncHttpClient</code> emits it as the configured HTTP header
+  (<code>http.correlation.id.header</code>) on downstream calls — in both cases an explicitly set header (e.g. a flow
+  mapping <code>model.cid -&gt; header.cid</code>, or a request that already carries the header) takes precedence.</li>
+</ul>
+<h2 id="transient-data-store">Transient data store<a class="headerlink" href="#transient-data-store" title="Permanent link">&para;</a></h2>
+<p>The system uses a temp folder in "/tmp/reactive" for event streaming.</p>
+<h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../configuration-reference/">Configuration Reference</a> — all configuration keys.</li>
+<li><a href="../actuators-and-http-client/">Actuators &amp; HTTP Client</a> — built-in endpoints and utilities.</li>
+</ul>
+
+
+
+
+
+
+
+  
+  
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+  <script>var tabs=__md_get("__tabs");if(Array.isArray(tabs))e:for(var set of document.querySelectorAll(".tabbed-set")){var labels=set.querySelector(".tabbed-labels");for(var tab of tabs)for(var label of labels.getElementsByTagName("label"))if(label.innerText.trim()===tab){var input=document.getElementById(label.htmlFor);input.checked=!0;continue e}}</script>
+
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+    
+      
+      <nav class="md-footer__inner md-grid" aria-label="Footer" >
+        
+          
+          <a href="../../test-reports/suspend-resume-interop/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Interop Test Report — Suspend/Resume">
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+            </div>
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Previous
+              </span>
+              <div class="md-ellipsis">
+                Interop Test Report — Suspend/Resume
+              </div>
+            </div>
+          </a>
+        
+        
+          
+          <a href="../actuators-and-http-client/" class="md-footer__link md-footer__link--next" aria-label="Next: Actuators &amp; HTTP Client">
+            <div class="md-footer__title">
+              <span class="md-footer__direction">
+                Next
+              </span>
+              <div class="md-ellipsis">
+                Actuators & HTTP Client
+              </div>
+            </div>
+            <div class="md-footer__button md-icon">
+              
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M4 11v2h12l-5.5 5.5 1.42 1.42L19.84 12l-7.92-7.92L10.5 5.5 16 11z"/></svg>
+            </div>
+          </a>
+        
+      </nav>
+    
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Apache-2.0 &middot; mercury-composable also has an official <a href="https://github.com/Accenture/mercury">Rust implementation</a>.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.top", "navigation.footer", "navigation.indexes", "toc.follow", "search.suggest", "search.highlight", "content.code.copy", "content.tabs.link"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
