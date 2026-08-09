@@ -1351,6 +1351,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#when-a-workflow-must-wait" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When a workflow must wait
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#why-short-runs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2540,6 +2551,17 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
+  <a href="#when-a-workflow-must-wait" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When a workflow must wait
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#why-short-runs" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2640,19 +2662,39 @@
 <blockquote>
 <p><strong>At a glance</strong></p>
 <ul>
-<li><strong>What it is</strong> — A graph run can <strong>suspend</strong> at a human checkpoint (approval,
-  intervention, inbox notification): its model is persisted to an external state store
-  and the run completes normally. A later request with the <strong>same business correlation
-  ID resumes</strong> past the checkpoint without re-executing it. A long-running business
-  process becomes a sequence of short runs — nothing stays in memory between them.</li>
-<li><strong>Vocabulary</strong> — the <code>graph.suspend</code> and <code>graph.resume</code> skills, the reserved node
-  alias <code>suspend</code>, and the node property <code>suspend=true</code>.</li>
+<li><strong>What it is</strong> — A graph run can <strong>suspend</strong> while the workflow waits — for a person
+  (an approval, missing information) or for another system (a batch job, a downstream
+  process): its model is persisted to an external state store and the run completes
+  normally. A later request with the <strong>same business correlation ID resumes</strong> where the
+  workflow left off. A long-running business process becomes a sequence of short runs —
+  nothing stays in memory between them.</li>
+<li><strong>Two ways to pause</strong> — a <strong>checkpoint node</strong> does its work, then pauses; on resume
+  the workflow continues at its next step(s) without re-running it. A <strong>decision node</strong>
+  chooses — continue, branch, or pause — and decides again with the new input on every
+  resume.</li>
 <li><strong>The store is pluggable</strong> — Redis ships as the <code>minigraph-state-redis</code> extension;
   any composable function honoring the <a href="#state-store-contract">store contract</a> works.</li>
 </ul>
 </blockquote>
+<h2 id="when-a-workflow-must-wait">When a workflow must wait<a class="headerlink" href="#when-a-workflow-must-wait" title="Permanent link">&para;</a></h2>
+<p>Two everyday situations produce the same problem — a multi-step process that cannot
+finish in one go:</p>
+<ul>
+<li><strong>Waiting for another system (fully automatic).</strong> A step starts a long batch job — for
+  example by publishing a Kafka message — and the processing takes minutes or hours.
+  When it finishes, the batch processor calls back with the same correlation ID and the
+  workflow picks up at the next step. No person is involved: suspension is not only for
+  human-in-the-loop.</li>
+<li><strong>Waiting for a person.</strong> A user submits a service ticket for a warranty replacement.
+  The workflow finds information missing, emails the user, and pauses. When the user
+  replies, the system resumes the workflow by its correlation ID — the ticket number —
+  and continues where it left off.</li>
+</ul>
+<p>In both cases the workflow <em>pauses</em> rather than <em>ends</em>: its memory is kept safe outside
+the application, and any application instance can pick it up when the reply arrives.</p>
 <h2 id="why-short-runs">Why short runs<a class="headerlink" href="#why-short-runs" title="Permanent link">&para;</a></h2>
-<p>An approval may take minutes or days. Parking a live graph instance for that long would
+<p>The reply — the batch completion, the manager's approval, the user's email — may take
+minutes, hours or days. Parking a live graph instance for that long would
 pin memory, defeat timeouts, and not survive a restart. Suspension inverts the problem:
 the run <strong>ends</strong> — the caller gets a <code>{"type": "suspended", "cid": ...}</code> reply — and the
 workflow's durable memory (the <code>model</code> namespace) waits in the state store under the
@@ -2672,23 +2714,63 @@ the state envelope through the attached store function — no data mapping neede
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>task=v1.redis.persist.model
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a>ttl=2d
 </code></pre></div>
-<p><code>ttl</code> is <strong>mandatory with no default</strong> — a checkpoint may wait a minute or days, and only
-the workflow designer knows. It uses duration syntax (<code>20s</code>, <code>5m</code>, <code>2h</code>, <code>2d</code>) and becomes
+<p><code>ttl</code> is <strong>mandatory with no default</strong> — a suspended workflow may wait a minute or days,
+and only the workflow designer knows. It uses duration syntax (<code>20s</code>, <code>5m</code>, <code>2h</code>, <code>2d</code>) and becomes
 the store record's expiry. The <code>suspend</code> node also needs an <strong>outgoing connection</strong>
 (normally to <code>end</code>): without one, the record would persist and the run would then stall
 instead of completing — the compiler rejects the graph.</p>
-<p><strong>2. A suspensible node</strong> — any skilled node marked <code>suspend=true</code>. After its skill
-completes and its output mapping runs, traversal routes to the <code>suspend</code> node instead of
-its normal forward path. Draw <strong>both</strong> edges — the checkpoint edge to <code>suspend</code> and the
-continuation edge — so the diagram tells the whole story (the compiler enforces this).
-Routing skills (<code>graph.math</code>, <code>graph.js</code>) cannot be suspensible. A plain edge <em>into</em> the
-<code>suspend</code> node is an unconditional suspension point — no property needed.</p>
+<p><strong>2. A suspension point</strong> — two patterns, named after the node that pauses:</p>
+<ul>
+<li><strong>A checkpoint node pauses after doing its work.</strong> Think of it as a hand-off: the node
+  records what just happened (the order, the uploaded document), stages the reply that
+  tells the caller what comes next, and the workflow pauses. A checkpoint never wonders
+  <em>whether</em> to pause — reaching it <strong>is</strong> the decision. On the canvas it draws <strong>two</strong>
+  arrows (the compiler enforces both): one to <code>suspend</code> — <em>pause here</em> — and at least one
+  continuation edge — <em>this is where the workflow continues when it wakes up</em>, a single
+  step or a fan-out. A resumed run continues along the continuation and <strong>never
+  re-executes</strong> the checkpoint itself.</li>
+<li><strong>A decision node chooses — and pausing is one of its choices.</strong> A <code>graph.math</code>
+  decision looks at the incoming request and returns where the workflow goes next: a
+  node name (continue there) or <code>suspend</code> (pause and keep waiting). It draws arrows only
+  to its real outcome targets — never to <code>suspend</code>: pausing is a returned choice, not an
+  edge (the compiler rejects a decision-to-suspend edge). On resume the decision is
+  <strong>re-executed</strong> against the new input, so it re-decides every time — "keep waiting
+  until a valid answer arrives" is one node with no extra wiring. When <code>suspend</code> is
+  reachable only this way, anchor it behind an island (<code>root -&gt; island -&gt; suspend</code>) so
+  the graph has no orphan nodes — traversal stops at the island, so the anchor edge is
+  never walked.</li>
+</ul>
+<p>The two patterns compose. When the pause itself is conditional, put a decision in front
+of a checkpoint: one outcome routes into the checkpoint (do the hand-off, then pause),
+another routes past it (no pause needed):</p>
+<pre class="mermaid"><code>flowchart LR
+    d{"decision"} --&gt;|needs a pause| c["checkpoint"]
+    d --&gt;|no pause| n["next step(s)"]
+    c --&gt;|pause| s[["suspend"]]
+    c --&gt;|"continuation - a resumed&lt;br&gt;run starts here"| n</code></pre>
+<p>And the decision pattern alone is the wait-loop — re-evaluate each incoming request
+until one moves the workflow forward:</p>
+<pre class="mermaid"><code>flowchart LR
+    d{"decision"} --&gt;|approved| a["next step"]
+    d --&gt;|rejected| t["terminal step"]
+    d -.-&gt;|"waiting..."| d
+    r(["root"]) --&gt; i["island"] --&gt; s[["suspend"]]</code></pre>
+<blockquote>
+<p>The ADRs and the compiler internals call these shapes <strong>edge mode</strong> (checkpoint node —
+the drawn edge to <code>suspend</code> is the declaration) and <strong>jump mode</strong> (decision node — the
+IF-THEN-ELSE returns <code>suspend</code>). Same behavior, engineering names.</p>
+</blockquote>
+<p>The <code>suspend</code> node cannot be an exception handler (<code>exception=suspend</code> is rejected). The
+retired <code>suspend=true</code> property is accepted and <strong>ignored</strong> for one deprecation window
+(the compiler logs a WARN): every valid earlier model already draws its checkpoint edge,
+which now declares the same behavior — models deploy unmodified.</p>
 <p><strong>3. The resume node</strong> — conventionally named <code>resume</code>, placed right after <code>root</code> (or
 after setup nodes). When the store has a record for <code>model.cid</code>, it restores the model,
 re-arms the traversal bookkeeping (a downstream <code>graph.join</code> still sees branches that
-completed before suspension), and jumps past the checkpoint. When there is no record —
-a fresh transaction, the normal first-run case, or an expired one — traversal simply
-continues along the resume node's own forward path.</p>
+completed before suspension), and continues at the suspension point: past a checkpoint
+node along its continuation edge, or by <strong>re-executing</strong> a decision against the new
+input. When there is no record — a fresh transaction, the normal first-run case, or an
+expired one — traversal simply continues along the resume node's own forward path.</p>
 <p>Either way, the skill records the outcome in <strong><code>model.run</code></strong> — <code>resume</code> when a record was
 restored, <code>fresh</code> when there was none. The engine deliberately does not distinguish
 absent from expired (with several checkpoints in one graph, no single fallback node could
@@ -2709,64 +2791,64 @@ colors in the Playground; the skill defines the behavior.</p>
 <p><code>tutorial-14</code> (shipped with the engine, runnable in the <code>minigraph-playground</code> example
 app) is the complete multi-checkpoint pattern — <strong>three human checkpoints, four short
 runs, one correlation ID</strong>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>root → resume → order (suspend=true) → check-approval → approval (suspend=true) → delivery (suspend=true) → ship → end
-<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>                                        ↑        ↘ manager-reject → end
-<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>                                        └─ await-decision (suspend=true)
-</code></pre></div>
+<pre class="mermaid"><code>flowchart LR
+    root(["root"]) --&gt; resume --&gt; order["order&lt;br&gt;(checkpoint)"] --&gt; check{"check-approval&lt;br&gt;(decision)"}
+    check --&gt;|approved| approval["approval&lt;br&gt;(checkpoint)"] --&gt; delivery["delivery&lt;br&gt;(checkpoint)"] --&gt; ship --&gt; done(["end"])
+    check --&gt;|rejected| reject["manager-reject"] --&gt; done
+    check -.-&gt;|waiting: pauses,&lt;br&gt;re-decides on resume| check</code></pre>
 <p>A customer orders, the store manager approves <strong>or rejects with a reason</strong>, the delivery
 department releases the shipment, and the parcel ships — one <code>suspend</code> node serves every
-checkpoint, and each suspensible node captures its actor's input into the model and
-stages its own stage-specific reply (overriding the default <code>suspended</code> response). The
-manager's decision lands at a <code>graph.math</code> decision node on the <code>order</code> checkpoint's
-continuation with three outcomes: an approved decision routes to the next suspension
-point, an explicit rejection routes to a terminal node that reports the manager's reason
-(the workflow ends), and anything else — a missing or unrecognized decision — re-suspends
-through <code>await-decision</code>, whose continuation loops back to the decision, so an invalid
-request can never end a long-running workflow by accident. The decision must sit
-<strong>before</strong> the suspensible nodes: a suspensible node always suspends when its skill
-completes — it cannot evaluate the input and choose not to — so the routing choice is
-made first, and only an approved decision reaches the checkpoint that suspends for the
-next actor. Run it with Redis (e.g. <code>helpers/redis-standalone</code>) and drive the four runs
-with one correlation ID.</p>
+suspension point. The <code>order</code>, <code>approval</code> and <code>delivery</code> nodes are <strong>checkpoint nodes</strong>:
+each draws its checkpoint edge to <code>suspend</code>, captures its actor's input into the model
+and stages its own stage-specific reply (overriding the default <code>suspended</code> response).
+The manager's decision lands at a <code>graph.math</code> <strong>decision node</strong> on the <code>order</code>
+checkpoint's continuation with three outcomes: an approved decision routes to the next
+suspension point, an explicit rejection routes to a terminal node that reports the
+manager's reason (the workflow ends), and anything else — a missing or unrecognized
+decision — returns <code>suspend</code> and pauses. Because the decision is re-executed against the
+new input on every resume, an invalid request can never end a long-running workflow by
+accident: the workflow keeps waiting and re-decides when the next request arrives, with
+no extra wait nodes. Run it with Redis (e.g. <code>helpers/redis-standalone</code>) and drive the
+four runs with one correlation ID.</p>
 <p>Run 1 — the customer orders a laptop; the run suspends at the <code>order</code> checkpoint and
 replies with <code>"run": "fresh"</code> (a new transaction):</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-1001&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;item&quot;: &quot;laptop&quot;, &quot;amount&quot;: 2000}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-1001&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;item&quot;: &quot;laptop&quot;, &quot;amount&quot;: 2000}&#39;</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="p">{</span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-submitted; waiting for store manager approval&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fresh&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-1001&quot;</span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-submitted; waiting for store manager approval&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fresh&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-1001&quot;</span><span class="p">}</span>
 </code></pre></div>
 <p>Run 2 — with the same <code>x-correlation-id</code>, the store manager approves. The <code>resume</code> node
 restores the persisted state and continues past the <code>order</code> checkpoint without
 re-executing it, into the <code>check-approval</code> decision — every reply from here on carries
 <code>"run": "resume"</code>:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-1001&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;decision&quot;: &quot;approved&quot;, &quot;manager&quot;: &quot;store-88&quot;}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-1001&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;decision&quot;: &quot;approved&quot;, &quot;manager&quot;: &quot;store-88&quot;}&#39;</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a><span class="p">{</span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;approved; waiting for the delivery department to release the shipment&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-1001&quot;</span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="p">{</span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;approved; waiting for the delivery department to release the shipment&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-1001&quot;</span><span class="p">}</span>
 </code></pre></div>
 <p>Run 3 — the delivery department releases the shipment:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-1001&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;release&quot;: true, &quot;courier&quot;: &quot;express&quot;}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-1001&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;release&quot;: true, &quot;courier&quot;: &quot;express&quot;}&#39;</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="p">{</span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;released; waiting for shipment confirmation&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-1001&quot;</span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="p">{</span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;released; waiting for shipment confirmation&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-1001&quot;</span><span class="p">}</span>
 </code></pre></div>
 <p>Run 4 — shipment confirmation completes the workflow:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-1001&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;tracking&quot;: &quot;TRK-12345&quot;}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-1001&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;tracking&quot;: &quot;TRK-12345&quot;}&#39;</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="p">{</span>
-<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shipped&quot;</span><span class="p">,</span>
-<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">,</span>
-<a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">  </span><span class="nt">&quot;order&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;item&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;laptop&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;amount&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2000</span><span class="p">},</span>
-<a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a><span class="w">  </span><span class="nt">&quot;approval&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;decision&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;approved&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;manager&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;store-88&quot;</span><span class="p">},</span>
-<a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a><span class="w">  </span><span class="nt">&quot;delivery&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;release&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;courier&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;express&quot;</span><span class="p">},</span>
-<a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a><span class="w">  </span><span class="nt">&quot;shipment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;tracking&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;TRK-12345&quot;</span><span class="p">},</span>
-<a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="w">  </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-1001&quot;</span>
-<a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="p">{</span>
+<a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="w">  </span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;shipped&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a><span class="w">  </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">,</span>
+<a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a><span class="w">  </span><span class="nt">&quot;order&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;item&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;laptop&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;amount&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2000</span><span class="p">},</span>
+<a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a><span class="w">  </span><span class="nt">&quot;approval&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;decision&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;approved&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;manager&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;store-88&quot;</span><span class="p">},</span>
+<a id="__codelineno-9-6" name="__codelineno-9-6" href="#__codelineno-9-6"></a><span class="w">  </span><span class="nt">&quot;delivery&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;release&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;courier&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;express&quot;</span><span class="p">},</span>
+<a id="__codelineno-9-7" name="__codelineno-9-7" href="#__codelineno-9-7"></a><span class="w">  </span><span class="nt">&quot;shipment&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;tracking&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;TRK-12345&quot;</span><span class="p">},</span>
+<a id="__codelineno-9-8" name="__codelineno-9-8" href="#__codelineno-9-8"></a><span class="w">  </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-1001&quot;</span>
+<a id="__codelineno-9-9" name="__codelineno-9-9" href="#__codelineno-9-9"></a><span class="p">}</span>
 </code></pre></div>
 <p>Every stage's input crossed every suspension — the model accumulated <code>order</code>, <code>approval</code>
 and <code>delivery</code> across four separate runs, and a later checkpoint simply re-persisted the
@@ -2776,25 +2858,25 @@ grown state under the same correlation ID.</p>
 reason together with the original order, and the workflow ends — the record was already
 consumed on resume and nothing re-suspends, so a further request under the same
 correlation ID is a fresh 404 rejection:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-2002&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;decision&quot;: &quot;rejected&quot;, &quot;reason&quot;: &quot;budget exceeded&quot;}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-2002&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;decision&quot;: &quot;rejected&quot;, &quot;reason&quot;: &quot;budget exceeded&quot;}&#39;</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a><span class="p">{</span>
-<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;rejected&quot;</span><span class="p">,</span>
-<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span><span class="nt">&quot;reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;budget exceeded&quot;</span><span class="p">,</span>
-<a id="__codelineno-12-4" name="__codelineno-12-4" href="#__codelineno-12-4"></a><span class="w">  </span><span class="nt">&quot;order&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;item&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;laptop&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;amount&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2000</span><span class="p">},</span>
-<a id="__codelineno-12-5" name="__codelineno-12-5" href="#__codelineno-12-5"></a><span class="w">  </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">,</span>
-<a id="__codelineno-12-6" name="__codelineno-12-6" href="#__codelineno-12-6"></a><span class="w">  </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-2002&quot;</span>
-<a id="__codelineno-12-7" name="__codelineno-12-7" href="#__codelineno-12-7"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-11-1" name="__codelineno-11-1" href="#__codelineno-11-1"></a><span class="p">{</span>
+<a id="__codelineno-11-2" name="__codelineno-11-2" href="#__codelineno-11-2"></a><span class="w">  </span><span class="nt">&quot;stage&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;rejected&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-3" name="__codelineno-11-3" href="#__codelineno-11-3"></a><span class="w">  </span><span class="nt">&quot;reason&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;budget exceeded&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-4" name="__codelineno-11-4" href="#__codelineno-11-4"></a><span class="w">  </span><span class="nt">&quot;order&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;item&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;laptop&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;amount&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2000</span><span class="p">},</span>
+<a id="__codelineno-11-5" name="__codelineno-11-5" href="#__codelineno-11-5"></a><span class="w">  </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;resume&quot;</span><span class="p">,</span>
+<a id="__codelineno-11-6" name="__codelineno-11-6" href="#__codelineno-11-6"></a><span class="w">  </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;order-2002&quot;</span>
+<a id="__codelineno-11-7" name="__codelineno-11-7" href="#__codelineno-11-7"></a><span class="p">}</span>
 </code></pre></div>
 <p>A <strong>missing or unrecognized decision</strong> takes the third path: the reply is
 <code>"stage": "awaiting-decision; supply decision approved or rejected for the store manager"</code>
-and the workflow <strong>re-suspends</strong> — <code>await-decision</code>'s continuation loops back to
-<code>check-approval</code>, so the next resume re-evaluates the decision and only an explicit
-<code>approved</code> or <code>rejected</code> moves the workflow forward. This is also what a replay against a
-leftover suspended record now yields — a self-explanatory "still waiting" instead of a
-surprise.</p>
+and the workflow <strong>re-suspends</strong> — <code>check-approval</code> returns <code>suspend</code>, and because a
+pausing decision re-executes on every resume, the next request re-evaluates the
+decision: only an explicit <code>approved</code> or <code>rejected</code> moves the workflow forward. This is
+also what a replay against a leftover suspended record now yields — a self-explanatory
+"still waiting" instead of a surprise.</p>
 <p>The tutorial also validates its input: a request that is not an order submission, for a
 correlation ID with no suspended record, is <strong>rejected with HTTP 404</strong> — the order must
 come first. Three techniques worth stealing from its model:</p>
@@ -2803,15 +2885,13 @@ come first. Three techniques worth stealing from its model:</p>
   substitution inside a <code>text()</code> constant is null-safe:
   <code>MAPPING: text(={input.body.item}) -&gt; model.order_probe</code> always yields a present
   string (<code>=null</code> when the field is absent), which an <code>IF</code> can compare safely. The
-  <code>check-approval</code> decision reuses the same idiom, so a missing decision safely routes to
-  the wait loop rather than raising a runtime error.</li>
-<li><strong>A wait loop across suspensions needs <code>RESET</code>.</strong> The traveler and executor never
-  re-execute a node they have already seen — and the <code>seen</code> marks are part of the
-  persisted state, so they survive suspension. A loop that revisits a decision on every
-  resume must clear its own nodes first: <code>check-approval</code>'s
-  <code>RESET: check-approval await-decision</code> runs before its <code>IF</code> statements (an <code>IF</code> that
-  jumps to a node returns immediately), un-marking both loop nodes so the next resumed
-  run can walk them again.</li>
+  <code>check-approval</code> decision reuses the same idiom, so a missing decision safely jumps
+  back to the checkpoint rather than raising a runtime error.</li>
+<li><strong>A decision can stage the caller's reply.</strong> <code>graph.math</code> <code>MAPPING:</code> statements run
+  before its <code>IF</code> statements and may write <code>output.*</code> — <code>check-approval</code> stages the
+  awaiting reply unconditionally, and the approval/rejection paths overwrite it
+  downstream. A decision-initiated suspension therefore replies with the decision's own
+  staged body (or the default <code>{"type": "suspended", ...}</code> when nothing was staged).</li>
 <li><strong>The run flag.</strong> <code>graph.resume</code> sets <code>model.run</code> to <code>fresh</code> or <code>resume</code>, and the
   tutorial stages it into every reply (<code>model.run -&gt; output.body.run</code>) — so the UI always
   knows whether it is looking at a new transaction or a resumed continuation, and a
@@ -2823,30 +2903,31 @@ come first. Three techniques worth stealing from its model:</p>
   <code>stack</code> key, with its <code>status</code> key corrected) — so give your rejection fields names other
   than <code>status</code>.</li>
 </ul>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-13-2" name="__codelineno-13-2" href="#__codelineno-13-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-9999&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-13-3" name="__codelineno-13-3" href="#__codelineno-13-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;decision&quot;: &quot;approved&quot;}&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-12-1" name="__codelineno-12-1" href="#__codelineno-12-1"></a>curl<span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>http://127.0.0.1:8085/api/graph/tutorial-14<span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-2" name="__codelineno-12-2" href="#__codelineno-12-2"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;content-type: application/json&#39;</span><span class="w"> </span>-H<span class="w"> </span><span class="s1">&#39;x-correlation-id: order-9999&#39;</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-12-3" name="__codelineno-12-3" href="#__codelineno-12-3"></a><span class="w">  </span>-d<span class="w"> </span><span class="s1">&#39;{&quot;decision&quot;: &quot;approved&quot;}&#39;</span>
 </code></pre></div>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;rejected&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Transaction not found. Submit the order first&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fresh&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">404</span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-13-1" name="__codelineno-13-1" href="#__codelineno-13-1"></a><span class="p">{</span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;rejected&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Transaction not found. Submit the order first&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;fresh&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">404</span><span class="p">}</span>
 </code></pre></div>
 <h2 id="design-rules">Design rules<a class="headerlink" href="#design-rules" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>The model is the workflow's durable memory.</strong> Only the <code>model</code> namespace persists —
   a node's <code>{node}.result</code> scratch does not survive suspension. Map anything a later step
   needs into <code>model.*</code> <strong>before</strong> the checkpoint.</li>
-<li><strong>A suspensible node is a complete working node — only its exit changes.</strong> It executes
-  its skill in full (input mapping → skill → output mapping) before routing to the
-  <code>suspend</code> node, so it may carry any non-routing skill (<code>graph.data.mapper</code>,
-  <code>graph.task</code>, <code>graph.api.fetcher</code>, <code>graph.extension</code>), capture the actor's input into
-  <code>model.*</code>, and stage the caller's reply in <code>output.*</code> — and its non-checkpoint edge
-  defines exactly where the next run continues after resume. What it never does is
-  choose: it cannot route, and it cannot decline to suspend.</li>
-<li><strong>Decide before you suspend.</strong> A suspensible node always suspends — when its skill
-  completes, traversal routes to the <code>suspend</code> node unconditionally; it cannot inspect
-  the input and opt out. Place a routing node (e.g. <code>graph.math</code>) on the resume
-  continuation, <strong>before</strong> the next suspensible node, to decide whether the workflow
-  continues to that checkpoint, branches, or ends — as tutorial-14's <code>check-approval</code>
-  does with the manager's decision.</li>
+<li><strong>A checkpoint node is a complete working step — only its exit changes.</strong> It executes
+  its skill in full (input mapping → skill → output mapping) before pausing, so it may
+  carry any non-routing skill (<code>graph.data.mapper</code>, <code>graph.task</code>, <code>graph.api.fetcher</code>,
+  <code>graph.extension</code>), capture the actor's input into <code>model.*</code>, and stage the caller's
+  reply in <code>output.*</code> — and its continuation edge defines exactly where the next run
+  continues after resume. What it never does is choose: a checkpoint always suspends when
+  its skill completes.</li>
+<li><strong>Route the choice, don't property it.</strong> When the input decides the workflow's
+  direction (approve vs reject vs wait), make the decision a <code>graph.math</code> node whose
+  outcomes route naturally: continue to the next checkpoint, branch to a terminal node,
+  or <strong>return <code>suspend</code></strong> to keep waiting. The decision draws edges only to its real
+  outcome targets — never to <code>suspend</code> (the compiler rejects that shape) — and re-executes
+  on every resume, so each new request is re-evaluated. tutorial-14's <code>check-approval</code>
+  is the pattern.</li>
 <li><strong>A suspension point must be the sole active branch.</strong> Do not suspend between a fan-out
   and its join — branches in flight cannot be persisted (the engine logs a warning);
   suspend <em>after</em> the join instead. Joins whose predecessors completed before suspension
@@ -2874,14 +2955,14 @@ come first. Three techniques worth stealing from its model:</p>
 property — the Redis module below is one implementation; PostgreSQL, DynamoDB, MongoDB or
 anything else plugs in the same way.</p>
 <p><strong>Persist</strong> — invoked by <code>graph.suspend</code>; headers <code>type=put</code>; request body:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-15-1" name="__codelineno-15-1" href="#__codelineno-15-1"></a><span class="p">{</span>
-<a id="__codelineno-15-2" name="__codelineno-15-2" href="#__codelineno-15-2"></a><span class="w">  </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w">   </span><span class="s2">&quot;&lt;business correlation ID - the retrieval key&gt;&quot;</span><span class="p">,</span>
-<a id="__codelineno-15-3" name="__codelineno-15-3" href="#__codelineno-15-3"></a><span class="w">  </span><span class="nt">&quot;node&quot;</span><span class="p">:</span><span class="w">  </span><span class="s2">&quot;&lt;the suspension point&gt;&quot;</span><span class="p">,</span>
-<a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a><span class="w">  </span><span class="nt">&quot;ttl&quot;</span><span class="p">:</span><span class="w">   </span><span class="mi">172800</span><span class="p">,</span>
-<a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a><span class="w">  </span><span class="nt">&quot;model&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;the model namespace minus reserved keys&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a><span class="w">  </span><span class="nt">&quot;seen&quot;</span><span class="p">:</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;traversal bookkeeping&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">},</span>
-<a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a><span class="w">  </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;traversal bookkeeping&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
-<a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-14-1" name="__codelineno-14-1" href="#__codelineno-14-1"></a><span class="p">{</span>
+<a id="__codelineno-14-2" name="__codelineno-14-2" href="#__codelineno-14-2"></a><span class="w">  </span><span class="nt">&quot;cid&quot;</span><span class="p">:</span><span class="w">   </span><span class="s2">&quot;&lt;business correlation ID - the retrieval key&gt;&quot;</span><span class="p">,</span>
+<a id="__codelineno-14-3" name="__codelineno-14-3" href="#__codelineno-14-3"></a><span class="w">  </span><span class="nt">&quot;node&quot;</span><span class="p">:</span><span class="w">  </span><span class="s2">&quot;&lt;the suspension point&gt;&quot;</span><span class="p">,</span>
+<a id="__codelineno-14-4" name="__codelineno-14-4" href="#__codelineno-14-4"></a><span class="w">  </span><span class="nt">&quot;ttl&quot;</span><span class="p">:</span><span class="w">   </span><span class="mi">172800</span><span class="p">,</span>
+<a id="__codelineno-14-5" name="__codelineno-14-5" href="#__codelineno-14-5"></a><span class="w">  </span><span class="nt">&quot;model&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;the model namespace minus reserved keys&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-14-6" name="__codelineno-14-6" href="#__codelineno-14-6"></a><span class="w">  </span><span class="nt">&quot;seen&quot;</span><span class="p">:</span><span class="w">  </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;traversal bookkeeping&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">},</span>
+<a id="__codelineno-14-7" name="__codelineno-14-7" href="#__codelineno-14-7"></a><span class="w">  </span><span class="nt">&quot;run&quot;</span><span class="p">:</span><span class="w">   </span><span class="p">{</span><span class="w"> </span><span class="nt">&quot;traversal bookkeeping&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="w"> </span><span class="p">}</span>
+<a id="__codelineno-14-8" name="__codelineno-14-8" href="#__codelineno-14-8"></a><span class="p">}</span>
 </code></pre></div>
 <p>Store the body <strong>opaquely</strong> (the reference implementations use MsgPack — binary values
 round-trip; note the platform's <a href="../../api-overview/">serialization gotchas</a>)
