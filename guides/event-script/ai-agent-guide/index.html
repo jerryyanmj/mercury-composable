@@ -489,6 +489,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -549,6 +553,62 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../mercury-story/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    White Paper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../mercury-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Mercury Family
   
 
     
@@ -1221,6 +1281,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#scaffolding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scaffolding a project from the template
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1616,6 +1687,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1780,6 +1857,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../../http-streaming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP Response Streaming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../polyglot-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polyglot Functions (Python & Node.js)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../minimalist-kafka/" class="md-nav__link">
         
   
@@ -1816,6 +1949,34 @@
     
   
     Twin Kafka (dual cluster)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../distributed-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Cache
   
 
     
@@ -1928,6 +2089,12 @@
   
     
     
+      
+        
+      
+        
+      
+        
       
         
       
@@ -2239,6 +2406,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../test-reports/progressive-rendering-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report — Progressive Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../test-reports/suspend-resume-interop/" class="md-nav__link">
         
   
@@ -2247,6 +2442,62 @@
     
   
     Interop Test Report — Suspend/Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../test-reports/streaming-return-route-cross-pod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — Streaming Return Route (cross-pod)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../test-reports/otel-dynatrace-certification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — OpenTelemetry forwarder (Dynatrace)
   
 
     
@@ -2562,6 +2813,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#scaffolding" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scaffolding a project from the template
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#see-also" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2609,7 +2871,8 @@
 <ol>
 <li>Write the flow YAML under <code>src/main/resources/flows/</code>.</li>
 <li>Register its file in the <strong><code>flows.yaml</code></strong> manifest.</li>
-<li>Map an HTTP endpoint to it in <strong><code>rest.yaml</code></strong> (<code>flow: {flow-id}</code>) — or trigger it by event.</li>
+<li>Map an HTTP endpoint to it in <strong><code>rest.yaml</code></strong> (<code>service: 'http.flow.adapter'</code> plus
+   <code>flow: {flow-id}</code> — both keys are required) — or trigger it by event.</li>
 </ol>
 <p>The engine compiles every registered flow at startup; a flow that violates the grammar fails to
 load. So correctness is checkable <em>before</em> runtime.</p>
@@ -2640,31 +2903,84 @@ fields, and mapping namespaces; use <a href="../flow-grammar/"><code>flow-gramma
 <h2 id="example">Worked example<a class="headerlink" href="#example" title="Permanent link">&para;</a></h2>
 <p>A minimal flow: receive a POST, call a <code>greeting</code> function, return its result.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nt">flow</span><span class="p">:</span>
-<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;greeting-flow&#39;</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Greet</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">caller</span><span class="nv"> </span><span class="s">by</span><span class="nv"> </span><span class="s">name&#39;</span>
+<a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="w">  </span><span class="nt">id</span><span class="p">:</span><span class="w"> </span><span class="s">'greeting-flow'</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">'Greet</span><span class="nv"> </span><span class="s">a</span><span class="nv"> </span><span class="s">caller</span><span class="nv"> </span><span class="s">by</span><span class="nv"> </span><span class="s">name'</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">  </span><span class="nt">ttl</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10s</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">first.task</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;greeting.service&#39;</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="nt">first.task</span><span class="p">:</span><span class="w"> </span><span class="s">'greeting.service'</span>
 <a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a><span class="nt">tasks</span><span class="p">:</span>
 <a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">input</span><span class="p">:</span>
-<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;input.body.name</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">name&#39;</span>
-<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="nt">process</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;greeting.service&#39;</span>
+<a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'input.body.name</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">name'</span>
+<a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a><span class="w">    </span><span class="nt">process</span><span class="p">:</span><span class="w"> </span><span class="s">'greeting.service'</span>
 <a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="w">    </span><span class="nt">output</span><span class="p">:</span>
-<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;result.message</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">output.body.message&#39;</span>
-<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Build</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">greeting&#39;</span>
+<a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'result.message</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">output.body.message'</span>
+<a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">'Build</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">greeting'</span>
 <a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a><span class="w">    </span><span class="nt">execution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">end</span>
 </code></pre></div>
 <p>A decision example (branch on a function result):</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">input</span><span class="p">:</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;input.body.amount</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">amount&#39;</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">process</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;risk.scorer&#39;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'input.body.amount</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">amount'</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="w">    </span><span class="nt">process</span><span class="p">:</span><span class="w"> </span><span class="s">'risk.scorer'</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">    </span><span class="nt">output</span><span class="p">:</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;result.high_risk</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">decision&#39;</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Score</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">branch&#39;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'result.high_risk</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">decision'</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">'Score</span><span class="nv"> </span><span class="s">and</span><span class="nv"> </span><span class="s">branch'</span>
 <a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">    </span><span class="nt">execution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">decision</span>
 <a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="nt">next</span><span class="p">:</span>
-<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;review.task&#39;</span><span class="w">       </span><span class="c1"># decision = true (high_risk) -&gt; next[0] (first)</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;approve.task&#39;</span><span class="w">      </span><span class="c1"># decision = false            -&gt; next[1] (second)</span>
+<a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'review.task'</span><span class="w">       </span><span class="c1"># decision = true (high_risk) -&gt; next[0] (first)</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'approve.task'</span><span class="w">      </span><span class="c1"># decision = false            -&gt; next[1] (second)</span>
 </code></pre></div>
+<h2 id="scaffolding">Scaffolding a project from the template<a class="headerlink" href="#scaffolding" title="Permanent link">&para;</a></h2>
+<p>Start a new Event Script application from <code>examples/composable-example</code> and trim against this
+manifest:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Role</th>
+<th>Trim?</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pom.xml</code></td>
+<td>Build; set your own artifact/group ids</td>
+<td>keep (edit ids)</td>
+</tr>
+<tr>
+<td><code>application.properties</code> (main <strong>and</strong> test)</td>
+<td>App name, <code>rest.server.port</code> — give the test copy a <strong>distinct port</strong>. <strong>Caution:</strong> the example's test properties set <code>snake.case.serialization=true</code>, which silently renames every JSON response field if copied wholesale</td>
+<td>keep (edit values)</td>
+</tr>
+<tr>
+<td><code>flows.yaml</code> + <code>flows/*.yml</code></td>
+<td>Your flow definitions — list every flow file you ship</td>
+<td>replace with yours</td>
+</tr>
+<tr>
+<td><code>rest.yaml</code></td>
+<td>Binds URLs to flows via <code>http.flow.adapter</code></td>
+<td>replace example routes with yours</td>
+</tr>
+<tr>
+<td><code>event-over-http.yaml</code></td>
+<td>Outbound event-over-HTTP targets</td>
+<td>drop unless you call another app</td>
+</tr>
+<tr>
+<td>Static/demo assets (<code>errorPage.html</code>, <code>public/</code>, <code>app-log-context.yaml</code>)</td>
+<td>Example plumbing</td>
+<td>drop unless used</td>
+</tr>
+<tr>
+<td>Main class annotated <code>@MainApplication</code></td>
+<td>App entry point</td>
+<td>keep (rename)</td>
+</tr>
+</tbody>
+</table>
+<p>The minimal <code>rest.yaml</code> for a derived project is <strong>one <code>http.flow.adapter</code> entry per endpoint</strong>,
+each naming its <code>flow:</code> (plus the <code>cors</code>/<code>headers</code> blocks those entries reference). No
+function-route entries are needed — the flow adapter is the only HTTP boundary, which is exactly
+the point of this layer.</p>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="../flow-grammar/">Event Script flow grammar</a> + <a href="../event-script-flow.json"><code>event-script-flow.json</code></a> — the source of truth.</li>

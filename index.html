@@ -415,7 +415,9 @@
           
             
               
-              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" hidden>
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
                     
@@ -589,6 +591,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -649,6 +655,62 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="mercury-story/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    White Paper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="mercury-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Mercury Family
   
 
     
@@ -1609,6 +1671,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1773,6 +1841,62 @@
   
   
     <li class="md-nav__item">
+      <a href="guides/http-streaming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP Response Streaming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="guides/polyglot-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polyglot Functions (Python & Node.js)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="guides/minimalist-kafka/" class="md-nav__link">
         
   
@@ -1809,6 +1933,34 @@
     
   
     Twin Kafka (dual cluster)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="guides/distributed-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Cache
   
 
     
@@ -1921,6 +2073,12 @@
   
     
     
+      
+        
+      
+        
+      
+        
       
         
       
@@ -2232,6 +2390,34 @@
   
   
     <li class="md-nav__item">
+      <a href="test-reports/progressive-rendering-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report — Progressive Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="test-reports/suspend-resume-interop/" class="md-nav__link">
         
   
@@ -2240,6 +2426,62 @@
     
   
     Interop Test Report — Suspend/Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="test-reports/streaming-return-route-cross-pod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — Streaming Return Route (cross-pod)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="test-reports/otel-dynatrace-certification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — OpenTelemetry forwarder (Dynatrace)
   
 
     
@@ -2492,6 +2734,8 @@
             
             
               
+                
+              
               <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
                 <div class="md-sidebar__scrollwrap">
                   <div class="md-sidebar__inner">
@@ -2579,6 +2823,8 @@
               <article class="md-content__inner md-typeset">
                 
                   
+  
+
 
 
   
@@ -2593,9 +2839,13 @@ through event envelopes — so orchestration is <strong>configuration, not code<
 virtual threads, so straightforward synchronous code performs on par with reactive. The
 event-driven core descends from the <strong>Scala/Akka actor model</strong>, realized on the <strong>Eclipse Vert.x</strong>
 event bus.</p>
-<blockquote>
-<p><strong>New here?</strong> Start with <strong><a href="guides/getting-started/">Getting Started</a></strong> — it opens with a 5-minute quickstart.</p>
-</blockquote>
+<p><a class="md-button md-button--primary" href="guides/getting-started/">Get started</a>
+<a class="md-button" href="https://accenture.github.io/mercury-composable/mercury-story/">Read the white paper</a>
+<a class="md-button" href="https://accenture.github.io/mercury-composable/presentations/mercury-story.html">View the deck</a>
+<a class="md-button" href="https://accenture.github.io/mercury-composable/mercury-family/">The Mercury Family</a></p>
+<p><em>The white paper — </em><em>Intent-Driven Development and the Architecture of Human-AI Collaboration</em><em> —
+presents the collaboration model the AI era needs and the Mercury story that proved it: shared
+memory, AI grammar, and governed execution; the deck tells the same story in slides.</em></p>
 <h2 id="a-layered-ascent">A layered ascent<a class="headerlink" href="#a-layered-ascent" title="Permanent link">&para;</a></h2>
 <p>Mercury grew in three layers. Each builds on the one beneath it, and you can mix them in a single
 application — drop down a layer exactly where you need more control, and no further.</p>
@@ -2609,19 +2859,19 @@ application — drop down a layer exactly where you need more control, and no fu
 </thead>
 <tbody>
 <tr>
-<td style="text-align: left;"><strong>Event-driven</strong><br><a href="guides/event-driven/">Platform Core</a></td>
-<td style="text-align: left;">decoupled functions reacting<br>to events</td>
-<td style="text-align: left;">Java functions,<br>addressed by route name</td>
+<td style="text-align: left;"><strong>Event-driven</strong> — <a href="guides/event-driven/">Platform Core</a></td>
+<td style="text-align: left;">decoupled functions reacting to events</td>
+<td style="text-align: left;">Java functions, addressed by route name</td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong>Composable</strong><br><a href="guides/event-script/">Event Script</a></td>
-<td style="text-align: left;">YAML flows that choreograph<br>functions</td>
-<td style="text-align: left;">~50% config,<br>50% code</td>
+<td style="text-align: left;"><strong>Composable</strong> — <a href="guides/event-script/">Event Script</a></td>
+<td style="text-align: left;">YAML flows that choreograph functions</td>
+<td style="text-align: left;">~50% config, 50% code</td>
 </tr>
 <tr>
-<td style="text-align: left;"><strong>Semantic</strong><br><a href="guides/knowledge-graph/">Active Knowledge Graph</a></td>
-<td style="text-align: left;">a graph whose nodes <em>execute</em><br>during traversal</td>
-<td style="text-align: left;">a model —<br>little or no code</td>
+<td style="text-align: left;"><strong>Semantic</strong> — <a href="guides/knowledge-graph/">Active Knowledge Graph</a></td>
+<td style="text-align: left;">a graph whose nodes <em>execute</em> during traversal</td>
+<td style="text-align: left;">a model — little or no code</td>
 </tr>
 </tbody>
 </table>
@@ -2646,7 +2896,7 @@ examples or reading engine source:</p>
 <li><strong>Get started</strong> — <a href="guides/getting-started/">Getting Started</a></li>
 <li><strong>Guides</strong> — <a href="guides/rest-automation/">REST Automation</a> · <a href="guides/build-test-deploy/">Build, Test &amp; Deploy</a> ·
   <a href="guides/spring-boot/">Spring Boot Integration</a> · <a href="guides/event-over-http/">Event over HTTP</a> ·
-  <a href="guides/service-mesh/">Service Mesh</a></li>
+  <a href="guides/polyglot-functions/">Polyglot Functions</a> · <a href="guides/service-mesh/">Service Mesh</a></li>
 <li><strong>Knowledge Graph</strong> — <a href="guides/knowledge-graph/">Knowledge Graph as Application</a> ·
   <a href="guides/knowledge-graph/build-your-first-graph/">Build your first graph</a> ·
   <a href="guides/knowledge-graph/property-graph/">Minimalist Property Graph</a></li>
@@ -2667,6 +2917,10 @@ examples or reading engine source:</p>
   layers, same flow YAML, behavior-synced with this engine:
   <a href="https://github.com/Accenture/mercury">github.com/Accenture/mercury</a>
   · <a href="https://accenture.github.io/mercury/">documentation</a></li>
+<li><strong>Polyglot functions:</strong> write functions in <strong>Python</strong> or <strong>Node.js</strong> and call them from
+  flows and graphs — see <a href="guides/polyglot-functions/">Polyglot Functions</a>:
+  <a href="https://accenture.github.io/mercury-python/">Composable for Python</a>
+  · <a href="https://accenture.github.io/mercury-nodejs/">Composable for Node.js</a></li>
 </ul>
 
 
@@ -2680,6 +2934,8 @@ examples or reading engine source:</p>
 
 
 
+
+  
 
 
 
@@ -2704,6 +2960,8 @@ examples or reading engine source:</p>
         <footer class="md-footer">
   
     
+      
+        
       
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         

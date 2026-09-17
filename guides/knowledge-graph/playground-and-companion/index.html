@@ -489,6 +489,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -549,6 +553,62 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../mercury-story/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    White Paper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../mercury-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Mercury Family
   
 
     
@@ -1524,6 +1584,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#enabling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Turning dev mode on in your own app
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#collaboration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1597,6 +1668,12 @@
   
     
     
+      
+        
+      
+        
+      
+        
       
         
       
@@ -1780,6 +1857,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../../http-streaming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP Response Streaming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../polyglot-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polyglot Functions (Python & Node.js)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../minimalist-kafka/" class="md-nav__link">
         
   
@@ -1816,6 +1949,34 @@
     
   
     Twin Kafka (dual cluster)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../distributed-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Cache
   
 
     
@@ -1928,6 +2089,12 @@
   
     
     
+      
+        
+      
+        
+      
+        
       
         
       
@@ -2239,6 +2406,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../test-reports/progressive-rendering-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report — Progressive Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../test-reports/suspend-resume-interop/" class="md-nav__link">
         
   
@@ -2247,6 +2442,62 @@
     
   
     Interop Test Report — Suspend/Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../test-reports/streaming-return-route-cross-pod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — Streaming Return Route (cross-pod)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../test-reports/otel-dynatrace-certification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — OpenTelemetry forwarder (Dynatrace)
   
 
     
@@ -2551,6 +2802,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#enabling" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Turning dev mode on in your own app
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#collaboration" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2686,43 +2948,97 @@ shipped help for each skill — the same content this Part documents.</p>
 <p>Each open Playground connection is a <strong>session</strong> with a public id like <code>ws-178443-2</code>. Sessions can
 be shared so several people model the same graph together:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>session                       # show this session + its subscribers
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>session subscribe ws-178443-2 # mirror another session&#39;s commands into yours
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>session subscribe ws-178443-2 # join that primary session as an equal co-author
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>session unsubscribe           # detach, keeping your current graph
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>session reset                 # clear the primary session; subscribers keep their graphs
 </code></pre></div>
-<p>When you subscribe to a primary session, commands flow to both, keeping the model in sync. (You
-can't subscribe to yourself or to a non-primary session; a primary session has nothing to
-unsubscribe.)</p>
+<p>When you subscribe to a primary session, commands mirror <strong>both ways</strong> — every command except the
+<code>session</code> topology commands propagates to the primary and all subscribers alike, so all parties
+(human or AI) are equal co-authors of one shared model. (You can't subscribe to yourself or to a
+non-primary session; a primary session has nothing to unsubscribe.)</p>
+<p><strong>An AI agent asked to host a session</strong> should run the shipped session broker
+(<code>scripts/playground-session-broker.mjs</code>, in the <code>starter-graph</code> template and the
+<code>minigraph-playground</code> example) rather than hand-roll a WebSocket client — the session contract
+includes a keep-alive (ping every ~20 s) that hand-rolled clients typically miss, and a client
+without it dies silently at the idle timeout. See
+<a href="../ai-agent-guide/#hosting">Hosting the session yourself</a>.</p>
 <h2 id="companion">The companion endpoint<a class="headerlink" href="#companion" title="Permanent link">&para;</a></h2>
 <p>The <strong>companion endpoint</strong> lets an HTTP client — a script, a test harness, or an AI agent —
-dispatch a Playground command into an <strong>already-open</strong> session. The command runs as if typed, and
-output streams back to that session's browser console.</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>POST /api/companion/{session-id}
+dispatch a Playground command into an <strong>already-open</strong> session. The command runs as if typed;
+the outcome comes back <strong>in the HTTP response</strong>, and every output line is <em>also</em> teed to that
+session's browser console so a watching human sees the same thing live.</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a>POST /api/companion/{session-id}/sync
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a>Content-Type: text/plain
 <a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a>
-<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>&lt;any Playground command&gt;
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a>&lt;exactly ONE Playground command&gt;
 </code></pre></div>
-<p>The response is an immediate acknowledgement — the real output appears on the WebSocket:</p>
+<p>The response carries the command's outcome in-band:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="p">{</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">&quot;type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;companion&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">&quot;status&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;accepted&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">&quot;id&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ws-123456-7&quot;</span><span class="p">,</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">&quot;message&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Command dispatched to graph.command.service. Output streams to the WebSocket console for this session.&quot;</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="p">}</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="w">  </span><span class="nt">"ok"</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span><span class="p">,</span>
+<a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="w">  </span><span class="nt">"id"</span><span class="p">:</span><span class="w"> </span><span class="s2">"ws-123456-7"</span><span class="p">,</span>
+<a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a><span class="w">  </span><span class="nt">"command"</span><span class="p">:</span><span class="w"> </span><span class="s2">"create node root ..."</span><span class="p">,</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a><span class="w">  </span><span class="nt">"output"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"&gt; create node root ..."</span><span class="p">,</span><span class="w"> </span><span class="s2">"node root created"</span><span class="p">],</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a><span class="w">  </span><span class="nt">"result"</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="err">s</span><span class="kc">tru</span><span class="err">c</span><span class="kc">ture</span><span class="err">d</span><span class="w"> </span><span class="err">da</span><span class="kc">ta</span><span class="p">,</span><span class="w"> </span><span class="err">e.g.</span><span class="w"> </span><span class="err">a</span><span class="w"> </span><span class="err">ru</span><span class="kc">n</span><span class="err">'s</span><span class="w"> </span><span class="err">ou</span><span class="kc">t</span><span class="err">pu</span><span class="kc">t</span><span class="err">.body</span><span class="w"> </span><span class="err">...</span><span class="w"> </span><span class="p">]</span>
+<a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">}</span>
 </code></pre></div>
-<p>Status codes: <strong>200</strong> dispatched (command <em>syntax</em> errors still return 200 — the error text appears
-on the WebSocket, not in the HTTP response); <strong>400</strong> missing/empty/non-text body; <strong>404</strong> no active
-session for that id. To read the current model for a live session, <code>GET /api/graph/session/{id}</code>.</p>
+<p>Null fields are omitted (<code>error</code> appears only on failure, <code>result</code> only when the command yields
+data). When <code>ok</code> is <code>false</code>, <code>error</code> carries the first failing line — read <code>output</code> for the full
+picture, fix, and re-issue. The complete contract, including the <code>ok</code> derivation and the rules an
+AI driver should follow, is in the <a href="../ai-agent-guide/">AI agent guide</a>.</p>
+<p>Status codes: <strong>200</strong> executed (read <code>ok</code>/<code>error</code> in the body); <strong>400</strong> missing/empty/non-text
+body; <strong>404</strong> no active session for that id — <strong>operationally, a 404 means the session is gone</strong>
+(for example, the app was restarted): stop and obtain a fresh session id, because every command
+against a dead id will keep failing. To read the current model for a live session,
+<code>GET /api/graph/session/{id}</code>.</p>
 <p>A minimal call:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">SESSION_ID</span><span class="o">=</span><span class="s2">&quot;ws-384729-17&quot;</span>
-<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">&quot;http://localhost:8300/api/companion/</span><span class="si">${</span><span class="nv">SESSION_ID</span><span class="si">}</span><span class="s2">&quot;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">&#39;Content-Type: text/plain&#39;</span><span class="w"> </span><span class="se">\</span>
-<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--data-binary<span class="w"> </span><span class="s1">$&#39;create node root\nwith type Root\nwith properties\nskill=graph.math&#39;</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="nv">SESSION_ID</span><span class="o">=</span><span class="s2">"ws-384729-17"</span>
+<a id="__codelineno-4-2" name="__codelineno-4-2" href="#__codelineno-4-2"></a>curl<span class="w"> </span>-sS<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">"http://localhost:8300/api/companion/</span><span class="si">${</span><span class="nv">SESSION_ID</span><span class="si">}</span><span class="s2">/sync"</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-3" name="__codelineno-4-3" href="#__codelineno-4-3"></a><span class="w">  </span>-H<span class="w"> </span><span class="s1">'Content-Type: text/plain'</span><span class="w"> </span><span class="se">\</span>
+<a id="__codelineno-4-4" name="__codelineno-4-4" href="#__codelineno-4-4"></a><span class="w">  </span>--data-binary<span class="w"> </span><span class="s1">$'create node root\nwith type Root\nwith properties\nskill=graph.math'</span>
 </code></pre></div>
-<p>Under the hood, the endpoint (<code>post.companion.command</code>) confirms the session is live, then dispatches
-to a <strong>singleton</strong> command handler so commands execute in order without races. Like the Playground
-itself, it is gated by <code>@OptionalService("app.env=dev")</code> — <strong>do not expose it beyond trusted dev
-environments</strong> (there is no auth).</p>
+<blockquote>
+<p><strong>Retired:</strong> the original fire-and-forget <code>POST /api/companion/{session-id}</code> (which returned
+only <code>{status:"accepted"}</code> and streamed the real outcome to the console) was <strong>retired in
+2026-09</strong> — it hid errors from the caller and forced slower, sleep-padded drivers. The bare URL
+now answers 404; use <code>/sync</code>.</p>
+</blockquote>
+<p>Under the hood, the endpoint (<code>post.companion.command.sync</code>) confirms the session is live, then
+dispatches to a <strong>singleton</strong> command handler so commands execute in order without races. Like the
+Playground itself, it is gated by <code>@OptionalService("app.env=dev")</code> — <strong>do not expose it beyond
+trusted dev environments</strong> (there is no auth).</p>
+<blockquote>
+<p><strong>Restarting the app ends every session — export first.</strong> The working graph lives in the
+session, not on disk: <code>export graph as {name}</code> before any restart (deploying a graph requires
+one), or the unexported work is lost.</p>
+</blockquote>
+<h2 id="enabling">Turning dev mode on in your own app<a class="headerlink" href="#enabling" title="Permanent link">&para;</a></h2>
+<p>The Playground is not a separate application — it rides along in any Mercury app that depends on
+<code>minigraph-playground-engine</code>. Two things switch it on:</p>
+<ol>
+<li><strong><code>app.env=dev</code></strong> in <code>application.properties</code>. Every Playground service is annotated
+   <code>@OptionalService("app.env=dev")</code>, so without this line none of them register.</li>
+<li><strong>The dev-mode <code>rest.yaml</code> entries</strong> — the companion endpoint, the live-model and
+   describe-model reads, the two upload dialogs, and the state-machine inspector. A REST entry
+   whose service is not registered is <strong>skipped with a warning at start-up</strong>, so the two settings
+   belong together: <code>app.env=dev</code> without the routes gives you a WebSocket and no HTTP surface;
+   the routes without <code>app.env=dev</code> give you a start-up log full of
+   <code>Skip [POST] /api/companion/{id}/sync - Service ... not available</code>.</li>
+</ol>
+<p>Both ship pre-wired in <a href="https://github.com/Accenture/mercury-composable/tree/main/templates/starter-graph"><code>templates/starter-graph</code></a>
+— copy that directory and the Playground is live on first run. The
+<a href="https://github.com/Accenture/mercury-composable/tree/main/examples/distributed-cache-example">distributed-cache example</a>
+shows the same wiring inside an app that also serves ordinary Layer 1 and Layer 2 endpoints: dev
+mode is additive, so a real application can be co-authored in the Playground and still serve its
+production routes. Remove the single <code>app.env=dev</code> line to close the whole surface for production.</p>
+<blockquote>
+<p><strong>Depend on the graph engine alone.</strong> <code>minigraph-playground-engine</code> pulls in
+<code>event-script-engine</code> and <code>platform-core</code> transitively — one dependency, all three layers. Adding
+the other two by hand introduces a resource collision: the Playground UI is bundled in the engine
+jar as <code>classpath:/public/index.html</code> and <code>platform-core</code> ships a placeholder welcome page at the
+same resource path, so whichever jar comes first on the classpath wins. The symptom is narrow and
+easy to misread — every test, <code>curl</code>, and companion command still succeeds, while the browser
+shows the placeholder instead of the Playground.</p>
+</blockquote>
 <h2 id="collaboration">User–AI collaboration<a class="headerlink" href="#collaboration" title="Permanent link">&para;</a></h2>
 <p>Put the two together and you get the seed of the framework's collaboration vision: a person watches
 the Playground in the browser while an <strong>AI companion</strong> builds the graph through the companion
@@ -2734,6 +3050,7 @@ endpoint; maturing it into an integrated, pluggable companion is on the roadmap 
 <a href="../#maturity">the maturity section</a>).</p>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
+<li><a href="../ai-agent-guide/">AI agent guide</a> — the full companion contract for AI drivers (the <code>ok</code> derivation, self-correction rules, one-command-per-request).</li>
 <li><a href="../build-your-first-graph/">Build your first Active Knowledge Graph</a> — the command loop in a full walkthrough.</li>
 <li><a href="../skills-reference/">Built-in skills reference</a> — what <code>describe skill</code> documents in the console.</li>
 <li><a href="../">Knowledge Graph as Application</a> — the paradigm and where collaboration fits.</li>

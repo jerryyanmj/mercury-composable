@@ -489,6 +489,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -549,6 +553,62 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mercury-story/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    White Paper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mercury-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Mercury Family
   
 
     
@@ -1511,6 +1571,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1732,10 +1798,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-rest-spring-example-demo-applications" class="md-nav__link">
+  <a href="#the-rest-spring-example-demo-application" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The rest-spring-example demo applications
+        The rest-spring-example demo application
       
     </span>
   </a>
@@ -1808,6 +1874,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../http-streaming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP Response Streaming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../polyglot-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polyglot Functions (Python & Node.js)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../minimalist-kafka/" class="md-nav__link">
         
   
@@ -1844,6 +1966,34 @@
     
   
     Twin Kafka (dual cluster)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../distributed-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Cache
   
 
     
@@ -1956,6 +2106,12 @@
   
     
     
+      
+        
+      
+        
+      
+        
       
         
       
@@ -2267,6 +2423,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../test-reports/progressive-rendering-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report — Progressive Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../test-reports/suspend-resume-interop/" class="md-nav__link">
         
   
@@ -2275,6 +2459,62 @@
     
   
     Interop Test Report — Suspend/Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../test-reports/streaming-return-route-cross-pod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — Streaming Return Route (cross-pod)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../test-reports/otel-dynatrace-certification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — OpenTelemetry forwarder (Dynatrace)
   
 
     
@@ -2596,10 +2836,10 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#the-rest-spring-example-demo-applications" class="md-nav__link">
+  <a href="#the-rest-spring-example-demo-application" class="md-nav__link">
     <span class="md-ellipsis">
       
-        The rest-spring-example demo applications
+        The rest-spring-example demo application
       
     </span>
   </a>
@@ -2653,23 +2893,27 @@
 <blockquote>
 <p><strong>At a glance</strong></p>
 <ul>
-<li><strong>What</strong> — run Mercury inside Spring Boot 3 or 4 (the <code>rest-spring</code> modules), or keep the
+<li><strong>What</strong> — run Mercury inside Spring Boot (the <code>rest-spring-4</code> module), or keep the
   lightweight platform-core HTTP server.</li>
 <li><strong>For</strong> teams integrating Mercury into an existing Spring stack.</li>
 </ul>
+<p><strong>Spring Boot 3 retired</strong>: the <code>rest-spring-3</code> add-on and its example were removed when the
+Spring community stopped issuing security patches for Spring Boot 3. Use <code>rest-spring-4</code> —
+it provides the same integration surface (RestServer bootstrap, autowiring, configuration
+keys), so migration is a dependency swap plus the Spring Boot 3 → 4 upgrade of your own code.</p>
 </blockquote>
 <p>While the platform-core foundation code includes a lightweight non-blocking HTTP server, you can also turn your
 application into an executable Spring Boot application.</p>
 <p>There are two ways to do that:</p>
 <ol>
-<li>Add dependency for Spring Boot version 3/4 and implement your Spring Boot main application</li>
-<li>Add the <code>rest-spring-3</code> or <code>rest-spring-4</code> add-on library for a pre-configured Spring Boot 3/4 experience</li>
+<li>Add dependency for Spring Boot and implement your Spring Boot main application</li>
+<li>Add the <code>rest-spring-4</code> add-on library for a pre-configured Spring Boot experience</li>
 </ol>
 <h2 id="add-platform-core-to-an-existing-spring-boot-application">Add platform-core to an existing Spring Boot application<a class="headerlink" href="#add-platform-core-to-an-existing-spring-boot-application" title="Permanent link">&para;</a></h2>
 <p>For the first option, the platform-core library can co-exist with Spring Boot. You can write code specific
 to Spring Boot and the Spring framework ecosystem. Please make sure you add the following startup code to
 your Spring Boot main application like this:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nd">@ComponentScan</span><span class="p">(</span><span class="s">&quot;${spring.component.scan:none}&quot;</span><span class="p">})</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="nd">@ComponentScan</span><span class="p">(</span><span class="s">"${spring.component.scan:none}"</span><span class="p">})</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nd">@SpringBootApplication</span>
 <a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">MyMainApp</span><span class="w"> </span><span class="kd">extends</span><span class="w"> </span><span class="n">SpringBootServletInitializer</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
@@ -2684,12 +2928,11 @@ your Spring Boot main application like this:</p>
 <p>We suggest running <code>AutoStart.main</code> before the <code>SpringApplication.run</code> statement. This would allow the
 platform-core foundation code to load the event-listener functions into memory before Spring Boot starts.</p>
 <h2 id="use-the-rest-spring-library-in-your-application">Use the rest-spring library in your application<a class="headerlink" href="#use-the-rest-spring-library-in-your-application" title="Permanent link">&para;</a></h2>
-<p>The second option is to add the <code>rest-spring-3</code> or <code>rest-spring-4</code> dependency to your composable application.
-The rest-spring-3 library is a pre-configured Spring Boot 3 library with WebFlux as the asynchronous
-HTTP servlet engine. Similarly, the rest-spring-4 is pre-configured for Spring Boot 4.</p>
-<p>This turns your composable application into a pre-configured Spring Boot 3/4 application.
+<p>The second option is to add the <code>rest-spring-4</code> dependency to your composable application.
+The rest-spring-4 library is pre-configured for Spring Boot 4.</p>
+<p>This turns your composable application into a pre-configured Spring Boot application.
 It provides consistent behavior for XML and JSON serialization and exception handling.</p>
-<p>The RestServer class in the rest-spring-3/rest-spring-4 library is used to bootstrap a Spring Boot application.</p>
+<p>The RestServer class in the rest-spring-4 library is used to bootstrap a Spring Boot application.</p>
 <p>Spring Boot is a sophisticated ecosystem by itself. If the simple RestServer bootstrap does not fit your
 use cases, please use the sample MainApp to implement your own Spring Boot initializer.</p>
 <p>You can add the "spring.boot.main" parameter in the application.properties to point to your own Spring Boot
@@ -2698,7 +2941,7 @@ the system provided Spring Boot initializer.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a>spring.boot.main<span class="o">=</span>org.platformlambda.rest.RestServer
 </code></pre></div>
 <p>The Spring Boot initialization main class must have at least the following annotations:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@ComponentScan</span><span class="p">({</span><span class="s">&quot;org.platformlambda&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;${spring.component.scan:none}&quot;</span><span class="p">})</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nd">@ComponentScan</span><span class="p">({</span><span class="s">"org.platformlambda"</span><span class="p">,</span><span class="w"> </span><span class="s">"${spring.component.scan:none}"</span><span class="p">})</span>
 <a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="nd">@SpringBootApplication</span>
 </code></pre></div>
 <p>The <code>ComponentScan</code> must include the package "org.platformlambda" to allow the system to load the pre-configured
@@ -2717,11 +2960,11 @@ The REST automation engine and the lightweight HTTP server will be turned off.</
 <p>You can customize your error page using the default <code>errorPage.html</code> by copying it from the platform-core's or 
 rest-spring's resources folder to your source project. The default page is shown below.</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="cp">&lt;!DOCTYPE html&gt;</span>
-<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="p">&lt;</span><span class="nt">html</span> <span class="na">lang</span><span class="o">=</span><span class="s">&quot;en&quot;</span><span class="p">&gt;</span>
+<a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="p">&lt;</span><span class="nt">html</span> <span class="na">lang</span><span class="o">=</span><span class="s">"en"</span><span class="p">&gt;</span>
 <a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a><span class="p">&lt;</span><span class="nt">head</span><span class="p">&gt;</span>
 <a id="__codelineno-3-4" name="__codelineno-3-4" href="#__codelineno-3-4"></a>    <span class="p">&lt;</span><span class="nt">title</span><span class="p">&gt;</span>HTTP Error<span class="p">&lt;/</span><span class="nt">title</span><span class="p">&gt;</span>
-<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="p">&lt;</span><span class="nt">meta</span> <span class="na">charset</span><span class="o">=</span><span class="s">&quot;utf-8&quot;</span><span class="p">&gt;</span>
-<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="p">&lt;</span><span class="nt">meta</span> <span class="na">name</span><span class="o">=</span><span class="s">&quot;viewport&quot;</span> <span class="na">content</span><span class="o">=</span><span class="s">&quot;width=device-width, initial-scale=1&quot;</span><span class="p">&gt;</span>
+<a id="__codelineno-3-5" name="__codelineno-3-5" href="#__codelineno-3-5"></a>    <span class="p">&lt;</span><span class="nt">meta</span> <span class="na">charset</span><span class="o">=</span><span class="s">"utf-8"</span><span class="p">&gt;</span>
+<a id="__codelineno-3-6" name="__codelineno-3-6" href="#__codelineno-3-6"></a>    <span class="p">&lt;</span><span class="nt">meta</span> <span class="na">name</span><span class="o">=</span><span class="s">"viewport"</span> <span class="na">content</span><span class="o">=</span><span class="s">"width=device-width, initial-scale=1"</span><span class="p">&gt;</span>
 <a id="__codelineno-3-7" name="__codelineno-3-7" href="#__codelineno-3-7"></a><span class="p">&lt;/</span><span class="nt">head</span><span class="p">&gt;</span>
 <a id="__codelineno-3-8" name="__codelineno-3-8" href="#__codelineno-3-8"></a><span class="p">&lt;</span><span class="nt">body</span><span class="p">&gt;</span>
 <a id="__codelineno-3-9" name="__codelineno-3-9" href="#__codelineno-3-9"></a>
@@ -2730,9 +2973,9 @@ rest-spring's resources folder to your source project. The default page is shown
 <a id="__codelineno-3-12" name="__codelineno-3-12" href="#__codelineno-3-12"></a>    <span class="p">&lt;</span><span class="nt">div</span><span class="p">&gt;</span>${warning}<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;&lt;</span><span class="nt">br</span><span class="p">/&gt;</span>
 <a id="__codelineno-3-13" name="__codelineno-3-13" href="#__codelineno-3-13"></a>    <span class="p">&lt;</span><span class="nt">table</span><span class="p">&gt;</span>
 <a id="__codelineno-3-14" name="__codelineno-3-14" href="#__codelineno-3-14"></a>        <span class="p">&lt;</span><span class="nt">tbody</span><span class="p">&gt;</span>
-<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;&lt;</span><span class="nt">td</span> <span class="na">style</span><span class="o">=</span><span class="s">&quot;font-style: italic; width: 100px&quot;</span><span class="p">&gt;</span>Type<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>error<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
-<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;&lt;</span><span class="nt">td</span> <span class="na">style</span><span class="o">=</span><span class="s">&quot;font-style: italic; width: 100px&quot;</span><span class="p">&gt;</span>Status<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>${status}<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
-<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;&lt;</span><span class="nt">td</span> <span class="na">style</span><span class="o">=</span><span class="s">&quot;font-style: italic; width: 100px&quot;</span><span class="p">&gt;</span>Message<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>${message}<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-3-15" name="__codelineno-3-15" href="#__codelineno-3-15"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;&lt;</span><span class="nt">td</span> <span class="na">style</span><span class="o">=</span><span class="s">"font-style: italic; width: 100px"</span><span class="p">&gt;</span>Type<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>error<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-3-16" name="__codelineno-3-16" href="#__codelineno-3-16"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;&lt;</span><span class="nt">td</span> <span class="na">style</span><span class="o">=</span><span class="s">"font-style: italic; width: 100px"</span><span class="p">&gt;</span>Status<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>${status}<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
+<a id="__codelineno-3-17" name="__codelineno-3-17" href="#__codelineno-3-17"></a>        <span class="p">&lt;</span><span class="nt">tr</span><span class="p">&gt;&lt;</span><span class="nt">td</span> <span class="na">style</span><span class="o">=</span><span class="s">"font-style: italic; width: 100px"</span><span class="p">&gt;</span>Message<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;</span><span class="nt">td</span><span class="p">&gt;</span>${message}<span class="p">&lt;/</span><span class="nt">td</span><span class="p">&gt;&lt;/</span><span class="nt">tr</span><span class="p">&gt;</span>
 <a id="__codelineno-3-18" name="__codelineno-3-18" href="#__codelineno-3-18"></a>        <span class="p">&lt;/</span><span class="nt">tbody</span><span class="p">&gt;</span>
 <a id="__codelineno-3-19" name="__codelineno-3-19" href="#__codelineno-3-19"></a>    <span class="p">&lt;/</span><span class="nt">table</span><span class="p">&gt;</span>
 <a id="__codelineno-3-20" name="__codelineno-3-20" href="#__codelineno-3-20"></a>
@@ -2750,8 +2993,8 @@ application server, please add the following to your application.properties file
 </code></pre></div>
 <p>The platform-core and Spring Boot will use <code>rest.server.port</code> and <code>server.port</code> respectively.</p>
 <h2 id="spring-autowiring">Spring Autowiring<a class="headerlink" href="#spring-autowiring" title="Permanent link">&para;</a></h2>
-<p>When using the <code>rest-spring-3</code> or <code>rest-spring-4</code> module, bean and value injection may be used:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@PreLoad</span><span class="p">(</span><span class="n">route</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;v1.demo.function&quot;</span><span class="p">)</span>
+<p>When using the <code>rest-spring-4</code> module, bean and value injection may be used:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a><span class="nd">@PreLoad</span><span class="p">(</span><span class="n">route</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">"v1.demo.function"</span><span class="p">)</span>
 <a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">DemoFunction</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">LambdaFunction</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>
 <a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a><span class="w">    </span><span class="c1">// field injection method</span>
@@ -2766,7 +3009,7 @@ application server, please add the following to your application.properties file
 <a id="__codelineno-5-13" name="__codelineno-5-13" href="#__codelineno-5-13"></a><span class="w">        </span><span class="k">this</span><span class="p">.</span><span class="na">testBean</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">testBean</span><span class="p">;</span>
 <a id="__codelineno-5-14" name="__codelineno-5-14" href="#__codelineno-5-14"></a><span class="w">    </span><span class="p">}</span>
 <a id="__codelineno-5-15" name="__codelineno-5-15" href="#__codelineno-5-15"></a>
-<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">    </span><span class="nd">@Value</span><span class="p">(</span><span class="s">&quot;${injected.value}&quot;</span><span class="p">)</span>
+<a id="__codelineno-5-16" name="__codelineno-5-16" href="#__codelineno-5-16"></a><span class="w">    </span><span class="nd">@Value</span><span class="p">(</span><span class="s">"${injected.value}"</span><span class="p">)</span>
 <a id="__codelineno-5-17" name="__codelineno-5-17" href="#__codelineno-5-17"></a><span class="w">    </span><span class="n">String</span><span class="w"> </span><span class="n">injectedValue</span><span class="p">;</span>
 <a id="__codelineno-5-18" name="__codelineno-5-18" href="#__codelineno-5-18"></a>
 <a id="__codelineno-5-19" name="__codelineno-5-19" href="#__codelineno-5-19"></a><span class="w">    </span><span class="nd">@Override</span>
@@ -2776,7 +3019,7 @@ application server, please add the following to your application.properties file
 <a id="__codelineno-5-23" name="__codelineno-5-23" href="#__codelineno-5-23"></a><span class="p">}</span>
 </code></pre></div>
 <p>Please note that the Spring annotation <code>@Service</code> is not required in a composable function.
-The <code>@PreLoad</code> annotation will automatically perform autowiring when the "rest-spring-3" dependency
+The <code>@PreLoad</code> annotation will automatically perform autowiring when the "rest-spring-4" dependency
 is included in pom.xml.</p>
 <blockquote>
 <p><em>Note</em>: This should be done judiciously - Composable functions should have very few dependencies
@@ -2788,9 +3031,8 @@ is included in pom.xml.</p>
 <li>Only applies to instances loaded with <code>@PreLoad</code> - Functions registered programmatically will not undergo injection.</li>
 <li>Constructor injection is not viable - these instances are constructed before the Spring context is created.</li>
 </ul>
-<h2 id="the-rest-spring-example-demo-applications">The rest-spring-example demo applications<a class="headerlink" href="#the-rest-spring-example-demo-applications" title="Permanent link">&para;</a></h2>
-<p>The two example applications (<code>rest-spring-3-example</code> and <code>rest-spring-4-example</code>) are the same and they
-use the rest-spring-3 and rest-spring-4 libraries respectively.</p>
+<h2 id="the-rest-spring-example-demo-application">The rest-spring-example demo application<a class="headerlink" href="#the-rest-spring-example-demo-application" title="Permanent link">&para;</a></h2>
+<p>The <code>rest-spring-4-example</code> application demonstrates this setup with the rest-spring-4 library.</p>
 <p>Let's review the <code>rest-spring-4-example</code> demo application in the "examples/rest-spring-4-example" project.</p>
 <p>You can use the rest-spring-4-example as a template to create a Spring Boot application.</p>
 <p>In addition to the REST automation engine that lets you create REST endpoints by configuration, you can also
@@ -2804,10 +3046,10 @@ programmatically create REST endpoints with the following methods:</p>
 <a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">AsyncHelloWorld</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a><span class="w">  </span><span class="kd">private</span><span class="w"> </span><span class="kd">static</span><span class="w"> </span><span class="kd">final</span><span class="w"> </span><span class="n">AtomicInteger</span><span class="w"> </span><span class="n">seq</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">AtomicInteger</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
 <a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>
-<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nd">@GetMapping</span><span class="p">(</span><span class="n">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">&quot;/api/hello/world&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">produces</span><span class="o">=</span><span class="p">{</span><span class="s">&quot;application/json&quot;</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;application/xml&quot;</span><span class="p">})</span>
+<a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a><span class="w">  </span><span class="nd">@GetMapping</span><span class="p">(</span><span class="n">value</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s">"/api/hello/world"</span><span class="p">,</span><span class="w"> </span><span class="n">produces</span><span class="o">=</span><span class="p">{</span><span class="s">"application/json"</span><span class="p">,</span><span class="w"> </span><span class="s">"application/xml"</span><span class="p">})</span>
 <a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a><span class="w">  </span><span class="kd">public</span><span class="w"> </span><span class="n">Mono</span><span class="o">&lt;</span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="o">&gt;&gt;</span><span class="w"> </span><span class="nf">hello</span><span class="p">(</span><span class="n">HttpServletRequest</span><span class="w"> </span><span class="n">request</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a><span class="w">    </span><span class="n">String</span><span class="w"> </span><span class="n">traceId</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Utility</span><span class="p">.</span><span class="na">getInstance</span><span class="p">().</span><span class="na">getUuid</span><span class="p">();</span>
-<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="n">PostOffice</span><span class="w"> </span><span class="n">po</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">PostOffice</span><span class="p">(</span><span class="s">&quot;hello.world.endpoint&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">traceId</span><span class="p">,</span><span class="w"> </span><span class="s">&quot;GET /api/hello/world&quot;</span><span class="p">);</span>
+<a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a><span class="w">    </span><span class="n">PostOffice</span><span class="w"> </span><span class="n">po</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">PostOffice</span><span class="p">(</span><span class="s">"hello.world.endpoint"</span><span class="p">,</span><span class="w"> </span><span class="n">traceId</span><span class="p">,</span><span class="w"> </span><span class="s">"GET /api/hello/world"</span><span class="p">);</span>
 <a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a><span class="w">    </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="o">&gt;</span><span class="w"> </span><span class="n">forward</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
 <a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>
 <a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a><span class="w">    </span><span class="n">Enumeration</span><span class="o">&lt;</span><span class="n">String</span><span class="o">&gt;</span><span class="w"> </span><span class="n">headers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">request</span><span class="p">.</span><span class="na">getHeaderNames</span><span class="p">();</span>
@@ -2819,16 +3061,16 @@ programmatically create REST endpoints with the following methods:</p>
 <a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a><span class="w">    </span><span class="c1">// The echo service will return both.</span>
 <a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a><span class="w">    </span><span class="kt">int</span><span class="w"> </span><span class="n">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">seq</span><span class="p">.</span><span class="na">incrementAndGet</span><span class="p">();</span>
 <a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a><span class="w">    </span><span class="n">EventEnvelope</span><span class="w"> </span><span class="n">req</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">EventEnvelope</span><span class="p">();</span>
-<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a><span class="w">    </span><span class="n">req</span><span class="p">.</span><span class="na">setTo</span><span class="p">(</span><span class="s">&quot;hello.world&quot;</span><span class="p">).</span><span class="na">setBody</span><span class="p">(</span><span class="n">forward</span><span class="p">).</span><span class="na">setHeader</span><span class="p">(</span><span class="s">&quot;seq&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
+<a id="__codelineno-6-20" name="__codelineno-6-20" href="#__codelineno-6-20"></a><span class="w">    </span><span class="n">req</span><span class="p">.</span><span class="na">setTo</span><span class="p">(</span><span class="s">"hello.world"</span><span class="p">).</span><span class="na">setBody</span><span class="p">(</span><span class="n">forward</span><span class="p">).</span><span class="na">setHeader</span><span class="p">(</span><span class="s">"seq"</span><span class="p">,</span><span class="w"> </span><span class="n">n</span><span class="p">);</span>
 <a id="__codelineno-6-21" name="__codelineno-6-21" href="#__codelineno-6-21"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">Mono</span><span class="p">.</span><span class="na">create</span><span class="p">(</span><span class="n">callback</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-6-22" name="__codelineno-6-22" href="#__codelineno-6-22"></a><span class="w">        </span><span class="n">po</span><span class="p">.</span><span class="na">asyncRequest</span><span class="p">(</span><span class="n">req</span><span class="p">,</span><span class="w"> </span><span class="mi">3000</span><span class="p">)</span>
 <a id="__codelineno-6-23" name="__codelineno-6-23" href="#__codelineno-6-23"></a><span class="w">                </span><span class="p">.</span><span class="na">onSuccess</span><span class="p">(</span><span class="n">event</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-6-24" name="__codelineno-6-24" href="#__codelineno-6-24"></a><span class="w">                  </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="o">&gt;</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
-<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&quot;status&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getStatus</span><span class="p">());</span>
-<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&quot;headers&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getHeaders</span><span class="p">());</span>
-<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&quot;body&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getBody</span><span class="p">());</span>
-<a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&quot;execution_time&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getExecutionTime</span><span class="p">());</span>
-<a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&quot;round_trip&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getRoundTrip</span><span class="p">());</span>
+<a id="__codelineno-6-25" name="__codelineno-6-25" href="#__codelineno-6-25"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"status"</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getStatus</span><span class="p">());</span>
+<a id="__codelineno-6-26" name="__codelineno-6-26" href="#__codelineno-6-26"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"headers"</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getHeaders</span><span class="p">());</span>
+<a id="__codelineno-6-27" name="__codelineno-6-27" href="#__codelineno-6-27"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"body"</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getBody</span><span class="p">());</span>
+<a id="__codelineno-6-28" name="__codelineno-6-28" href="#__codelineno-6-28"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"execution_time"</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getExecutionTime</span><span class="p">());</span>
+<a id="__codelineno-6-29" name="__codelineno-6-29" href="#__codelineno-6-29"></a><span class="w">                  </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"round_trip"</span><span class="p">,</span><span class="w"> </span><span class="n">event</span><span class="p">.</span><span class="na">getRoundTrip</span><span class="p">());</span>
 <a id="__codelineno-6-30" name="__codelineno-6-30" href="#__codelineno-6-30"></a><span class="w">                  </span><span class="n">callback</span><span class="p">.</span><span class="na">success</span><span class="p">(</span><span class="n">result</span><span class="p">);</span>
 <a id="__codelineno-6-31" name="__codelineno-6-31" href="#__codelineno-6-31"></a><span class="w">                </span><span class="p">})</span>
 <a id="__codelineno-6-32" name="__codelineno-6-32" href="#__codelineno-6-32"></a><span class="w">                </span><span class="p">.</span><span class="na">onFailure</span><span class="p">(</span><span class="n">ex</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="n">callback</span><span class="p">.</span><span class="na">error</span><span class="p">(</span><span class="k">new</span><span class="w"> </span><span class="n">AppException</span><span class="p">(</span><span class="mi">408</span><span class="p">,</span><span class="w"> </span><span class="n">ex</span><span class="p">.</span><span class="na">getMessage</span><span class="p">())));</span>
@@ -2842,13 +3084,13 @@ The function is defined in the MainApp like this:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">Platform</span><span class="w"> </span><span class="n">platform</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">Platform</span><span class="p">.</span><span class="na">getInstance</span><span class="p">();</span>
 <a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a><span class="n">LambdaFunction</span><span class="w"> </span><span class="n">echo</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">headers</span><span class="p">,</span><span class="w"> </span><span class="n">input</span><span class="p">,</span><span class="w"> </span><span class="n">instance</span><span class="p">)</span><span class="w"> </span><span class="o">-&gt;</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a><span class="w">    </span><span class="n">Map</span><span class="o">&lt;</span><span class="n">String</span><span class="p">,</span><span class="w"> </span><span class="n">Object</span><span class="o">&gt;</span><span class="w"> </span><span class="n">result</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">new</span><span class="w"> </span><span class="n">HashMap</span><span class="o">&lt;&gt;</span><span class="p">();</span>
-<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&quot;headers&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">headers</span><span class="p">);</span>
-<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&quot;body&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">input</span><span class="p">);</span>
-<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">    </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&quot;instance&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">instance</span><span class="p">);</span>
-<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">    </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">&quot;origin&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">platform</span><span class="p">.</span><span class="na">getOrigin</span><span class="p">());</span>
+<a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a><span class="w">    </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"headers"</span><span class="p">,</span><span class="w"> </span><span class="n">headers</span><span class="p">);</span>
+<a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a><span class="w">    </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"body"</span><span class="p">,</span><span class="w"> </span><span class="n">input</span><span class="p">);</span>
+<a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a><span class="w">    </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"instance"</span><span class="p">,</span><span class="w"> </span><span class="n">instance</span><span class="p">);</span>
+<a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a><span class="w">    </span><span class="n">result</span><span class="p">.</span><span class="na">put</span><span class="p">(</span><span class="s">"origin"</span><span class="p">,</span><span class="w"> </span><span class="n">platform</span><span class="p">.</span><span class="na">getOrigin</span><span class="p">());</span>
 <a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a><span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="n">result</span><span class="p">;</span>
 <a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a><span class="p">};</span>
-<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="n">platform</span><span class="p">.</span><span class="na">register</span><span class="p">(</span><span class="s">&quot;hello.world&quot;</span><span class="p">,</span><span class="w"> </span><span class="n">echo</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">);</span>
+<a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a><span class="n">platform</span><span class="p">.</span><span class="na">register</span><span class="p">(</span><span class="s">"hello.world"</span><span class="p">,</span><span class="w"> </span><span class="n">echo</span><span class="p">,</span><span class="w"> </span><span class="mi">20</span><span class="p">);</span>
 </code></pre></div>
 <p>When "hello.world" responds, its result set will be returned to the <code>onSuccess</code> method as a "future response".</p>
 <p>The "onSuccess" method then sends the response to the browser.</p>
@@ -2873,7 +3115,7 @@ application.properties.</p>
 <p><em>Note</em>: The "websocket.server.port" parameter is an alias of "rest.server.port"</p>
 </blockquote>
 <p>You can create a websocket service with a Java class like this:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nd">@WebSocketService</span><span class="p">(</span><span class="s">&quot;hello&quot;</span><span class="p">)</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="nd">@WebSocketService</span><span class="p">(</span><span class="s">"hello"</span><span class="p">)</span>
 <a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a><span class="kd">public</span><span class="w"> </span><span class="kd">class</span> <span class="nc">WsEchoDemo</span><span class="w"> </span><span class="kd">implements</span><span class="w"> </span><span class="n">LambdaFunction</span><span class="w"> </span><span class="p">{</span>
 <a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>
 <a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a><span class="w">    </span><span class="nd">@Override</span>
@@ -2883,7 +3125,7 @@ application.properties.</p>
 <a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a><span class="p">}</span>
 </code></pre></div>
 <p>The above creates a websocket service at the URL "/ws/hello" server endpoint.</p>
-<p>Please review the example code in the WsEchoDemo class in the rest-spring-3-example project for details.</p>
+<p>Please review the example code in the WsEchoDemo class in the rest-spring-4-example project for details.</p>
 <p>If you want to use Spring Boot's Tomcat websocket server, you can disable the non-blocking websocket server feature
 by removing the <code>websocket.server.port</code> configuration and any websocket service classes with the <code>WebSocketService</code>
 annotation.</p>

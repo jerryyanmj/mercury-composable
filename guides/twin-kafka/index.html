@@ -16,7 +16,7 @@
         <link rel="prev" href="../minimalist-kafka/">
       
       
-        <link rel="next" href="../schema-registry-mock/">
+        <link rel="next" href="../distributed-cache/">
       
       
         
@@ -489,6 +489,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -549,6 +553,62 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mercury-story/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    White Paper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mercury-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Mercury Family
   
 
     
@@ -1511,6 +1571,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1678,6 +1744,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../http-streaming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP Response Streaming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../polyglot-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polyglot Functions (Python & Node.js)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../minimalist-kafka/" class="md-nav__link">
         
   
@@ -1785,6 +1907,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="The bridge pattern">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-way" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A one-way bridge: switch off the clients you do not use
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -1874,6 +2013,34 @@
   
 </nav>
       
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../distributed-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Cache
+  
+
+    
+  </span>
+  
+  
+
+      </a>
     </li>
   
 
@@ -1978,6 +2145,12 @@
   
     
     
+      
+        
+      
+        
+      
+        
       
         
       
@@ -2289,6 +2462,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../test-reports/progressive-rendering-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report — Progressive Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../test-reports/suspend-resume-interop/" class="md-nav__link">
         
   
@@ -2297,6 +2498,62 @@
     
   
     Interop Test Report — Suspend/Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../test-reports/streaming-return-route-cross-pod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — Streaming Return Route (cross-pod)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../test-reports/otel-dynatrace-certification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — OpenTelemetry forwarder (Dynatrace)
   
 
     
@@ -2587,6 +2844,23 @@
     </span>
   </a>
   
+    <nav class="md-nav" aria-label="The bridge pattern">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#one-way" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A one-way bridge: switch off the clients you do not use
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
 </li>
       
         <li class="md-nav__item">
@@ -2754,6 +3028,11 @@ cluster's schema-id cache is isolated (Confluent global ids are only unique with
 <td><code>secondary.schema.registry.url</code> + <code>secondary-schema-registry.properties</code></td>
 </tr>
 <tr>
+<td>Client opt-out (default <code>true</code>)</td>
+<td><code>kafka.producer.enabled</code> / <code>kafka.consumer.enabled</code></td>
+<td><code>secondary.kafka.producer.enabled</code> / <code>secondary.kafka.consumer.enabled</code></td>
+</tr>
+<tr>
 <td>Outbound header names</td>
 <td><code>kafka.correlation.id.header</code> / <code>kafka.trace.id.header</code> / <code>kafka.traceparent.header</code></td>
 <td><code>secondary.kafka.correlation.id.header</code> / <code>secondary.kafka.trace.id.header</code> / <code>secondary.kafka.traceparent.header</code> (fall back to the globals)</td>
@@ -2762,7 +3041,10 @@ cluster's schema-id cache is isolated (Confluent global ids are only unique with
 </table>
 <p>All secondary templates follow the same mechanics as the primary ones: loaded from the bundled
 classpath template by default, <code>${ENV_VAR:default}</code> substitution, and OAuth token endpoint URLs
-auto-registered on the JVM allow-list. Externalization of configuration is opt-in - point the
+auto-registered on the JVM allow-list. That includes the
+<a href="../minimalist-kafka/#rebalance-protocol">consumer rebalance protocol</a>: each cluster resolves
+<code>group.protocol=auto</code> independently, so the primary may run the KIP-848 consumer protocol while the
+secondary stays classic (or vice versa). Externalization of configuration is opt-in - point the
 location key at a file rendered by the devops pipeline (e.g. <code>file:/tmp/config/...</code>), optionally
 with a classpath fallback as a comma-separated list. The default bootstrap is
 <code>${SECONDARY_KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:8092}</code> - matching the
@@ -2772,22 +3054,22 @@ with a classpath fallback as a comma-separated list. The default bootstrap is
 flow YAML. Inbound bindings on the source cluster:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="c1"># kafka-flow-adapter.yaml (primary = on-prem)</span>
 <a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a><span class="nt">consumer</span><span class="p">:</span>
-<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">topic</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;orders.onprem&#39;</span>
-<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">flow</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;bridge-to-cloud&#39;</span>
-<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;bridge-up-group&#39;</span>
+<a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">topic</span><span class="p">:</span><span class="w"> </span><span class="s">'orders.onprem'</span>
+<a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a><span class="w">    </span><span class="nt">flow</span><span class="p">:</span><span class="w"> </span><span class="s">'bridge-to-cloud'</span>
+<a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="w">    </span><span class="nt">group</span><span class="p">:</span><span class="w"> </span><span class="s">'bridge-up-group'</span>
 </code></pre></div>
 <p>The bridge flow republishes through the other cluster's notification function, carrying the business
 correlation-id (<code>model.cid</code>, seeded by the adapter) and stamping a fresh W3C <code>traceparent</code>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># bridge-to-cloud.yml</span>
-<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">first.task</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;secondary.kafka.notification&#39;</span>
+<a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="nt">first.task</span><span class="p">:</span><span class="w"> </span><span class="s">'secondary.kafka.notification'</span>
 <a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="nt">tasks</span><span class="p">:</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">input</span><span class="p">:</span>
-<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;input.body</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">*&#39;</span>
-<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;text(orders.cloud)</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">header.topic&#39;</span>
-<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">&#39;model.cid</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">header.cid&#39;</span>
-<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="nt">process</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;secondary.kafka.notification&#39;</span>
+<a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'input.body</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">*'</span>
+<a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'text(orders.cloud)</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">header.topic'</span>
+<a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a><span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="s">'model.cid</span><span class="nv"> </span><span class="s">-&gt;</span><span class="nv"> </span><span class="s">header.cid'</span>
+<a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a><span class="w">    </span><span class="nt">process</span><span class="p">:</span><span class="w"> </span><span class="s">'secondary.kafka.notification'</span>
 <a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a><span class="w">    </span><span class="nt">output</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span>
-<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">&#39;Republish</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">on-prem</span><span class="nv"> </span><span class="s">message</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">cloud</span><span class="nv"> </span><span class="s">cluster&#39;</span>
+<a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a><span class="w">    </span><span class="nt">description</span><span class="p">:</span><span class="w"> </span><span class="s">'Republish</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">on-prem</span><span class="nv"> </span><span class="s">message</span><span class="nv"> </span><span class="s">to</span><span class="nv"> </span><span class="s">the</span><span class="nv"> </span><span class="s">cloud</span><span class="nv"> </span><span class="s">cluster'</span>
 <a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a><span class="w">    </span><span class="nt">execution</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">end</span>
 </code></pre></div>
 <p>The reverse direction mirrors it: a binding in <code>yaml.secondary.kafka.flow.adapter</code> routes the cloud
@@ -2795,6 +3077,35 @@ topic into a flow that publishes through <code>simple.kafka.notification</code>.
 flow, the bridge is observable (continuous trace across both clusters), governable (per-binding
 retry + dead-letter on the <em>originating</em> cluster), and extensible (enrich/filter/transform tasks can
 sit between consume and republish).</p>
+<h3 id="one-way">A one-way bridge: switch off the clients you do not use<a class="headerlink" href="#one-way" title="Permanent link">&para;</a></h3>
+<p>A bridge that only flows on-prem → cloud consumes on the primary and produces on the secondary — so
+two of the four clients are dead weight. That matters beyond tidiness: a managed cluster issues
+credentials <strong>per client</strong>, and a Confluent console that was never asked for a primary <em>producer</em> API
+key has none to give. Building the unused client then fails the deployment. Declare the direction
+instead:</p>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="c1"># on-prem -&gt; cloud, one way. Two clusters, one client each.</span>
+<a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="na">kafka.consumer.enabled</span><span class="o">=</span><span class="s">true</span>
+<a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="na">kafka.producer.enabled</span><span class="o">=</span><span class="s">false</span>
+<a id="__codelineno-2-4" name="__codelineno-2-4" href="#__codelineno-2-4"></a><span class="na">secondary.kafka.consumer.enabled</span><span class="o">=</span><span class="s">false</span>
+<a id="__codelineno-2-5" name="__codelineno-2-5" href="#__codelineno-2-5"></a><span class="na">secondary.kafka.producer.enabled</span><span class="o">=</span><span class="s">true</span>
+<a id="__codelineno-2-6" name="__codelineno-2-6" href="#__codelineno-2-6"></a>
+<a id="__codelineno-2-7" name="__codelineno-2-7" href="#__codelineno-2-7"></a><span class="na">yaml.kafka.flow.adapter</span><span class="o">=</span><span class="s">classpath:/kafka-flow-adapter.yaml</span>
+<a id="__codelineno-2-8" name="__codelineno-2-8" href="#__codelineno-2-8"></a><span class="c1"># no yaml.secondary.kafka.flow.adapter - nothing consumes on the cloud side</span>
+</code></pre></div>
+<p>Each cluster reads only its own keys, and each diagnoses itself: publishing through
+<code>simple.kafka.notification</code> here fails naming <code>kafka.producer.enabled</code>, and the secondary
+counterpart names <code>secondary.kafka.producer.enabled</code>. Two consequences to plan for:</p>
+<ul>
+<li><strong>Dead letters need the producer of the cluster they came from.</strong> The primary binding above consumes
+  from on-prem, so its <code>dlq-topic</code> would be written to on-prem — through the producer this
+  configuration just disabled. That contradiction <strong>fails startup</strong> rather than dropping poison
+  messages silently. Either keep <code>kafka.producer.enabled=true</code> (a DLQ-only producer credential) or
+  handle failures without a DLQ.</li>
+<li><strong>Health checks still cover both legs.</strong> <code>kafka.health</code> probes through the consumer template as
+  usual; <code>secondary.kafka.health</code> finds its consumer disabled and probes through the secondary
+  <em>producer</em> template instead, so <code>mandatory.health.dependencies=kafka.health, secondary.kafka.health</code>
+  keeps working unchanged. See <a href="#health">health check</a>.</li>
+</ul>
 <h2 id="asymmetric-registry">Asymmetric Schema Registry<a class="headerlink" href="#asymmetric-registry" title="Permanent link">&para;</a></h2>
 <p>The Schema Registry is <strong>optional and per-cluster</strong>. A common real-world topology pairs an on-prem
 <strong>Apache Kafka</strong> (no registry, raw byte[]) with a cloud <strong>Confluent</strong> cluster (with a registry):
@@ -2850,7 +3161,10 @@ the embedded id would be meaningless on the other registry.</p>
 topology in one process - set <code>dual.servers=true</code> (in its <code>application.properties</code> or as
 <code>-Ddual.servers=true</code>) and it starts broker 1 on <code>127.0.0.1:9092</code> and broker 2 on <code>127.0.0.1:8092</code>
 with separate log directories:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="nb">cd</span><span class="w"> </span>helpers/kafka-standalone<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>java<span class="w"> </span>-Ddual.servers<span class="o">=</span><span class="nb">true</span><span class="w"> </span>-jar<span class="w"> </span>target/kafka-standalone-x.y.z-exec.jar
+<blockquote>
+<p><strong>Note</strong>: <code>x.y.z</code> denotes the current Mercury version shown in the root <code>pom.xml</code>.</p>
+</blockquote>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="nb">cd</span><span class="w"> </span>helpers/kafka-standalone<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>java<span class="w"> </span>-Ddual.servers<span class="o">=</span><span class="nb">true</span><span class="w"> </span>-jar<span class="w"> </span>target/kafka-standalone-x.y.z-exec.jar
 </code></pre></div>
 <p>The shipped templates' defaults (<code>127.0.0.1:9092</code> primary, <code>127.0.0.1:8092</code> secondary) line up with
 this, so a bridge application runs locally with zero connection configuration.</p>
@@ -2871,6 +3185,16 @@ crossing the two emulated clusters with trace/correlation continuity — see the
 <td><code>yaml.secondary.kafka.flow.adapter</code></td>
 <td>-</td>
 <td>Secondary adapter config location; unset = secondary inbound adapter off.</td>
+</tr>
+<tr>
+<td><code>secondary.kafka.producer.enabled</code></td>
+<td><code>true</code></td>
+<td>Set <code>false</code> when the secondary cluster issues no producer credentials — see <a href="#one-way">one-way bridge</a>. A secondary binding with <code>dlq-topic</code> then fails startup.</td>
+</tr>
+<tr>
+<td><code>secondary.kafka.consumer.enabled</code></td>
+<td><code>true</code></td>
+<td>Set <code>false</code> when the secondary cluster issues no consumer credentials; <code>secondary.kafka.health</code> then probes through the secondary producer template.</td>
 </tr>
 <tr>
 <td><code>secondary.kafka.producer.properties</code></td>
@@ -2941,11 +3265,16 @@ non-schema publishes.</p>
 consumer template with the same no-ACL Metadata request, start-up grace, and HTTP 503 semantics.
 A bridge is only healthy when <strong>both</strong> clusters are reachable, so a dual-cluster application lists
 both dependencies:</p>
-<div class="highlight"><pre><span></span><code><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="na">mandatory.health.dependencies</span><span class="o">=</span><span class="s">kafka.health, secondary.kafka.health</span>
+<div class="highlight"><pre><span></span><code><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="na">mandatory.health.dependencies</span><span class="o">=</span><span class="s">kafka.health, secondary.kafka.health</span>
 </code></pre></div>
 <p>The <code>/health</code> dependency list distinguishes the two by service name (<code>kafka</code> vs <code>secondary.kafka</code>,
 each with its cluster's <code>bootstrap.servers</code> as <code>href</code>). An application that treats the secondary
 cluster as best-effort can move <code>secondary.kafka.health</code> to <code>optional.health.dependencies</code> instead.</p>
+<p>On a <a href="#one-way">one-way bridge</a> the probe follows whichever client that cluster configured: with
+<code>secondary.kafka.consumer.enabled=false</code> there is no consumer credential to probe with, so
+<code>secondary.kafka.health</code> builds its probe from <code>secondary-kafka-producer.properties</code> instead —
+same Metadata request, same no-ACL requirement, same 503 semantics. Both legs of a one-way bridge
+therefore stay health-checkable with the dependency list unchanged.</p>
 <h2 id="see-also">See also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
 <ul>
 <li><a href="https://github.com/Accenture/mercury-composable/tree/main/examples/twin-kafka-demo">twin-kafka-demo</a> - runnable worked example of the bridge pattern.</li>
@@ -3010,13 +3339,13 @@ cluster as best-effort can move <code>secondary.kafka.health</code> to <code>opt
         
         
           
-          <a href="../schema-registry-mock/" class="md-footer__link md-footer__link--next" aria-label="Next: Schema Registry Mock">
+          <a href="../distributed-cache/" class="md-footer__link md-footer__link--next" aria-label="Next: Distributed Cache">
             <div class="md-footer__title">
               <span class="md-footer__direction">
                 Next
               </span>
               <div class="md-ellipsis">
-                Schema Registry Mock
+                Distributed Cache
               </div>
             </div>
             <div class="md-footer__button md-icon">

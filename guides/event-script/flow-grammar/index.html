@@ -489,6 +489,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -549,6 +553,62 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../mercury-story/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    White Paper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../mercury-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Mercury Family
   
 
     
@@ -1638,6 +1698,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1802,6 +1868,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../../http-streaming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP Response Streaming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../polyglot-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polyglot Functions (Python & Node.js)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../minimalist-kafka/" class="md-nav__link">
         
   
@@ -1838,6 +1960,34 @@
     
   
     Twin Kafka (dual cluster)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../distributed-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Cache
   
 
     
@@ -1950,6 +2100,12 @@
   
     
     
+      
+        
+      
+        
+      
+        
       
         
       
@@ -2261,6 +2417,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../test-reports/progressive-rendering-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report — Progressive Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../test-reports/suspend-resume-interop/" class="md-nav__link">
         
   
@@ -2269,6 +2453,62 @@
     
   
     Interop Test Report — Suspend/Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../test-reports/streaming-return-route-cross-pod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — Streaming Return Route (cross-pod)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../test-reports/otel-dynatrace-certification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — OpenTelemetry forwarder (Dynatrace)
   
 
     
@@ -2878,7 +3118,7 @@
 </tr>
 <tr>
 <td><code>error.*</code></td>
-<td>exception context in a handler (<code>error.task/.status/.message/.stack</code>)</td>
+<td>exception context in a handler (<code>error.task/.code/.message/.stack</code>)</td>
 </tr>
 <tr>
 <td><code>$.…</code></td>
@@ -2947,7 +3187,9 @@ The full catalog with examples is in <a href="../syntax/#tasks-and-data-mapping"
 <li>The engine runs <code>first.task</code>, then chains by execution type (<code>next</code>/<code>join</code>/<code>pipeline</code>).</li>
 <li>A <code>decision</code> task routes by the value its <code>output</code> maps into <code>decision</code>.</li>
 <li><code>flow.exception</code> catches unhandled task errors; a task's own <code>exception</code> overrides it; the handler
-  reads <code>error.*</code>. The built-in <code>resilience.handler</code> adds retry/backoff.</li>
+  reads <code>error.*</code>. The built-in <code>resilience.handler</code> adds retry/backoff. With no handler at all,
+  the caller receives the default error body <code>{type: 'error', status, message}</code> with the thrown
+  status.</li>
 </ul>
 <h2 id="invariants">Invariants<a class="headerlink" href="#invariants" title="Permanent link">&para;</a></h2>
 <p>Compile-time rules — violate them and the flow won't load:</p>

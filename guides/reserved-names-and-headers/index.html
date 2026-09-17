@@ -13,7 +13,7 @@
         <link rel="canonical" href="https://accenture.github.io/mercury-composable/guides/reserved-names-and-headers/">
       
       
-        <link rel="prev" href="../../test-reports/suspend-resume-interop/">
+        <link rel="prev" href="../../test-reports/otel-dynatrace-certification/">
       
       
         <link rel="next" href="../actuators-and-http-client/">
@@ -489,6 +489,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -549,6 +553,62 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mercury-story/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    White Paper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../mercury-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Mercury Family
   
 
     
@@ -1509,6 +1569,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1673,6 +1739,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../http-streaming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP Response Streaming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../polyglot-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polyglot Functions (Python & Node.js)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../minimalist-kafka/" class="md-nav__link">
         
   
@@ -1709,6 +1831,34 @@
     
   
     Twin Kafka (dual cluster)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../distributed-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Cache
   
 
     
@@ -1823,6 +1973,12 @@
   
     
     
+      
+        
+      
+        
+      
+        
       
         
       
@@ -2137,6 +2293,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../test-reports/progressive-rendering-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report — Progressive Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../test-reports/suspend-resume-interop/" class="md-nav__link">
         
   
@@ -2145,6 +2329,62 @@
     
   
     Interop Test Report — Suspend/Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../test-reports/streaming-return-route-cross-pod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — Streaming Return Route (cross-pod)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../test-reports/otel-dynatrace-certification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — OpenTelemetry forwarder (Dynatrace)
   
 
     
@@ -2775,11 +3015,6 @@ to avoid breaking the system unintentionally.</p>
 <td style="text-align: left;">platform-core</td>
 </tr>
 <tr>
-<td style="text-align: left;">elastic.queue.cleanup</td>
-<td style="text-align: left;">Elastic event buffer clean up task</td>
-<td style="text-align: left;">platform-core</td>
-</tr>
-<tr>
 <td style="text-align: left;">distributed.tracing</td>
 <td style="text-align: left;">Distributed tracing logger</td>
 <td style="text-align: left;">platform-core</td>
@@ -2954,7 +3189,10 @@ tasks an application wires into its own <code>sync-to-async</code> flow (see
 function under these names. The knowledge graph additionally reserves the node <strong>alias</strong>
 <code>suspend</code> (bound to the <code>graph.suspend</code> skill — traversal jumps to it by name, the <code>root</code>/<code>end</code>
 pattern), the node <strong>property</strong> <code>suspend</code>, and the engine-managed state key <code>model.run</code> — see
-<a href="../knowledge-graph/workflow-suspension/">Workflow Suspension</a>.</p>
+<a href="../knowledge-graph/workflow-suspension/">Workflow Suspension</a>. The node alias <code>error</code> is likewise
+reserved: it is the <strong>generic exception context namespace</strong> (<code>error.source</code>, <code>error.code</code>,
+<code>error.message</code>, <code>error.stack</code>) staged when a failed node routes to its <code>exception=</code> handler —
+see <a href="../knowledge-graph/command-reference/#failure-routing">failure routing</a>.</p>
 <h2 id="optional-user-defined-functions">Optional user defined functions<a class="headerlink" href="#optional-user-defined-functions" title="Permanent link">&para;</a></h2>
 <p>The following optional route names will be detected by the system for additional user defined features.</p>
 <table>
@@ -3122,7 +3360,7 @@ system or for unit tests.</p>
 to downstream. Its header name is enterprise-specific, so it is <strong>configurable</strong>:</p>
 <div class="highlight"><pre><span></span><code><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="c1"># HTTP: many enterprises use X-Correlation-Id (the default)</span>
 <a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="na">http.correlation.id.header</span><span class="o">=</span><span class="s">X-Correlation-Id</span>
-<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Kafka: no cross-vendor standard exists, so &quot;cid&quot; is the default</span>
+<a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="c1"># Kafka: no cross-vendor standard exists, so "cid" is the default</span>
 <a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="na">kafka.correlation.id.header</span><span class="o">=</span><span class="s">cid</span>
 </code></pre></div>
 <blockquote>
@@ -3203,7 +3441,7 @@ rest.yaml endpoint or kafka-flow-adapter.yaml binding may override them with the
       <nav class="md-footer__inner md-grid" aria-label="Footer" >
         
           
-          <a href="../../test-reports/suspend-resume-interop/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Interop Test Report — Suspend/Resume">
+          <a href="../../test-reports/otel-dynatrace-certification/" class="md-footer__link md-footer__link--prev" aria-label="Previous: Test Report — OpenTelemetry forwarder (Dynatrace)">
             <div class="md-footer__button md-icon">
               
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
@@ -3213,7 +3451,7 @@ rest.yaml endpoint or kafka-flow-adapter.yaml binding may override them with the
                 Previous
               </span>
               <div class="md-ellipsis">
-                Interop Test Report — Suspend/Resume
+                Test Report — OpenTelemetry forwarder (Dynatrace)
               </div>
             </div>
           </a>

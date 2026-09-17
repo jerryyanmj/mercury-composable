@@ -489,6 +489,10 @@
       
         
       
+        
+      
+        
+      
     
     
     
@@ -549,6 +553,62 @@
     
   
     Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../mercury-story/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    White Paper
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../mercury-family/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The Mercury Family
   
 
     
@@ -1638,6 +1698,12 @@
       
         
       
+        
+      
+        
+      
+        
+      
     
     
     
@@ -1802,6 +1868,62 @@
   
   
     <li class="md-nav__item">
+      <a href="../../http-streaming/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    HTTP Response Streaming
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../polyglot-functions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Polyglot Functions (Python & Node.js)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../minimalist-kafka/" class="md-nav__link">
         
   
@@ -1838,6 +1960,34 @@
     
   
     Twin Kafka (dual cluster)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../distributed-cache/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Distributed Cache
   
 
     
@@ -1950,6 +2100,12 @@
   
     
     
+      
+        
+      
+        
+      
+        
       
         
       
@@ -2261,6 +2417,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../../test-reports/progressive-rendering-interop/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Interop Test Report — Progressive Rendering
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../../test-reports/suspend-resume-interop/" class="md-nav__link">
         
   
@@ -2269,6 +2453,62 @@
     
   
     Interop Test Report — Suspend/Resume
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../test-reports/streaming-return-route-cross-pod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — Streaming Return Route (cross-pod)
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../../test-reports/otel-dynatrace-certification/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Test Report — OpenTelemetry forwarder (Dynatrace)
   
 
     
@@ -2737,6 +2977,11 @@
 <td><code>true</code>/<code>false</code> (default false) — enable distributed tracing</td>
 </tr>
 <tr>
+<td><code>stream</code></td>
+<td>no</td>
+<td><code>true</code>/<code>false</code> (default false) — progressive response streaming (SSE / chunked JSON Lines) on a dedicated ordered reply lane; see the <a href="../../http-streaming/">HTTP Response Streaming</a> guide</td>
+</tr>
+<tr>
 <td><code>trace.id.header</code></td>
 <td>no</td>
 <td>per-endpoint override of the global <code>http.trace.id.header</code> (default <code>X-Trace-Id</code>) — impedance matching for a caller that sends its own trace-id header name; a well-formed W3C <code>traceparent</code> still takes precedence</td>
@@ -2763,7 +3008,7 @@
 </tr>
 </tbody>
 </table>
-<p>Boolean fields (<code>upload</code>, <code>tracing</code>, <code>trust_all_cert</code>) are written <strong>unquoted</strong>, e.g. <code>tracing: true</code>.
+<p>Boolean fields (<code>upload</code>, <code>tracing</code>, <code>stream</code>, <code>trust_all_cert</code>) are written <strong>unquoted</strong>, e.g. <code>tracing: true</code>.
 The header-override values are header names, written quoted like other strings, e.g.
 <code>trace.id.header: 'X-Legacy-Trace'</code> (header capture is case-insensitive; precedence is
 per-entry &gt; <code>application.properties</code> global &gt; built-in default — see
