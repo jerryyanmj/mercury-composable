@@ -1,0 +1,23 @@
+#
+# Demo step: drain the manager outbox on demand.
+# The 'manual' trigger is what distinguishes this from the scheduler, which is suppressed in
+# demo mode - see Demo.suppressed().
+#
+flow:
+  id: 'admin-relay'
+  description: 'Manually drain the manager outbox to Kafka'
+  ttl: 20s
+  exception: 'v1.order.exception'
+
+first.task: 'v1.manager.outbox.relay'
+
+tasks:
+  - name: 'v1.manager.outbox.relay'
+    input:
+      - 'text(manual) -> trigger'
+    process: 'v1.manager.outbox.relay'
+    description: 'Publish every staged manager outbox row to Kafka now'
+    output:
+      - 'text(application/json) -> output.header.content-type'
+      - 'result -> output.body'
+    execution: end

@@ -1,0 +1,8 @@
+jobs:
+  - name: "manager-outbox-relay"
+    description: "Relay unsent manager outbox entries to Kafka"
+    cron: "0/15 0/1 * 1/1 * ? *"
+    service: "v1.manager.outbox.relay"
+    resolver: "v1.job.state.resolver"
+deferred.start: true
+leader.election: false

@@ -1,0 +1,40 @@
+flow:
+  id: 'steward-request-flow'
+  description: 'Handle a fresh fulfillment.request: create DB record, drive the lifecycle graph to its first checkpoint (SCHEDULED), and record the state transition'
+  ttl: 30s
+
+first.task: 'v1.fulfillment.create'
+
+tasks:
+  - input:
+      - 'input.body -> *'
+    process: 'v1.fulfillment.create'
+    output:
+      - 'result -> model.fulfillment_result'
+    description: 'Create fulfillment record and initial VALIDATED event in one transaction'
+    execution: sequential
+    next:
+      - 'graph.executor'
+
+  - input:
+      - 'model.instance -> header.instance'
+      - 'text(fulfillment-lifecycle) -> header.graph'
+      - 'input.body -> *'
+    process: 'graph.executor'
+    output:
+      - 'result.lifecycle_state -> model.lifecycle_state'
+    description: 'Drive the fulfillment lifecycle graph - fresh run suspends at the first checkpoint'
+    execution: sequential
+    next:
+      - 'v1.txn.record.status'
+
+  - input:
+      - 'input.body.fulfillment_id -> fulfillment_id'
+      - 'text(VALIDATED) -> from_state'
+      - 'model.lifecycle_state -> to_state'
+      - 'text(STEWARD) -> source'
+    process: 'v1.txn.record.status'
+    output:
+      - 'result -> output.body'
+    description: 'Record VALIDATED->SCHEDULED status transition'
+    execution: end

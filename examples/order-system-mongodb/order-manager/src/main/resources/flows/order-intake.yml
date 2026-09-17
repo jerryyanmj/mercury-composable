@@ -1,0 +1,39 @@
+flow:
+  id: 'order-intake-flow'
+  description: 'Accept an order via REST, validate it, persist it, and queue the fulfillment.request event'
+  ttl: 30s
+  exception: 'v1.order.exception'
+
+first.task: 'v1.order.validate'
+
+tasks:
+  - name: 'v1.order.validate'
+    input:
+      - 'input.body -> *'
+    process: 'v1.order.validate'
+    description: 'Validate order fields'
+    output:
+      - 'result -> model.validated'
+    execution: sequential
+    next:
+      - 'v1.order.persist'
+
+  - name: 'v1.order.persist'
+    input:
+      - 'input.body -> *'
+    process: 'v1.order.persist'
+    description: 'Persist the order and stage fulfillment.request in the outbox'
+    output:
+      - 'result -> output.body'
+    execution: end
+
+  - name: 'v1.order.exception'
+    input:
+      - 'error.code -> status'
+      - 'error.message -> message'
+    process: 'v1.order.exception'
+    description: 'Surface validation or persistence errors'
+    output:
+      - 'result.status -> output.status'
+      - 'result -> output.body'
+    execution: end

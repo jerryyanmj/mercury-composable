@@ -1,0 +1,25 @@
+#
+# Kafka Flow Adapter - Order Steward
+# Three inbound bindings, one per lifecycle event class:
+#   fulfillment.request - a fresh lifecycle (manager -> steward)
+#   fulfillment.tick    - the dispatch-window tick (steward scheduler -> steward)
+#   fulfillment.ack     - a SoR milestone acknowledgement (acknowledge -> steward)
+#
+consumer:
+  - topic: 'fulfillment.request'
+    flow: 'steward-request-flow'
+    group: 'order-steward-request-group'
+    dlq-topic: 'fulfillment.request.dlq'
+    serializer: 'json'
+
+  - topic: 'fulfillment.tick'
+    flow: 'steward-tick-flow'
+    group: 'order-steward-tick-group'
+    dlq-topic: 'fulfillment.tick.dlq'
+    serializer: 'json'
+
+  - topic: 'fulfillment.ack'
+    flow: 'steward-ack-flow'
+    group: 'order-steward-ack-group'
+    dlq-topic: 'fulfillment.ack.dlq'
+    serializer: 'json'

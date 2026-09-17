@@ -1,0 +1,12 @@
+consumer:
+  - topic: 'orders.inbound'
+    flow: 'order-intake-event'
+    group: 'order-manager-intake-group'
+    dlq-topic: 'orders.inbound.dlq'
+    serializer: 'json'
+
+  - topic: 'fulfillment.status'
+    flow: 'order-aggregate-flow'
+    group: 'order-manager-status-group'
+    dlq-topic: 'fulfillment.status.dlq'
+    serializer: 'json'

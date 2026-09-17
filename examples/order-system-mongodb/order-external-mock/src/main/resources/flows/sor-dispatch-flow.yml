@@ -1,0 +1,16 @@
+flow:
+  id: 'sor-dispatch-flow'
+  description: 'Kafka consumer: receive a sor.dispatch event and emit SoR milestones'
+  ttl: 30s
+
+first.task: 'v1.sor.mock.process'
+
+tasks:
+  - name: 'v1.sor.mock.process'
+    input:
+      - 'input.body -> *'
+    process: 'v1.sor.mock.process'
+    description: 'Process the SoR dispatch and auto-emit milestones (or hold in DEMO mode)'
+    output:
+      - 'result -> output.body'
+    execution: end

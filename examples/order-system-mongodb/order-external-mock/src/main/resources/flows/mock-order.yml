@@ -1,0 +1,16 @@
+flow:
+  id: 'mock-order-flow'
+  description: 'Submit a test order to orders.inbound via REST'
+  ttl: 15s
+
+first.task: 'v1.mock.order.submit'
+
+tasks:
+  - name: 'v1.mock.order.submit'
+    input:
+      - 'input.body -> *'
+    process: 'v1.mock.order.submit'
+    description: 'Publish the order to orders.inbound Kafka topic'
+    output:
+      - 'result -> output.body'
+    execution: end

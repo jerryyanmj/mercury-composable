@@ -1,0 +1,14 @@
+#
+# Scheduled jobs for the Order Manager
+# NOTE: the cron interval must exceed 10 seconds - the scheduler adds a random
+# 0-9s deferred-start delay for racing-condition avoidance.
+#
+jobs:
+  - name: "manager-outbox-relay"
+    description: "Relay unsent outbox rows to Kafka"
+    cron: "0/15 0/1 * 1/1 * ? *"
+    service: "v1.manager.outbox.relay"
+    resolver: "v1.job.state.resolver"
+
+deferred.start: true
+leader.election: false

@@ -18,7 +18,7 @@
 - **status:** active, mature framework (Maven reactor)
 - **repo:** github.com/Accenture/mercury-composable (official — source of truth)
 - **last_enabled:** 2026-06-20
-- **last_session:** 2026-08-11 | agent: Claude Code (2026-08-11-220600)
+- **last_session:** 2026-08-26 | agent: Claude Code (2026-08-26-210842)
 - **last_review:** 2026-08-07 | through 2026-08-07-142823.md
 - **last_invariant_check:** 2026-07-27 | 2026-07-27-215011.md (all 15 confirmed by Eric — one-by-one walkthrough with live-tree evidence; thread-reverify-invariants-2026q2 closed)
 
@@ -63,6 +63,9 @@
   <!-- id: virtual-threads-rpc | created: 2026-06-20 | last_used: 2026-06-27 | uses: 4 | tier: core -->
 
 ## Key Decisions
+
+- **`examples/order-system-mongodb/` — full MongoDB implementation of the Order Fulfillment System (2026-08-26, uncommitted working tree, 74 files).** 4 apps (order-manager, order-steward, order-acknowledge, order-external-mock) + 2 shared library modules (order-common, order-mongo-service). Uses MiniGraph `fulfillment-lifecycle.json` (DB-agnostic, identical shape to the Postgres version), Redis for graph suspend/resume, Kafka for all inter-app events, MongoDB for business state. Key design: single-document atomicity via MongoDB 4.2+ pipeline updates (`$concatArrays` = state-change + outbox-append in one findOneAndUpdate); milestone idempotency via `$ifNull` (first-write-wins per milestone name); `_seq` counter embedded in document for sequenced outbox events; `mongo.service` route as shared reactive-driver abstraction (double-checked-lock singleton, `.block()` safe on virtual threads). Milestone-as-set: 3 facts, no ordering, terminal state derived from accumulated counts (any-fail→FAILED; all-pass→SETTLED). `await-sor` JUMP MODE (no drawn edge to suspend; re-evaluated on each resume = wait loop). NOT a port of examples/order-system/ (Postgres) — fresh design per user instruction. Root pom.xml updated with new module. All files in working tree; user will commit separately. **DEMO_MODE=true** on external-mock suppresses auto-emission of SoR milestones (use `POST /api/admin/sor/emit/{sor_ref}/{milestone}/{outcome}` for controlled testing). **Bugs fixed 2026-08-26 session 2**: (1) `SorProcess` was missing `cid` header + `.get()` on Kafka notifications; (2) `OrderPersist` didn't initialize `lines` array, causing `OrderAggregate.deriveOrderStatus` to always return null and `order_status` to stay PENDING; (3) `OrderStatus` now strips `lines` from API response. Both SETTLED and FAILED scenarios verified end-to-end, idempotency confirmed.
+  <!-- id: project-order-system-mongodb | created: 2026-08-26 | last_used: 2026-08-26 | uses: 3 | tier: working | origin: 2026-08-26-210842 -->
 
 - **Release 4.8.1 — SHIPPED 2026-07-11 (tag `v4.8.1` on `3d226c5b`; PRs #159-#161).** Durable
   facts: (1) **SimpleRandomPartitioner is minimalist-kafka's producer DEFAULT** (`putIfAbsent` in

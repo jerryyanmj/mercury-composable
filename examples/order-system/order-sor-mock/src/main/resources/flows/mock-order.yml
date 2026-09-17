@@ -1,0 +1,27 @@
+#
+# Publish an order onto orders.inbound, as an external party would.
+#
+#   POST /api/v1/mock/order
+#   {"order_id":"O-1001","external_party":"acme","route":"steward-1","payload":{"amount":500}}
+#
+# The whole body is passed through untouched, so an intentionally invalid order can be sent to
+# demonstrate the dead-letter path.
+#
+flow:
+  id: 'mock-order'
+  description: 'Simulate an external party submitting an order over Kafka'
+  ttl: 15s
+
+first.task: 'v1.mock.order.submit'
+
+tasks:
+  - name: 'v1.mock.order.submit'
+    input:
+      - 'input.body -> *'
+    process: 'v1.mock.order.submit'
+    description: 'Publish the order body to the orders.inbound topic'
+    output:
+      - 'text(application/json) -> output.header.content-type'
+      - 'int(202) -> output.status'
+      - 'result -> output.body'
+    execution: end

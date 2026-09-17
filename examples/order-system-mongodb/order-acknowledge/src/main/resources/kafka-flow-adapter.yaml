@@ -1,0 +1,18 @@
+consumer:
+  - topic: 'sor.validation'
+    flow: 'ack-validation-flow'
+    group: 'order-ack-validation-group'
+    dlq-topic: 'sor.validation.dlq'
+    serializer: 'json'
+
+  - topic: 'sor.preprocess'
+    flow: 'ack-preprocess-flow'
+    group: 'order-ack-preprocess-group'
+    dlq-topic: 'sor.preprocess.dlq'
+    serializer: 'json'
+
+  - topic: 'sor.process'
+    flow: 'ack-process-flow'
+    group: 'order-ack-process-group'
+    dlq-topic: 'sor.process.dlq'
+    serializer: 'json'

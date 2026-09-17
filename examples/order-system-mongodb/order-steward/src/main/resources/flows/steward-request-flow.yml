@@ -1,0 +1,42 @@
+flow:
+  id: 'steward-request-flow'
+  description: 'Create a fulfillment document, run the lifecycle graph (fresh), and record SCHEDULED'
+  ttl: 30s
+
+first.task: 'v1.fulfillment.create'
+
+tasks:
+  - name: 'v1.fulfillment.create'
+    input:
+      - 'input.body -> *'
+    process: 'v1.fulfillment.create'
+    description: 'Idempotent upsert of the fulfillment document'
+    output: []
+    execution: sequential
+    next:
+      - 'graph.executor'
+
+  - name: 'graph.executor'
+    input:
+      - 'input.body -> *'
+      - 'text(fulfillment-lifecycle) -> header.graph'
+      - 'model.instance -> header.instance'
+    process: 'graph.executor'
+    description: 'Run lifecycle graph fresh — validates the request and suspends at validated node'
+    output:
+      - 'result.lifecycle_state -> model.lifecycle_state'
+    execution: sequential
+    next:
+      - 'v1.steward.record.status'
+
+  - name: 'v1.steward.record.status'
+    input:
+      - 'input.body.fulfillment_id -> fulfillment_id'
+      - 'text(VALIDATED) -> from_state'
+      - 'model.lifecycle_state -> to_state'
+      - 'text(STEWARD) -> source'
+    process: 'v1.steward.record.status'
+    description: 'Record the VALIDATED→SCHEDULED transition and stage fulfillment.status'
+    output:
+      - 'result -> output.body'
+    execution: end

@@ -1,0 +1,3157 @@
+{
+  "info": {
+    "name": "Order Fulfillment System",
+    "description": "End-to-end test cases for examples/order-system.\n\nSETUP\n1. ../boot-infra-dependencies.sh\n2. each module's boot-dependencies.sh\n3. start the apps with DEMO_MODE=true so nothing advances on its own:\n     DEMO_MODE=true java -jar <module>/target/<module>-1.0.0.jar\n\nFolders 01-05 and 08 need DEMO_MODE=true (they step the pipeline by hand).\nFolders 06, 07 and 09 work either way.\n\nKafka propagation is not instant. When running the whole collection, allow a delay between\nrequests:  newman run order-system.postman_collection.json --delay-request 4000\nWhen clicking through by hand, pause a few seconds between steps - that pause is the demo.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01. Happy Path",
+      "description": "The full lifecycle, one step at a time. Requires DEMO_MODE=true so nothing advances on its own.",
+      "item": [
+        {
+          "name": "1. Submit Order  (external party -> orders.inbound)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "description": "The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-HAPPY-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 500\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to orders.inbound\", () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"topic is orders.inbound\", () => pm.expect(b.topic).to.eql(\"orders.inbound\"));",
+                  "pm.collectionVariables.set(\"order_id\", b.order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Trigger Manager Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Manager Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Capture Fulfillment Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"order is in the read model\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order found\", () => pm.expect(b.found).to.be.true);",
+                  "pm.expect(b.lines.length, \"a fulfillment line exists\").to.be.above(0);",
+                  "pm.collectionVariables.set(\"fulfillment_id\", b.lines[0].fulfillment_id);",
+                  "console.log(\"fulfillment_id =\", b.lines[0].fulfillment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Trigger Steward Dispatch Window",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/dispatch",
+              "host": [
+                "{{steward}}/api/v1/admin/dispatch"
+              ]
+            },
+            "description": "Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"dispatch window opened\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Trigger Steward Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Steward Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. SoR Validated  (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/validated",
+              "host": [
+                "{{mock}}/api/v1/sor/validated"
+              ]
+            },
+            "description": "Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_validated}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. SoR Preprocessed  (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/preprocessed",
+              "host": [
+                "{{mock}}/api/v1/sor/preprocessed"
+              ]
+            },
+            "description": "Publishes the 'preprocessed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_preprocessed}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. SoR Processed  (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/processed",
+              "host": [
+                "{{mock}}/api/v1/sor/processed"
+              ]
+            },
+            "description": "Publishes the 'processed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_processed}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9. Final Steward Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Final Steward Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10. Final Manager Relay (publishes order.status.external)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Publishes the external order-status notification. It is staged in the manager's outbox by the same transaction that concluded the order, so this step has real work to do - it used to be a no-op because the notification was published directly from the flow instead."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"relay ran\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"published the external notification\", () => pm.expect(b.relayed).to.be.at.least(1));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11. Get Order Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The external report, served entirely from the manager's CQRS read model - it never queries the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status returned\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order is COMPLETED\", () => pm.expect(b.order.order_status).to.eql(\"COMPLETED\"));",
+                  "pm.test(\"line is SETTLED\", () => pm.expect(b.lines[0].line_status).to.eql(\"SETTLED\"));",
+                  "pm.test(\"4 transitions recorded\", () => pm.expect(b.transitions).to.eql(4));",
+                  "console.log(\"path:\", b.history.map(h => h.to_state).join(\" -> \"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02. SoR Failure - at Validation",
+      "description": "The SoR reports failure at the 'validated' milestone. A SoR error is NOT a rejection: the fulfillment ends FAILED and the reason must name 'sor_validation' - the stage that actually failed.",
+      "item": [
+        {
+          "name": "1. Submit Order  (external party -> orders.inbound)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "description": "The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-FAIL2-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 500\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to orders.inbound\", () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"topic is orders.inbound\", () => pm.expect(b.topic).to.eql(\"orders.inbound\"));",
+                  "pm.collectionVariables.set(\"order_id\", b.order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Trigger Manager Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Manager Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Capture Fulfillment Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"order is in the read model\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order found\", () => pm.expect(b.found).to.be.true);",
+                  "pm.expect(b.lines.length, \"a fulfillment line exists\").to.be.above(0);",
+                  "pm.collectionVariables.set(\"fulfillment_id\", b.lines[0].fulfillment_id);",
+                  "console.log(\"fulfillment_id =\", b.lines[0].fulfillment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Trigger Steward Dispatch Window",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/dispatch",
+              "host": [
+                "{{steward}}/api/v1/admin/dispatch"
+              ]
+            },
+            "description": "Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"dispatch window opened\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Trigger Steward Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Steward Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. SoR Validated  (fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/validated",
+              "host": [
+                "{{mock}}/api/v1/sor/validated"
+              ]
+            },
+            "description": "Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"fail\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_validated}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. Final Steward Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Final Steward Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. Get Order Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The external report, served entirely from the manager's CQRS read model - it never queries the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status returned\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order is FAILED\", () => pm.expect(b.order.order_status).to.eql(\"FAILED\"));",
+                  "pm.test(\"line is FAILED\", () => pm.expect(b.lines[0].line_status).to.eql(\"FAILED\"));",
+                  "pm.test(\"4 transitions recorded\", () => pm.expect(b.transitions).to.eql(4));",
+                  "console.log(\"path:\", b.history.map(h => h.to_state).join(\" -> \"));",
+                  "const last = b.history[b.history.length - 1];",
+                  "pm.test(\"failure attributed to sor_validated\", () => pm.expect(last.reason).to.eql(\"sor_validated\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03. SoR Failure - at Preprocess",
+      "description": "The SoR reports failure at the 'preprocessed' milestone. A SoR error is NOT a rejection: the fulfillment ends FAILED and the reason must name 'sor_preprocess' - the stage that actually failed.",
+      "item": [
+        {
+          "name": "1. Submit Order  (external party -> orders.inbound)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "description": "The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-FAIL3-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 500\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to orders.inbound\", () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"topic is orders.inbound\", () => pm.expect(b.topic).to.eql(\"orders.inbound\"));",
+                  "pm.collectionVariables.set(\"order_id\", b.order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Trigger Manager Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Manager Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Capture Fulfillment Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"order is in the read model\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order found\", () => pm.expect(b.found).to.be.true);",
+                  "pm.expect(b.lines.length, \"a fulfillment line exists\").to.be.above(0);",
+                  "pm.collectionVariables.set(\"fulfillment_id\", b.lines[0].fulfillment_id);",
+                  "console.log(\"fulfillment_id =\", b.lines[0].fulfillment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Trigger Steward Dispatch Window",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/dispatch",
+              "host": [
+                "{{steward}}/api/v1/admin/dispatch"
+              ]
+            },
+            "description": "Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"dispatch window opened\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Trigger Steward Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Steward Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. SoR Validated  (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/validated",
+              "host": [
+                "{{mock}}/api/v1/sor/validated"
+              ]
+            },
+            "description": "Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_validated}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. SoR Preprocessed  (fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/preprocessed",
+              "host": [
+                "{{mock}}/api/v1/sor/preprocessed"
+              ]
+            },
+            "description": "Publishes the 'preprocessed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"fail\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_preprocessed}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. Final Steward Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Final Steward Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9. Get Order Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The external report, served entirely from the manager's CQRS read model - it never queries the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status returned\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order is FAILED\", () => pm.expect(b.order.order_status).to.eql(\"FAILED\"));",
+                  "pm.test(\"line is FAILED\", () => pm.expect(b.lines[0].line_status).to.eql(\"FAILED\"));",
+                  "pm.test(\"4 transitions recorded\", () => pm.expect(b.transitions).to.eql(4));",
+                  "console.log(\"path:\", b.history.map(h => h.to_state).join(\" -> \"));",
+                  "const last = b.history[b.history.length - 1];",
+                  "pm.test(\"failure attributed to sor_preprocessed\", () => pm.expect(last.reason).to.eql(\"sor_preprocessed\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04. SoR Failure - at Process",
+      "description": "The SoR reports failure at the 'processed' milestone. A SoR error is NOT a rejection: the fulfillment ends FAILED and the reason must name 'sor_process' - the stage that actually failed.",
+      "item": [
+        {
+          "name": "1. Submit Order  (external party -> orders.inbound)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "description": "The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-FAIL4-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 500\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to orders.inbound\", () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"topic is orders.inbound\", () => pm.expect(b.topic).to.eql(\"orders.inbound\"));",
+                  "pm.collectionVariables.set(\"order_id\", b.order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Trigger Manager Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Manager Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Capture Fulfillment Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"order is in the read model\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order found\", () => pm.expect(b.found).to.be.true);",
+                  "pm.expect(b.lines.length, \"a fulfillment line exists\").to.be.above(0);",
+                  "pm.collectionVariables.set(\"fulfillment_id\", b.lines[0].fulfillment_id);",
+                  "console.log(\"fulfillment_id =\", b.lines[0].fulfillment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Trigger Steward Dispatch Window",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/dispatch",
+              "host": [
+                "{{steward}}/api/v1/admin/dispatch"
+              ]
+            },
+            "description": "Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"dispatch window opened\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Trigger Steward Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Steward Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. SoR Validated  (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/validated",
+              "host": [
+                "{{mock}}/api/v1/sor/validated"
+              ]
+            },
+            "description": "Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_validated}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. SoR Preprocessed  (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/preprocessed",
+              "host": [
+                "{{mock}}/api/v1/sor/preprocessed"
+              ]
+            },
+            "description": "Publishes the 'preprocessed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_preprocessed}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. SoR Processed  (fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/processed",
+              "host": [
+                "{{mock}}/api/v1/sor/processed"
+              ]
+            },
+            "description": "Publishes the 'processed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"fail\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_processed}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9. Final Steward Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Final Steward Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10. Get Order Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The external report, served entirely from the manager's CQRS read model - it never queries the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status returned\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order is FAILED\", () => pm.expect(b.order.order_status).to.eql(\"FAILED\"));",
+                  "pm.test(\"line is FAILED\", () => pm.expect(b.lines[0].line_status).to.eql(\"FAILED\"));",
+                  "pm.test(\"4 transitions recorded\", () => pm.expect(b.transitions).to.eql(4));",
+                  "console.log(\"path:\", b.history.map(h => h.to_state).join(\" -> \"));",
+                  "const last = b.history[b.history.length - 1];",
+                  "pm.test(\"failure attributed to sor_processed\", () => pm.expect(last.reason).to.eql(\"sor_processed\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05. Business Rejection (amount = 0)",
+      "description": "An order that fails the graph's own validation never reaches the SoR. The lifecycle stops at REJECTED after two transitions and no sor.dispatch is ever published.",
+      "item": [
+        {
+          "name": "1. Submit Order  (external party -> orders.inbound)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "description": "The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-ZERO-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 0\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to orders.inbound\", () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"topic is orders.inbound\", () => pm.expect(b.topic).to.eql(\"orders.inbound\"));",
+                  "pm.collectionVariables.set(\"order_id\", b.order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Trigger Manager Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Manager Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Trigger Steward Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "The rejection happens inside the STEWARD's graph, so its fulfillment.status event must be relayed before the manager can know about it. Without this step the manager still reports RECEIVED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Steward Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Get Order Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "Rejected before dispatch."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status returned\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order is FAILED\", () => pm.expect(b.order.order_status).to.eql(\"FAILED\"));",
+                  "pm.test(\"line is REJECTED\", () => pm.expect(b.lines[0].line_status).to.eql(\"REJECTED\"));",
+                  "pm.test(\"2 transitions recorded\", () => pm.expect(b.transitions).to.eql(2));",
+                  "console.log(\"path:\", b.history.map(h => h.to_state).join(\" -> \"));",
+                  "pm.test(\"never dispatched to the SoR\", () => pm.expect(b.history.map(h=>h.to_state)).to.not.include(\"DISPATCHED\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06. Intake Validation (REST)",
+      "description": "The REST ingress answers a bad order with 400 through the flow's exception handler. These run with or without DEMO_MODE.",
+      "item": [
+        {
+          "name": "Missing order_id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{manager}}/api/v1/order",
+              "host": [
+                "{{manager}}/api/v1/order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"amount\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected with 400\", () => pm.response.to.have.status(400));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"message names the problem\", () => pm.expect(b.message).to.include(\"Missing order_id\"));",
+                  "pm.test(\"flagged as an error\", () => pm.expect(b.error).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing route",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{manager}}/api/v1/order",
+              "host": [
+                "{{manager}}/api/v1/order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-X\",\n  \"payload\": {\n    \"amount\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected with 400\", () => pm.response.to.have.status(400));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"message names the problem\", () => pm.expect(b.message).to.include(\"Missing route\"));",
+                  "pm.test(\"flagged as an error\", () => pm.expect(b.error).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Missing payload",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{manager}}/api/v1/order",
+              "host": [
+                "{{manager}}/api/v1/order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-X\",\n  \"route\": \"steward-1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected with 400\", () => pm.response.to.have.status(400));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"message names the problem\", () => pm.expect(b.message).to.include(\"Missing payload\"));",
+                  "pm.test(\"flagged as an error\", () => pm.expect(b.error).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Empty body",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order",
+              "host": [
+                "{{manager}}/api/v1/order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected with 400\", () => pm.response.to.have.status(400));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"message names the problem\", () => pm.expect(b.message).to.include(\"Missing order_id\"));",
+                  "pm.test(\"flagged as an error\", () => pm.expect(b.error).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Blank order_id",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{manager}}/api/v1/order",
+              "host": [
+                "{{manager}}/api/v1/order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"   \",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"amount\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected with 400\", () => pm.response.to.have.status(400));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"message names the problem\", () => pm.expect(b.message).to.include(\"Missing order_id\"));",
+                  "pm.test(\"flagged as an error\", () => pm.expect(b.error).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "order_id not starting with O",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{manager}}/api/v1/order",
+              "host": [
+                "{{manager}}/api/v1/order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"X-BAD\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"amount\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected with 400\", () => pm.response.to.have.status(400));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"message names the problem\", () => pm.expect(b.message).to.include(\"must start with 'O'\"));",
+                  "pm.test(\"flagged as an error\", () => pm.expect(b.error).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Lowercase o rejected",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{manager}}/api/v1/order",
+              "host": [
+                "{{manager}}/api/v1/order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"oLOWER\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"amount\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"rejected with 400\", () => pm.response.to.have.status(400));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"message names the problem\", () => pm.expect(b.message).to.include(\"must start with 'O'\"));",
+                  "pm.test(\"flagged as an error\", () => pm.expect(b.error).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Valid order accepted",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{manager}}/api/v1/order",
+              "host": [
+                "{{manager}}/api/v1/order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-REST-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 500\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"accepted (202)\", () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"fulfillment id starts with F\", () => pm.expect(b.fulfillment_id).to.match(/^F/));",
+                  "pm.test(\"id format FUL-<order>-<8 hex>\", () => pm.expect(b.fulfillment_id).to.match(/^FUL-.+-[0-9a-f]{8}$/));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07. Kafka Ingress + Dead Letter",
+      "description": "Over Kafka nobody is waiting for an answer, so a malformed order must DEAD-LETTER rather than be silently dropped. That is why the event flow deliberately has no exception handler.",
+      "item": [
+        {
+          "name": "1. Valid order via Kafka",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-KAFKA-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 500\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published\", () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set(\"order_id\", pm.response.json().order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Confirm it was ingested",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"found in the read model\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"order exists\", () => pm.expect(pm.response.json().found).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Malformed order via Kafka",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "description": "The mock performs no validation - sending a bad order is the point.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"BAD-NO-PREFIX\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"amount\": 1\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"the mock publishes it regardless\", () => pm.response.to.have.status(202));",
+                  "pm.collectionVariables.set(\"bad_order_id\", \"BAD-NO-PREFIX\");"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Confirm it was NOT persisted",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{bad_order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{bad_order_id}}"
+              ]
+            },
+            "description": "It should be sitting in orders.inbound.dlq instead. Verify with: node node/list-topics.mjs"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"responds\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"never reached the database\", () => pm.expect(pm.response.json().found).to.be.false);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08. Idempotency",
+      "description": "Self-contained: runs a full lifecycle of its own, then replays acknowledgements against the settled fulfillment. Each replay finds its Redis record already consumed, so it becomes a no-op - nothing in the read model may change. Needs DEMO_MODE=true.",
+      "item": [
+        {
+          "name": "1. Submit Order  (external party -> orders.inbound)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "description": "The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-HAPPY-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 500\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to orders.inbound\", () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"topic is orders.inbound\", () => pm.expect(b.topic).to.eql(\"orders.inbound\"));",
+                  "pm.collectionVariables.set(\"order_id\", b.order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Trigger Manager Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Manager Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Capture Fulfillment Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"order is in the read model\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order found\", () => pm.expect(b.found).to.be.true);",
+                  "pm.expect(b.lines.length, \"a fulfillment line exists\").to.be.above(0);",
+                  "pm.collectionVariables.set(\"fulfillment_id\", b.lines[0].fulfillment_id);",
+                  "console.log(\"fulfillment_id =\", b.lines[0].fulfillment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Trigger Steward Dispatch Window",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/dispatch",
+              "host": [
+                "{{steward}}/api/v1/admin/dispatch"
+              ]
+            },
+            "description": "Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"dispatch window opened\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Trigger Steward Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Steward Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. SoR Validated  (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/validated",
+              "host": [
+                "{{mock}}/api/v1/sor/validated"
+              ]
+            },
+            "description": "Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_validated}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. SoR Preprocessed  (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/preprocessed",
+              "host": [
+                "{{mock}}/api/v1/sor/preprocessed"
+              ]
+            },
+            "description": "Publishes the 'preprocessed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_preprocessed}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. SoR Processed  (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/processed",
+              "host": [
+                "{{mock}}/api/v1/sor/processed"
+              ]
+            },
+            "description": "Publishes the 'processed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to the SoR topic\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"correct topic\", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn(\"{{topic_processed}}\")));",
+                  "pm.test(\"published flag\", () => pm.expect(b.published).to.be.true);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9. Final Steward Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Final Steward Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10. Note the settled state",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "Records the transition count and status this folder must leave untouched."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"responds\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set(\"baseline_transitions\", b.transitions);",
+                  "pm.collectionVariables.set(\"baseline_status\", b.order.order_status);",
+                  "pm.collectionVariables.set(\"fulfillment_id\", b.lines[0].fulfillment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "11. Replay the 'processed' ack",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/processed",
+              "host": [
+                "{{mock}}/api/v1/sor/processed"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published again\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "12. Replay a stale 'validated' ack",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/validated",
+              "host": [
+                "{{mock}}/api/v1/sor/validated"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published again\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "13. Confirm nothing changed",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"responds\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"transition count unchanged\", () => pm.expect(b.transitions).to.eql(Number(pm.collectionVariables.get(\"baseline_transitions\"))));",
+                  "pm.test(\"order status unchanged\", () => pm.expect(b.order.order_status).to.eql(pm.collectionVariables.get(\"baseline_status\")));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "09. Operations",
+      "description": "The individual admin endpoints, for poking at a running system.",
+      "item": [
+        {
+          "name": "Manager outbox relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"relayed\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Steward outbox relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"relayed\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Steward dispatch window",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/dispatch",
+              "host": [
+                "{{steward}}/api/v1/admin/dispatch"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"ticked\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Order status by id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "Uses {{order_id}}, set by any folder that submits an order. With the default it simply reports found:false."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"responds\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"answers found true or false\", () => pm.expect(b).to.have.property(\"found\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10. Out-of-Order Milestones",
+      "description": "All three pass but arrive in the wrong order. The milestones are an unordered SET accumulated in the database, so the fulfillment waits at DISPATCHED until the set is complete and then settles - the order of arrival is irrelevant.",
+      "item": [
+        {
+          "name": "1. Submit Order  (external party -> orders.inbound)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "description": "The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-HAPPY-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 500\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to orders.inbound\", () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"topic is orders.inbound\", () => pm.expect(b.topic).to.eql(\"orders.inbound\"));",
+                  "pm.collectionVariables.set(\"order_id\", b.order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Trigger Manager Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Manager Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Capture Fulfillment Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"order is in the read model\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order found\", () => pm.expect(b.found).to.be.true);",
+                  "pm.expect(b.lines.length, \"a fulfillment line exists\").to.be.above(0);",
+                  "pm.collectionVariables.set(\"fulfillment_id\", b.lines[0].fulfillment_id);",
+                  "console.log(\"fulfillment_id =\", b.lines[0].fulfillment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Trigger Steward Dispatch Window",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/dispatch",
+              "host": [
+                "{{steward}}/api/v1/admin/dispatch"
+              ]
+            },
+            "description": "Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"dispatch window opened\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Trigger Steward Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Steward Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. SoR processed (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/processed",
+              "host": [
+                "{{mock}}/api/v1/sor/processed"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Publishes the 'processed' milestone with outcome pass."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"went to the processed topic\", () => pm.expect(pm.response.json().milestone).to.eql(\"processed\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. SoR validated (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/validated",
+              "host": [
+                "{{mock}}/api/v1/sor/validated"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Publishes the 'validated' milestone with outcome pass."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"went to the validated topic\", () => pm.expect(pm.response.json().milestone).to.eql(\"validated\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. SoR preprocessed (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/preprocessed",
+              "host": [
+                "{{mock}}/api/v1/sor/preprocessed"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Publishes the 'preprocessed' milestone with outcome pass."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"went to the preprocessed topic\", () => pm.expect(pm.response.json().milestone).to.eql(\"preprocessed\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9. Final Steward Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Final Steward Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10. Get Order Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "Arrival order must change neither the state nor the reason."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status returned\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order is COMPLETED\", () => pm.expect(b.order.order_status).to.eql(\"COMPLETED\"));",
+                  "pm.test(\"line is SETTLED\", () => pm.expect(b.lines[0].line_status).to.eql(\"SETTLED\"));",
+                  "pm.test(\"4-transition spine\", () => pm.expect(b.transitions).to.eql(4));",
+                  "console.log(\"path:\", b.history.map(h => h.to_state).join(\" -> \"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11. Out-of-Order Failure",
+      "description": "The FAILING milestone arrives first. Under the old sequential model the failure was attributed to whichever checkpoint the workflow happened to be waiting at; the reason now names the milestone that actually failed.",
+      "item": [
+        {
+          "name": "1. Submit Order  (external party -> orders.inbound)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/mock/order",
+              "host": [
+                "{{mock}}/api/v1/mock/order"
+              ]
+            },
+            "description": "The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"order_id\": \"O-HAPPY-{{$timestamp}}\",\n  \"external_party\": \"acme\",\n  \"route\": \"steward-1\",\n  \"payload\": {\n    \"item\": \"widget\",\n    \"qty\": 2,\n    \"amount\": 500\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published to orders.inbound\", () => pm.response.to.have.status(202));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"topic is orders.inbound\", () => pm.expect(b.topic).to.eql(\"orders.inbound\"));",
+                  "pm.collectionVariables.set(\"order_id\", b.order_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "2. Trigger Manager Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/admin/relay",
+              "host": [
+                "{{manager}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Manager Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3. Capture Fulfillment Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"order is in the read model\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order found\", () => pm.expect(b.found).to.be.true);",
+                  "pm.expect(b.lines.length, \"a fulfillment line exists\").to.be.above(0);",
+                  "pm.collectionVariables.set(\"fulfillment_id\", b.lines[0].fulfillment_id);",
+                  "console.log(\"fulfillment_id =\", b.lines[0].fulfillment_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4. Trigger Steward Dispatch Window",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/dispatch",
+              "host": [
+                "{{steward}}/api/v1/admin/dispatch"
+              ]
+            },
+            "description": "Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"dispatch window opened\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5. Trigger Steward Outbox Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Trigger Steward Outbox Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "6. SoR preprocessed (fail)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/preprocessed",
+              "host": [
+                "{{mock}}/api/v1/sor/preprocessed"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"fail\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Publishes the 'preprocessed' milestone with outcome fail."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"went to the preprocessed topic\", () => pm.expect(pm.response.json().milestone).to.eql(\"preprocessed\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "7. SoR validated (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/validated",
+              "host": [
+                "{{mock}}/api/v1/sor/validated"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Publishes the 'validated' milestone with outcome pass."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"went to the validated topic\", () => pm.expect(pm.response.json().milestone).to.eql(\"validated\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "8. SoR processed (pass)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{mock}}/api/v1/sor/processed",
+              "host": [
+                "{{mock}}/api/v1/sor/processed"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fulfillment_id\": \"{{fulfillment_id}}\",\n  \"outcome\": \"pass\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "description": "Publishes the 'processed' milestone with outcome pass."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"published\", () => pm.response.to.have.status(200));",
+                  "pm.test(\"went to the processed topic\", () => pm.expect(pm.response.json().milestone).to.eql(\"processed\"));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "9. Final Steward Relay",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{steward}}/api/v1/admin/relay",
+              "host": [
+                "{{steward}}/api/v1/admin/relay"
+              ]
+            },
+            "description": "Drains the steward outbox: sor.dispatch and every fulfillment.status event."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Final Steward Relay\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "console.log(\"relayed/ticked:\", JSON.stringify(b));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "10. Get Order Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{manager}}/api/v1/order/{{order_id}}",
+              "host": [
+                "{{manager}}/api/v1/order/{{order_id}}"
+              ]
+            },
+            "description": "Arrival order must change neither the state nor the reason."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"status returned\", () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test(\"order is FAILED\", () => pm.expect(b.order.order_status).to.eql(\"FAILED\"));",
+                  "pm.test(\"line is FAILED\", () => pm.expect(b.lines[0].line_status).to.eql(\"FAILED\"));",
+                  "pm.test(\"4-transition spine\", () => pm.expect(b.transitions).to.eql(4));",
+                  "console.log(\"path:\", b.history.map(h => h.to_state).join(\" -> \"));",
+                  "const last = b.history[b.history.length - 1];",
+                  "pm.test(\"reason names the failing milestone (sor_preprocessed)\", () => pm.expect(last.reason).to.eql(\"sor_preprocessed\"));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "manager",
+      "value": "http://127.0.0.1:8081"
+    },
+    {
+      "key": "steward",
+      "value": "http://127.0.0.1:8082"
+    },
+    {
+      "key": "mock",
+      "value": "http://127.0.0.1:8084"
+    },
+    {
+      "key": "order_id",
+      "value": "O-UNKNOWN"
+    },
+    {
+      "key": "bad_order_id",
+      "value": "BAD-UNKNOWN"
+    },
+    {
+      "key": "fulfillment_id",
+      "value": ""
+    },
+    {
+      "key": "baseline_transitions",
+      "value": ""
+    },
+    {
+      "key": "baseline_status",
+      "value": ""
+    },
+    {
+      "key": "topic_validated",
+      "value": "sor.validation"
+    },
+    {
+      "key": "topic_preprocessed",
+      "value": "sor.preprocess"
+    },
+    {
+      "key": "topic_processed",
+      "value": "sor.process"
+    }
+  ]
+}

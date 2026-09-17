@@ -1,0 +1,17 @@
+flow:
+  id: 'ack-process-flow'
+  description: 'Translate a sor.process outcome into a processed milestone on fulfillment.ack'
+  ttl: 15s
+
+first.task: 'v1.ack.ingest'
+
+tasks:
+  - name: 'v1.ack.ingest'
+    input:
+      - 'input.body -> *'
+      - 'text(processed) -> header.milestone'
+    process: 'v1.ack.ingest'
+    description: 'Publish fulfillment.ack with milestone=processed'
+    output:
+      - 'result -> output.body'
+    execution: end

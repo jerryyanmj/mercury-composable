@@ -1,0 +1,44 @@
+#
+# Demo endpoint for the SoR mock.
+#
+# With DEMO_MODE=true the mock stops acknowledging automatically, and each milestone is published
+# on request instead - which is what makes the steward's four suspend/resume checkpoints visible
+# one at a time.
+#
+rest:
+  # The external ordering party: publishes onto orders.inbound, the system's real ingress.
+  - service: "http.flow.adapter"
+    methods: ['POST']
+    url: "/api/v1/mock/order"
+    flow: 'mock-order'
+    timeout: 15s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  - service: "http.flow.adapter"
+    methods: ['POST']
+    url: "/api/v1/sor/{milestone}"
+    flow: 'sor-emit'
+    timeout: 15s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+cors:
+  - id: cors_1
+    options:
+      - "Access-Control-Allow-Origin: *"
+      - "Access-Control-Allow-Methods: GET, DELETE, PUT, POST, PATCH, OPTIONS"
+      - "Access-Control-Allow-Headers: Origin, Authorization, X-Session-Id, X-Correlation-Id, Accept, Content-Type, X-Requested-With"
+      - "Access-Control-Max-Age: 86400"
+    headers:
+      - "Access-Control-Allow-Origin: *"
+      - "Access-Control-Allow-Methods: GET, DELETE, PUT, POST, PATCH, OPTIONS"
+      - "Access-Control-Allow-Credentials: true"
+
+headers:
+  - id: header_1
+    response:
+      add:
+        - "Cache-Control: no-cache, no-store"

@@ -1,0 +1,177 @@
+{
+  "nodes": [
+    {
+      "alias": "root",
+      "types": ["Root"],
+      "properties": {
+        "name": "plan-funds",
+        "purpose": "Given a plan_id, fetch plan config and fund balances from two independent systems in parallel, then merge: mark the fund matching the plan's default_investment_fund_id as default=true."
+      }
+    },
+    {
+      "alias": "validate",
+      "types": ["Decision"],
+      "properties": {
+        "skill": "graph.math",
+        "statement": [
+          "MAPPING: text(={input.body.plan_id}) -> model.plan_id_probe",
+          "IF: {model.plan_id_probe} == '=null'\nTHEN: reject\nELSE: stage"
+        ],
+        "purpose": "Guard: plan_id is required"
+      }
+    },
+    {
+      "alias": "stage",
+      "types": ["Mapper"],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "input.body.plan_id -> model.plan_id"
+        ],
+        "purpose": "Copy plan_id into the model, then fan out to the two parallel fetches"
+      }
+    },
+    {
+      "alias": "fetch-plan",
+      "types": ["Task"],
+      "properties": {
+        "skill": "graph.task",
+        "task": "mock.plan.service",
+        "input": [
+          "model.plan_id -> plan_id"
+        ],
+        "output": [
+          "result.plan_name -> model.plan_name",
+          "result.default_investment_fund_id -> model.default_fund_id"
+        ],
+        "purpose": "Fetch plan configuration from the Plan System mock"
+      }
+    },
+    {
+      "alias": "fetch-funds",
+      "types": ["Task"],
+      "properties": {
+        "skill": "graph.task",
+        "task": "mock.plan.investment.service",
+        "input": [
+          "model.plan_id -> plan_id"
+        ],
+        "output": [
+          "result.funds -> model.funds"
+        ],
+        "purpose": "Fetch fund balances from the Plan Investment System mock"
+      }
+    },
+    {
+      "alias": "join",
+      "types": ["Task"],
+      "properties": {
+        "skill": "graph.join",
+        "purpose": "Barrier: wait for both fetch-plan and fetch-funds to complete before merging"
+      }
+    },
+    {
+      "alias": "merge",
+      "types": ["Task"],
+      "properties": {
+        "skill": "graph.task",
+        "task": "fund.merger",
+        "input": [
+          "model.default_fund_id -> default_fund_id",
+          "model.funds -> funds"
+        ],
+        "output": [
+          "result.funds -> model.merged_funds"
+        ],
+        "purpose": "Enrich each fund with default=true when its fund_id matches the plan's default_investment_fund_id"
+      }
+    },
+    {
+      "alias": "shape",
+      "types": ["Mapper"],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "model.plan_id -> output.body.plan_id",
+          "model.plan_name -> output.body.plan_name",
+          "model.merged_funds -> output.body.funds"
+        ],
+        "purpose": "Shape the final HTTP response"
+      }
+    },
+    {
+      "alias": "reject",
+      "types": ["Mapper"],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "int(400) -> output.status",
+          "text(plan_id is required) -> output.body.error"
+        ],
+        "purpose": "Return 400 when plan_id is absent"
+      }
+    },
+    {
+      "alias": "end",
+      "types": ["End"],
+      "properties": {}
+    }
+  ],
+  "connections": [
+    {
+      "source": "root",
+      "target": "validate",
+      "relations": [{"type": "then", "properties": {}}]
+    },
+    {
+      "source": "validate",
+      "target": "stage",
+      "relations": [{"type": "ok", "properties": {}}]
+    },
+    {
+      "source": "validate",
+      "target": "reject",
+      "relations": [{"type": "invalid", "properties": {}}]
+    },
+    {
+      "source": "stage",
+      "target": "fetch-plan",
+      "relations": [{"type": "then", "properties": {}}]
+    },
+    {
+      "source": "stage",
+      "target": "fetch-funds",
+      "relations": [{"type": "then", "properties": {}}]
+    },
+    {
+      "source": "fetch-plan",
+      "target": "join",
+      "relations": [{"type": "then", "properties": {}}]
+    },
+    {
+      "source": "fetch-funds",
+      "target": "join",
+      "relations": [{"type": "then", "properties": {}}]
+    },
+    {
+      "source": "join",
+      "target": "merge",
+      "relations": [{"type": "then", "properties": {}}]
+    },
+    {
+      "source": "merge",
+      "target": "shape",
+      "relations": [{"type": "then", "properties": {}}]
+    },
+    {
+      "source": "shape",
+      "target": "end",
+      "relations": [{"type": "then", "properties": {}}]
+    },
+    {
+      "source": "reject",
+      "target": "end",
+      "relations": [{"type": "then", "properties": {}}]
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+#
+# Order intake over Kafka - the real ingress: an external party publishes to orders.inbound.
+#
+# The tasks are identical to order-intake (the REST path); what differs is FAILURE HANDLING, and
+# that is why this is a separate flow rather than a second binding on the same one.
+#
+#   REST  - a caller is waiting, so the flow's exception handler turns a bad order into a 400.
+#   KAFKA - nobody is waiting. If a handler answered here the flow would COMPLETE successfully,
+#           the adapter would commit the offset, and a malformed order would be silently dropped.
+#           With no handler the failure propagates, the record is retried, and it finally lands in
+#           orders.inbound.dlq where it can be seen and replayed.
+#
+# Deliberately no `exception:` key. That absence is the feature.
+#
+flow:
+  id: 'order-intake-event'
+  description: 'Accept an order from the orders.inbound topic, persist it and enqueue the fulfillment request'
+  ttl: 30s
+
+first.task: 'v1.order.validate'
+
+tasks:
+  - name: 'v1.order.validate'
+    input:
+      - 'input.body -> *'
+    process: 'v1.order.validate'
+    description: 'Reject an incomplete or non-conforming order before anything else happens'
+    output:
+      - 'result -> model.order'
+    execution: sequential
+    next:
+      - 'mint-identity'
+
+  - name: 'mint-identity'
+    input:
+      - 'model.order -> *'
+    process: 'no.op'
+    description: 'Generate the unique part of the fulfillment id'
+    output:
+      - 'f:uuid() -> model.uuid'
+      - 'f:substring(model.uuid, int(0), int(8)) -> model.suffix'
+    execution: sequential
+    next:
+      - 'stage-order'
+
+  - name: 'stage-order'
+    input:
+      - 'model.order.order_id -> order_id'
+      - 'model.order.external_party -> external_party'
+      - 'model.order.route -> route'
+      - 'model.order.payload -> payload'
+      - 'f:concat(text(FUL-), model.order.order_id, text(-), model.suffix) -> fulfillment_id'
+    process: 'v1.order.persist'
+    description: 'Persist the order, its routing line and the outbox event in ONE transaction'
+    output:
+      - 'result -> output.body'
+    execution: end

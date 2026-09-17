@@ -1,0 +1,17 @@
+flow:
+  id: 'ack-preprocess-flow'
+  description: 'Translate a sor.preprocess outcome into a preprocessed milestone on fulfillment.ack'
+  ttl: 15s
+
+first.task: 'v1.ack.ingest'
+
+tasks:
+  - name: 'v1.ack.ingest'
+    input:
+      - 'input.body -> *'
+      - 'text(preprocessed) -> header.milestone'
+    process: 'v1.ack.ingest'
+    description: 'Publish fulfillment.ack with milestone=preprocessed'
+    output:
+      - 'result -> output.body'
+    execution: end

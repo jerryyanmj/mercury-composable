@@ -1,0 +1,6 @@
+flows:
+  - 'mock-order.yml'
+  - 'sor-emit.yml'
+  - 'sor-dispatch-flow.yml'
+
+location: 'classpath:/flows/'

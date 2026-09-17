@@ -1,0 +1,47 @@
+#
+# REST endpoints for the Order Steward
+# The /api/graph/{graph_id} endpoint is provided by the minigraph-playground-engine.
+#
+rest:
+  # ---- demo / operations endpoints ----
+  - service: "http.flow.adapter"
+    methods: ['POST']
+    url: "/api/v1/admin/dispatch"
+    flow: 'admin-dispatch'
+    timeout: 20s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  - service: "http.flow.adapter"
+    methods: ['POST']
+    url: "/api/v1/admin/relay"
+    flow: 'admin-relay'
+    timeout: 20s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+cors:
+  - id: cors_1
+    options:
+      - "Access-Control-Allow-Origin: *"
+      - "Access-Control-Allow-Methods: GET, DELETE, PUT, POST, PATCH, OPTIONS"
+      - "Access-Control-Allow-Headers: Origin, Authorization, X-Session-Id, X-Correlation-Id, Accept, Content-Type, X-Requested-With"
+      - "Access-Control-Max-Age: 86400"
+    headers:
+      - "Access-Control-Allow-Origin: *"
+      - "Access-Control-Allow-Methods: GET, DELETE, PUT, POST, PATCH, OPTIONS"
+      - "Access-Control-Allow-Headers: Origin, Authorization, X-Session-Id, X-Correlation-Id, Accept, Content-Type, X-Requested-With"
+      - "Access-Control-Allow-Credentials: true"
+
+headers:
+  - id: header_1
+    request:
+      drop: ['Upgrade-Insecure-Requests', 'cache-control', 'accept-encoding', 'connection']
+    response:
+      add:
+        - "Strict-Transport-Security: max-age=31536000"
+        - "Cache-Control: no-cache, no-store"
+        - "Pragma: no-cache"
+        - "Expires: Thu, 01 Jan 1970 00:00:00 GMT"

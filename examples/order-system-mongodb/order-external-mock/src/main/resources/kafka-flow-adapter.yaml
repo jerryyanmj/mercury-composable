@@ -1,0 +1,6 @@
+consumer:
+  - topic: 'sor.dispatch'
+    flow: 'sor-dispatch-flow'
+    group: 'order-external-sor-group'
+    dlq-topic: 'sor.dispatch.dlq'
+    serializer: 'json'

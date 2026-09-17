@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>3.4.2</version>
+        <relativePath/>
+    </parent>
+
+    <groupId>com.accenture</groupId>
+    <artifactId>order-common</artifactId>
+    <version>1.0.0</version>
+    <name>Order Common</name>
+    <description>Shared helpers: database access and event publishing over the platform event bus</description>
+
+    <properties>
+        <java.version>21</java.version>
+        <mercury.version>4.11.9</mercury.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>io.projectreactor</groupId>
+                <artifactId>reactor-bom</artifactId>
+                <version>2025.0.6</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.platformlambda</groupId>
+            <artifactId>platform-core</artifactId>
+            <version>${mercury.version}</version>
+        </dependency>
+        <!-- reactive-postgres supplies the statement models the Db helper compiles against, and
+             transitively the r2dbc driver with its logging exclusions - never redeclare the
+             starter here.
+
+             OPTIONAL on purpose. It is not merely a jar: it autoconfigures postgres.service,
+             postgres.health and a repository scan, all of which fail at startup without database
+             configuration. Leaking it transitively into the two stateless apps (which use only
+             the Events helper) stopped them booting. The two database-owning apps declare it
+             themselves, so they still get it. -->
+        <dependency>
+            <groupId>org.platformlambda</groupId>
+            <artifactId>reactive-postgres</artifactId>
+            <version>${mercury.version}</version>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+            </plugin>
+        </plugins>
+    </build>
+</project>

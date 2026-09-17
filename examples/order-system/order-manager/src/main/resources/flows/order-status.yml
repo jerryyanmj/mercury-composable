@@ -1,0 +1,22 @@
+#
+# The external report for one order: the aggregate, its lines, and every recorded transition.
+# Served entirely from the manager's read model.
+#
+flow:
+  id: 'order-status'
+  description: 'Report an order, its fulfillment lines and their history'
+  ttl: 15s
+  exception: 'v1.order.exception'
+
+first.task: 'v1.order.status'
+
+tasks:
+  - name: 'v1.order.status'
+    input:
+      - 'input.path_parameter.order_id -> order_id'
+    process: 'v1.order.status'
+    description: 'Read the order, its lines and their history from the read model'
+    output:
+      - 'text(application/json) -> output.header.content-type'
+      - 'result -> output.body'
+    execution: end

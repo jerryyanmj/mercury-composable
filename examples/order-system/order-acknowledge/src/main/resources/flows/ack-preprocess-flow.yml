@@ -1,0 +1,26 @@
+#
+# sor.preprocess -> fulfillment.ack
+#
+# The milestone is NOT in the SoR's payload - it is implied by the topic. This flow is bound to
+# sor.preprocess alone, so stamping text(preprocessed) here is what "derive the milestone from
+# the source topic" means in practice. The three ack flows are identical but for that constant.
+#
+flow:
+  id: 'ack-preprocess-flow'
+  description: 'Normalize a sor.preprocess record into the internal fulfillment.ack contract'
+  ttl: 10s
+
+first.task: 'v1.ack.ingest'
+
+tasks:
+  - input:
+      - 'input.body.sor_reference -> sor_reference'
+      - 'input.body.fulfillment_id -> fulfillment_id'
+      - 'input.body.outcome -> outcome'
+      - 'input.body.reason -> reason'
+      - 'text(preprocessed) -> milestone'
+    process: 'v1.ack.ingest'
+    output:
+      - 'result -> output.body'
+    description: 'Stamp the milestone implied by the source topic and forward to fulfillment.ack'
+    execution: end

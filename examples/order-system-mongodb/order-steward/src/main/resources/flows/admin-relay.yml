@@ -1,0 +1,16 @@
+flow:
+  id: 'admin-relay-steward-flow'
+  description: 'Admin: manually trigger the steward outbox relay'
+  ttl: 60s
+
+first.task: 'v1.steward.outbox.relay'
+
+tasks:
+  - name: 'v1.steward.outbox.relay'
+    input:
+      - 'text(manual) -> trigger'
+    process: 'v1.steward.outbox.relay'
+    description: 'Flush unsent steward outbox entries to Kafka'
+    output:
+      - 'result -> output.body'
+    execution: end

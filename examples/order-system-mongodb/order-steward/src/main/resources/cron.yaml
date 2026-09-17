@@ -1,0 +1,13 @@
+jobs:
+  - name: "steward-outbox-relay"
+    description: "Relay unsent steward outbox entries to Kafka"
+    cron: "0/15 0/1 * 1/1 * ? *"
+    service: "v1.steward.outbox.relay"
+    resolver: "v1.job.state.resolver"
+  - name: "steward-scheduled-dispatch"
+    description: "Dispatch SCHEDULED fulfillments to the SoR"
+    cron: "0/30 0/1 * 1/1 * ? *"
+    service: "v1.scheduled.dispatch"
+    resolver: "v1.job.state.resolver"
+deferred.start: true
+leader.election: false

@@ -1,0 +1,309 @@
+{
+  "nodes": [
+    {
+      "alias": "root",
+      "types": [
+        "Root"
+      ],
+      "properties": {
+        "name": "mortgage-calc",
+        "purpose": "Advanced mortgage amortization - computed in graph.math; helpers only reshape extras and add dates"
+      }
+    },
+    {
+      "alias": "validate",
+      "types": [
+        "Decision"
+      ],
+      "properties": {
+        "skill": "graph.math",
+        "statement": [
+          "MAPPING: text(={input.body.loan_amount}) -> model.p_loan",
+          "MAPPING: text(={input.body.annual_rate}) -> model.p_rate",
+          "MAPPING: text(={input.body.term_years}) -> model.p_term",
+          "MAPPING: text(={input.body.start_date}) -> model.p_date",
+          "IF: {model.p_loan} == '=null' || {model.p_rate} == '=null' || {model.p_term} == '=null' || {model.p_date} == '=null'\nTHEN: reject\nELSE: expand"
+        ]
+      }
+    },
+    {
+      "alias": "expand",
+      "types": [
+        "Task"
+      ],
+      "properties": {
+        "skill": "graph.task",
+        "task": "v1.mortgage.expand-extras",
+        "input": [
+          "input.body -> *"
+        ],
+        "output": [
+          "result.extras -> model.extras",
+          "result.tax -> model.tax",
+          "result.insurance -> model.insurance"
+        ]
+      }
+    },
+    {
+      "alias": "params",
+      "types": [
+        "Compute"
+      ],
+      "properties": {
+        "skill": "graph.math",
+        "statement": [
+          "COMPUTE: i -> {input.body.annual_rate} / 1200",
+          "COMPUTE: n -> {input.body.term_years} * 12",
+          "COMPUTE: pmt -> round({input.body.loan_amount} * {params.result.i} / (1 - (1 + {params.result.i}) ** (0 - {params.result.n})) * 100) / 100",
+          "COMPUTE: escrow -> round(({model.tax} + {model.insurance}) / 12 * 100) / 100",
+          "COMPUTE: piti -> round(({params.result.pmt} + {params.result.escrow}) * 100) / 100",
+          "MAPPING: params.result.i -> model.i",
+          "MAPPING: params.result.n -> model.n",
+          "MAPPING: params.result.pmt -> model.pmt",
+          "MAPPING: params.result.escrow -> model.escrow",
+          "MAPPING: params.result.piti -> model.piti",
+          "MAPPING: input.body.loan_amount -> model.balance",
+          "MAPPING: input.body.loan_amount -> model.bal_base",
+          "MAPPING: int(0) -> model.month",
+          "MAPPING: int(0) -> model.ti",
+          "MAPPING: int(0) -> model.ti_base",
+          "MAPPING: int(0) -> model.payoff_month"
+        ]
+      }
+    },
+    {
+      "alias": "amortize",
+      "types": [
+        "Compute"
+      ],
+      "properties": {
+        "skill": "graph.math",
+        "for_each": [
+          "model.extras -> model.extra"
+        ],
+        "statement": [
+          "COMPUTE: m -> {model.month} + 1",
+          "MAPPING: amortize.result.m -> model.month",
+          "COMPUTE: is_last -> {model.month} >= {model.n}",
+          "COMPUTE: active -> {model.balance} > 0.005",
+          "COMPUTE: int_raw -> round({model.balance} * {model.i} * 100) / 100",
+          "COMPUTE: interest -> {amortize.result.active} ? {amortize.result.int_raw} : 0",
+          "COMPUTE: princ_raw -> round(({model.pmt} - {amortize.result.interest} + {model.extra}) * 100) / 100",
+          "COMPUTE: overpay -> {amortize.result.princ_raw} >= {model.balance}",
+          "COMPUTE: close -> {amortize.result.overpay} || {amortize.result.is_last}",
+          "COMPUTE: princ_ov -> {amortize.result.close} ? {model.balance} : {amortize.result.princ_raw}",
+          "COMPUTE: princ -> {amortize.result.active} ? {amortize.result.princ_ov} : 0",
+          "COMPUTE: newbal -> round(({model.balance} - {amortize.result.princ}) * 100) / 100",
+          "MAPPING: amortize.result.newbal -> model.balance",
+          "COMPUTE: payment -> round(({amortize.result.interest} + {amortize.result.princ}) * 100) / 100",
+          "COMPUTE: ti2 -> round(({model.ti} + {amortize.result.interest}) * 100) / 100",
+          "MAPPING: amortize.result.ti2 -> model.ti",
+          "COMPUTE: paidnow -> {amortize.result.active} && {model.balance} <= 0.005",
+          "COMPUTE: payoff2 -> {amortize.result.paidnow} ? {model.month} : {model.payoff_month}",
+          "MAPPING: amortize.result.payoff2 -> model.payoff_month",
+          "COMPUTE: active_b -> {model.bal_base} > 0.005",
+          "COMPUTE: int_b_raw -> round({model.bal_base} * {model.i} * 100) / 100",
+          "COMPUTE: int_b -> {amortize.result.active_b} ? {amortize.result.int_b_raw} : 0",
+          "COMPUTE: princ_b_raw -> round(({model.pmt} - {amortize.result.int_b}) * 100) / 100",
+          "COMPUTE: overpay_b -> {amortize.result.princ_b_raw} >= {model.bal_base}",
+          "COMPUTE: close_b -> {amortize.result.overpay_b} || {amortize.result.is_last}",
+          "COMPUTE: princ_b_ov -> {amortize.result.close_b} ? {model.bal_base} : {amortize.result.princ_b_raw}",
+          "COMPUTE: princ_b -> {amortize.result.active_b} ? {amortize.result.princ_b_ov} : 0",
+          "COMPUTE: newbal_b -> round(({model.bal_base} - {amortize.result.princ_b}) * 100) / 100",
+          "MAPPING: amortize.result.newbal_b -> model.bal_base",
+          "COMPUTE: ti_base2 -> round(({model.ti_base} + {amortize.result.int_b}) * 100) / 100",
+          "MAPPING: amortize.result.ti_base2 -> model.ti_base",
+          "MAPPING: model.month -> model.months[]",
+          "MAPPING: amortize.result.payment -> model.payments[]",
+          "MAPPING: amortize.result.princ -> model.principals[]",
+          "MAPPING: amortize.result.interest -> model.interests[]",
+          "MAPPING: model.extra -> model.extras_out[]",
+          "MAPPING: model.balance -> model.balances[]"
+        ]
+      }
+    },
+    {
+      "alias": "savings",
+      "types": [
+        "Compute"
+      ],
+      "properties": {
+        "skill": "graph.math",
+        "statement": [
+          "COMPUTE: saved -> round(({model.ti_base} - {model.ti}) * 100) / 100",
+          "COMPUTE: msaved -> {model.n} - {model.payoff_month}",
+          "MAPPING: savings.result.saved -> model.interest_saved",
+          "MAPPING: savings.result.msaved -> model.months_saved"
+        ]
+      }
+    },
+    {
+      "alias": "format",
+      "types": [
+        "Task"
+      ],
+      "properties": {
+        "skill": "graph.task",
+        "task": "v1.mortgage.format-schedule",
+        "input": [
+          "model.months -> months",
+          "model.payments -> payments",
+          "model.principals -> principals",
+          "model.interests -> interests",
+          "model.extras_out -> extras",
+          "model.balances -> balances",
+          "input.body.start_date -> start_date",
+          "model.payoff_month -> payoff_month"
+        ],
+        "output": [
+          "result.schedule -> output.body.schedule",
+          "result.payoff_date -> model.payoff_date"
+        ]
+      }
+    },
+    {
+      "alias": "shape",
+      "types": [
+        "Mapper"
+      ],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "model.pmt -> output.body.summary.monthly_principal_interest",
+          "model.escrow -> output.body.summary.monthly_escrow",
+          "model.piti -> output.body.summary.monthly_total_piti",
+          "model.ti -> output.body.summary.total_interest",
+          "model.ti_base -> output.body.summary.total_interest_baseline",
+          "model.interest_saved -> output.body.summary.interest_saved",
+          "model.n -> output.body.summary.scheduled_term_months",
+          "model.payoff_month -> output.body.summary.payoff_month",
+          "model.months_saved -> output.body.summary.months_saved",
+          "input.body.start_date -> output.body.summary.first_payment_date",
+          "model.payoff_date -> output.body.summary.payoff_date"
+        ]
+      }
+    },
+    {
+      "alias": "reject",
+      "types": [
+        "Mapper"
+      ],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "int(400) -> output.status",
+          "text(loan_amount, annual_rate, term_years, and start_date are required) -> output.body.error"
+        ]
+      }
+    },
+    {
+      "alias": "end",
+      "types": [
+        "End"
+      ],
+      "properties": {}
+    }
+  ],
+  "connections": [
+    {
+      "source": "root",
+      "target": "validate",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "validate",
+      "target": "expand",
+      "relations": [
+        {
+          "type": "ok",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "validate",
+      "target": "reject",
+      "relations": [
+        {
+          "type": "invalid",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "expand",
+      "target": "params",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "params",
+      "target": "amortize",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "amortize",
+      "target": "savings",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "savings",
+      "target": "format",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "format",
+      "target": "shape",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "shape",
+      "target": "end",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "reject",
+      "target": "end",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    }
+  ]
+}

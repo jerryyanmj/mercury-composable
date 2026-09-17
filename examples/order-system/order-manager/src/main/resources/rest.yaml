@@ -1,0 +1,55 @@
+#
+# REST endpoints for the Order Manager
+#
+rest:
+  - service: "http.flow.adapter"
+    methods: ['POST']
+    url: "/api/v1/order"
+    flow: 'order-intake'
+    timeout: 15s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  # ---- demo / operations endpoints ----
+  - service: "http.flow.adapter"
+    methods: ['GET']
+    url: "/api/v1/order/{order_id}"
+    flow: 'order-status'
+    timeout: 15s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  - service: "http.flow.adapter"
+    methods: ['POST']
+    url: "/api/v1/admin/relay"
+    flow: 'admin-relay'
+    timeout: 20s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+cors:
+  - id: cors_1
+    options:
+      - "Access-Control-Allow-Origin: *"
+      - "Access-Control-Allow-Methods: GET, DELETE, PUT, POST, PATCH, OPTIONS"
+      - "Access-Control-Allow-Headers: Origin, Authorization, X-Session-Id, X-Correlation-Id, Accept, Content-Type, X-Requested-With"
+      - "Access-Control-Max-Age: 86400"
+    headers:
+      - "Access-Control-Allow-Origin: *"
+      - "Access-Control-Allow-Methods: GET, DELETE, PUT, POST, PATCH, OPTIONS"
+      - "Access-Control-Allow-Headers: Origin, Authorization, X-Session-Id, X-Correlation-Id, Accept, Content-Type, X-Requested-With"
+      - "Access-Control-Allow-Credentials: true"
+
+headers:
+  - id: header_1
+    request:
+      drop: ['Upgrade-Insecure-Requests', 'cache-control', 'accept-encoding', 'connection']
+    response:
+      add:
+        - "Strict-Transport-Security: max-age=31536000"
+        - "Cache-Control: no-cache, no-store"
+        - "Pragma: no-cache"
+        - "Expires: Thu, 01 Jan 1970 00:00:00 GMT"

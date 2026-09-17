@@ -55,6 +55,9 @@
         <module>examples/kafka-demo</module>
         <module>examples/sync-over-async-demo</module>
         <module>examples/twin-kafka-demo</module>
+        <module>examples/order-system</module>
+        <module>examples/order-system-mongodb</module>
+        <module>examples/plan-fund-merge</module>
 
         <!-- Executable for benchmark tests
         <module>benchmark/benchmark-reporter</module>-->

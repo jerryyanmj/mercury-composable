@@ -1,0 +1,17 @@
+flow:
+  id: 'ack-validation-flow'
+  description: 'Translate a sor.validation outcome into a validated milestone on fulfillment.ack'
+  ttl: 15s
+
+first.task: 'v1.ack.ingest'
+
+tasks:
+  - name: 'v1.ack.ingest'
+    input:
+      - 'input.body -> *'
+      - 'text(validated) -> header.milestone'
+    process: 'v1.ack.ingest'
+    description: 'Publish fulfillment.ack with milestone=validated'
+    output:
+      - 'result -> output.body'
+    execution: end

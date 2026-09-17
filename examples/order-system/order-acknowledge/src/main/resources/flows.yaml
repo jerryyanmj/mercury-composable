@@ -1,0 +1,6 @@
+flows:
+  - 'ack-validation-flow.yml'
+  - 'ack-preprocess-flow.yml'
+  - 'ack-process-flow.yml'
+
+location: 'classpath:/flows/'

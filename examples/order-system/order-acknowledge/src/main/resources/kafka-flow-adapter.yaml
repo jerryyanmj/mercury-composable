@@ -1,0 +1,30 @@
+#
+# Kafka Flow Adapter - Order Acknowledge
+#
+# The System of Record publishes each milestone on its OWN topic - three SoR-defined topics, no
+# milestone field in the payload and no negotiation available. That quirk stops here: this is the
+# anti-corruption layer, so the milestone is derived from WHICH topic a record arrived on, and all
+# three normalize into the single internal fulfillment.ack contract.
+#
+# Deriving it from the binding rather than sniffing a header is deliberate: the flow adapter does
+# not expose the source topic to a flow:// target, and one flow per topic makes the mapping
+# explicit in configuration instead of hiding it in code.
+#
+consumer:
+  - topic: 'sor.validation'
+    flow: 'ack-validation-flow'
+    group: 'order-acknowledge-sor-group'
+    dlq-topic: 'sor.validation.dlq'
+    serializer: 'json'
+
+  - topic: 'sor.preprocess'
+    flow: 'ack-preprocess-flow'
+    group: 'order-acknowledge-sor-group'
+    dlq-topic: 'sor.preprocess.dlq'
+    serializer: 'json'
+
+  - topic: 'sor.process'
+    flow: 'ack-process-flow'
+    group: 'order-acknowledge-sor-group'
+    dlq-topic: 'sor.process.dlq'
+    serializer: 'json'

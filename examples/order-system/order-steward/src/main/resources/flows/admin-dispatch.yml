@@ -1,0 +1,21 @@
+#
+# Demo step: Manually open the dispatch window.
+# The 'manual' trigger distinguishes this from the scheduler, which is suppressed in demo mode.
+#
+flow:
+  id: 'admin-dispatch'
+  description: 'Manually open the dispatch window'
+  ttl: 20s
+
+first.task: 'v1.scheduled.dispatch'
+
+tasks:
+  - name: 'v1.scheduled.dispatch'
+    input:
+      - 'text(manual) -> trigger'
+    process: 'v1.scheduled.dispatch'
+    description: 'Open the dispatch window for every SCHEDULED fulfillment now'
+    output:
+      - 'text(application/json) -> output.header.content-type'
+      - 'result -> output.body'
+    execution: end

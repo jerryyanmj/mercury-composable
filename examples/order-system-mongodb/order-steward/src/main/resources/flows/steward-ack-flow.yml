@@ -1,0 +1,53 @@
+#
+# A SoR milestone acknowledgement.
+#
+# The fact is recorded FIRST (idempotent $ifNull in MongoDB pipeline). Then the lifecycle
+# graph resumes and routes on the DERIVED progress, not on arrival order.
+# Three milestones form an unordered SET: accumulate, then ask where the set stands.
+#
+flow:
+  id: 'steward-ack-flow'
+  description: 'Record a SoR milestone, then advance the lifecycle if the outcome is now decided'
+  ttl: 30s
+
+first.task: 'v1.milestone.record'
+
+tasks:
+  - name: 'v1.milestone.record'
+    input:
+      - 'input.body.fulfillment_id -> fulfillment_id'
+      - 'input.body.milestone -> milestone'
+      - 'input.body.outcome -> outcome'
+      - 'input.body.reason -> reason'
+    process: 'v1.milestone.record'
+    description: 'Record the milestone as an idempotent fact and derive where the set now stands'
+    output:
+      - 'result.progress -> model.progress'
+      - 'result.to_state -> model.derived_state'
+      - 'result.reason -> model.derived_reason'
+    execution: sequential
+    next:
+      - 'graph.executor'
+
+  - name: 'graph.executor'
+    input:
+      - 'text(fulfillment-lifecycle) -> header.graph'
+      - 'model.instance -> header.instance'
+    process: 'graph.executor'
+    description: 'Resume the lifecycle graph; re-suspends while the milestone set is incomplete'
+    output: []
+    execution: sequential
+    next:
+      - 'v1.steward.record.status'
+
+  - name: 'v1.steward.record.status'
+    input:
+      - 'input.body.fulfillment_id -> fulfillment_id'
+      - 'model.derived_state -> to_state'
+      - 'text(STEWARD) -> source'
+      - 'model.derived_reason -> reason'
+    process: 'v1.steward.record.status'
+    description: 'Record the state transition if the accumulated set decided one (NOOP = still waiting)'
+    output:
+      - 'result -> output.body'
+    execution: end

@@ -1,0 +1,19 @@
+flow:
+  id: 'sor-emit-flow'
+  description: 'Admin: manually emit a single SoR milestone for a given sor_reference (DEMO mode)'
+  ttl: 15s
+
+first.task: 'v1.sor.mock.emit'
+
+tasks:
+  - name: 'v1.sor.mock.emit'
+    input:
+      - 'input.path_parameter.sor_reference -> sor_reference'
+      - 'input.path_parameter.milestone -> milestone'
+      - 'input.path_parameter.outcome -> outcome'
+      - 'input.body.reason -> reason'
+    process: 'v1.sor.mock.emit'
+    description: 'Publish the SoR milestone outcome to the appropriate topic'
+    output:
+      - 'result -> output.body'
+    execution: end

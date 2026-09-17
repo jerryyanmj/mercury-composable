@@ -1,0 +1,8 @@
+flows:
+  - 'order-intake-event.yml'
+  - 'admin-relay.yml'
+  - 'order-status.yml'
+  - 'order-intake.yml'
+  - 'order-aggregate-flow.yml'
+
+location: 'classpath:/flows/'

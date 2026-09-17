@@ -1,0 +1,9 @@
+flows:
+  - 'steward-request-flow.yml'
+  - 'steward-tick-flow.yml'
+  - 'steward-ack-flow.yml'
+  - 'graph-executor.yml'
+  - 'admin-dispatch.yml'
+  - 'admin-relay.yml'
+
+location: 'classpath:/flows/'

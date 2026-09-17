@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/maven-v4_0_0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <groupId>com.accenture</groupId>
+    <artifactId>order-system-mongodb</artifactId>
+    <version>1.0.0</version>
+    <packaging>pom</packaging>
+    <name>Order Fulfillment System (MongoDB)</name>
+    <description>Event-driven order fulfillment: Manager, Steward, Acknowledge, External Mock — MongoDB backend</description>
+
+    <modules>
+        <module>order-common</module>
+        <module>order-mongo-service</module>
+        <module>order-manager</module>
+        <module>order-steward</module>
+        <module>order-acknowledge</module>
+        <module>order-external-mock</module>
+    </modules>
+</project>

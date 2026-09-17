@@ -1,0 +1,40 @@
+#
+# Project a fulfillment.status event into the CQRS read model.
+#
+# The external notification is NOT published here. Concluding an order and announcing that
+# conclusion are one transaction inside v1.order.aggregate: the rollup's UPDATE feeds an INSERT
+# into the outbox, so the order.status.external event is staged only when the status actually
+# changed, and the manager's relay publishes it like every other event.
+#
+# That was the fix for a real inconsistency - this notification used to be published straight to
+# Kafka from a decision task here, which meant the one event announcing a completed order was the
+# only state change in the system with no outbox guarantee behind it.
+#
+flow:
+  id: 'order-aggregate-flow'
+  description: 'Update the CQRS read model and stage the external notification when an order concludes'
+  ttl: 15s
+  exception: 'v1.order.exception'
+
+first.task: 'v1.order.aggregate'
+
+tasks:
+  - name: 'v1.order.aggregate'
+    input:
+      - 'input.body -> *'
+    process: 'v1.order.aggregate'
+    description: 'Write line_history, update the line, and conclude the order if every line is terminal'
+    output:
+      - 'result -> output.body'
+    execution: end
+
+  - name: 'v1.order.exception'
+    input:
+      - 'error.code -> status'
+      - 'error.message -> message'
+    process: 'v1.order.exception'
+    description: 'Surface a projection failure so the record is retried or dead-lettered'
+    output:
+      - 'result.status -> output.status'
+      - 'result -> output.body'
+    execution: end

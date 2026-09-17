@@ -1,0 +1,44 @@
+#
+# The dispatch-window tick: resume the lifecycle graph past its first checkpoint, stage the
+# SoR dispatch, and record the SCHEDULED -> DISPATCHED transition.
+#
+flow:
+  id: 'steward-tick-flow'
+  description: 'Handle a dispatch-window tick: resume the graph, stage the SoR dispatch and record DISPATCHED'
+  ttl: 30s
+
+first.task: 'graph.executor'
+
+tasks:
+  - input:
+      - 'model.instance -> header.instance'
+      - 'text(fulfillment-lifecycle) -> header.graph'
+      - 'input.body -> *'
+    process: 'graph.executor'
+    output:
+      - 'result.lifecycle_state -> model.lifecycle_state'
+    description: 'Resume the lifecycle graph - advances through dispatch and suspends at checkpoint 2'
+    execution: sequential
+    next:
+      - 'v1.sor.dispatch'
+
+  - input:
+      - 'input.body.fulfillment_id -> fulfillment_id'
+    process: 'v1.sor.dispatch'
+    output:
+      - 'result.sor_reference -> model.sor_reference'
+    description: 'Assign the SoR reference and stage the sor.dispatch event in the outbox'
+    execution: sequential
+    next:
+      - 'v1.txn.record.status'
+
+  - input:
+      - 'input.body.fulfillment_id -> fulfillment_id'
+      - 'text(SCHEDULED) -> from_state'
+      - 'model.lifecycle_state -> to_state'
+      - 'text(SCHEDULER) -> source'
+    process: 'v1.txn.record.status'
+    output:
+      - 'result -> output.body'
+    description: 'Record the SCHEDULED -> DISPATCHED transition'
+    execution: end

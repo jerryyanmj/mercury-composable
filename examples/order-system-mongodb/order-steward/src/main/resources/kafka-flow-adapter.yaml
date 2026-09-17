@@ -1,0 +1,18 @@
+consumer:
+  - topic: 'fulfillment.request'
+    flow: 'steward-request-flow'
+    group: 'order-steward-request-group'
+    dlq-topic: 'fulfillment.request.dlq'
+    serializer: 'json'
+
+  - topic: 'fulfillment.tick'
+    flow: 'steward-tick-flow'
+    group: 'order-steward-tick-group'
+    dlq-topic: 'fulfillment.tick.dlq'
+    serializer: 'json'
+
+  - topic: 'fulfillment.ack'
+    flow: 'steward-ack-flow'
+    group: 'order-steward-ack-group'
+    dlq-topic: 'fulfillment.ack.dlq'
+    serializer: 'json'

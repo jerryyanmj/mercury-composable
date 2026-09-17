@@ -1,0 +1,18 @@
+#
+# Kafka Flow Adapter — Order Manager
+# Consumes fulfillment.status events and updates the CQRS read model.
+#
+consumer:
+  # The real ingress: an external party publishes orders here. Same tasks as the REST path, but a
+  # malformed order dead-letters instead of answering 400 - there is no caller to answer.
+  - topic: 'orders.inbound'
+    flow: 'order-intake-event'
+    group: 'order-manager-intake-group'
+    dlq-topic: 'orders.inbound.dlq'
+    serializer: 'json'
+
+  - topic: 'fulfillment.status'
+    flow: 'order-aggregate-flow'
+    group: 'order-manager-status-group'
+    dlq-topic: 'fulfillment.status.dlq'
+    serializer: 'json'

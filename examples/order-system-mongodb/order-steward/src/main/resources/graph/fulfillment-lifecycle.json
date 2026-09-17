@@ -1,0 +1,408 @@
+{
+  "nodes": [
+    {
+      "alias": "root",
+      "types": [
+        "Root"
+      ],
+      "properties": {
+        "name": "fulfillment-lifecycle",
+        "purpose": "Fulfillment lifecycle with four suspend/resume checkpoints: validate, dispatch to SoR, SoR validation, SoR pre-processing, SoR processing, and settlement"
+      }
+    },
+    {
+      "alias": "resume",
+      "types": [
+        "Resume"
+      ],
+      "properties": {
+        "skill": "graph.resume",
+        "task": "v1.redis.retrieve.model",
+        "purpose": "Restore workflow state if this fulfillment was suspended in a prior run"
+      }
+    },
+    {
+      "alias": "classify",
+      "types": [
+        "Decision"
+      ],
+      "properties": {
+        "skill": "graph.math",
+        "statement": [
+          "MAPPING: text(={input.body.payload}) -> model.request_probe",
+          "IF: {model.request_probe} == '=null'\nTHEN: reject\nELSE: validate"
+        ],
+        "purpose": "Guard: only a fulfillment REQUEST carries a payload. An acknowledgement reaching a fresh run means its suspension state was already consumed (a duplicate or stale ack), so there is nothing to resume - route it to the no-op terminal instead of re-deciding the lifecycle from scratch"
+      }
+    },
+    {
+      "alias": "validate",
+      "types": [
+        "Decision"
+      ],
+      "properties": {
+        "skill": "graph.math",
+        "statement": [
+          "MAPPING: text(={input.body.payload.amount}) -> model.amount_probe",
+          "IF: {model.amount_probe} == '=null'\nTHEN: rejected\nELSE: check-amount"
+        ],
+        "purpose": "A request must carry an amount"
+      }
+    },
+    {
+      "alias": "validated",
+      "types": [
+        "Suspensible"
+      ],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "input.body -> model.request",
+          "text(SCHEDULED) -> output.body.lifecycle_state",
+          "model.cid -> output.body.cid",
+          "model.run -> output.body.run"
+        ],
+        "purpose": "Capture the initial request; suspend and wait for the scheduler to dispatch to SoR"
+      }
+    },
+    {
+      "alias": "dispatch",
+      "types": [
+        "Suspensible"
+      ],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "input.body.sor_reference -> model.sor_reference",
+          "text(DISPATCHED) -> output.body.lifecycle_state",
+          "model.cid -> output.body.cid",
+          "model.run -> output.body.run"
+        ],
+        "purpose": "Record the SoR reference and mark as dispatched; suspend and wait for the first SoR ack"
+      }
+    },
+    {
+      "alias": "settle",
+      "types": [
+        "mapper"
+      ],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "text(SETTLED) -> output.body.lifecycle_state",
+          "model.cid -> output.body.cid",
+          "model.run -> output.body.run"
+        ],
+        "purpose": "Fulfillment is fully processed and settled - terminal happy path"
+      }
+    },
+    {
+      "alias": "rejected",
+      "types": [
+        "mapper"
+      ],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "text(REJECTED) -> output.body.lifecycle_state",
+          "model.cid -> output.body.cid",
+          "model.run -> output.body.run"
+        ],
+        "purpose": "Fulfillment rejected due to missing payload - terminal rejection path"
+      }
+    },
+    {
+      "alias": "failed",
+      "types": [
+        "mapper"
+      ],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "text(FAILED) -> output.body.lifecycle_state",
+          "model.derived_reason -> output.body.reason",
+          "model.cid -> output.body.cid",
+          "model.run -> output.body.run"
+        ],
+        "purpose": "A SoR milestone failed. The reason comes from the accumulated facts, so it names the stage that actually failed."
+      }
+    },
+    {
+      "alias": "reject",
+      "types": [
+        "mapper"
+      ],
+      "properties": {
+        "skill": "graph.data.mapper",
+        "mapping": [
+          "text(NOOP) -> output.body.lifecycle_state",
+          "text(Not a fulfillment request, or its suspension state was already consumed) -> output.body.message",
+          "model.cid -> output.body.cid",
+          "model.run -> output.body.run"
+        ],
+        "purpose": "No-op terminal: a duplicate or stale acknowledgement. NOOP tells the calling flow to record nothing, so a late ack cannot mutate a completed fulfillment"
+      }
+    },
+    {
+      "alias": "suspend",
+      "types": [
+        "Suspend"
+      ],
+      "properties": {
+        "skill": "graph.suspend",
+        "task": "v1.redis.persist.model",
+        "ttl": "8h",
+        "purpose": "Persist workflow state to Redis and wait for the next event"
+      }
+    },
+    {
+      "alias": "end",
+      "types": [
+        "End"
+      ],
+      "properties": {}
+    },
+    {
+      "alias": "check-amount",
+      "types": [
+        "Decision"
+      ],
+      "properties": {
+        "skill": "graph.math",
+        "statement": [
+          "IF: {input.body.payload.amount} > 0\nTHEN: validated\nELSE: rejected"
+        ],
+        "purpose": "A fulfillment request is valid only when its amount is greater than zero"
+      }
+    },
+    {
+      "alias": "await-sor",
+      "types": [
+        "Decision"
+      ],
+      "properties": {
+        "skill": "graph.math",
+        "statement": [
+          "IF: {model.progress} == 'waiting'\nTHEN: suspend\nELSE: sor-outcome"
+        ],
+        "purpose": "The SoR barrier. The three milestones are an unordered SET, accumulated in the database, so this waits for the set to be complete rather than for a sequence of states. It reaches suspend by JUMPING, which means a resumed run re-evaluates it against the next acknowledgement - the wait loop."
+      }
+    },
+    {
+      "alias": "sor-outcome",
+      "types": [
+        "Decision"
+      ],
+      "properties": {
+        "skill": "graph.math",
+        "statement": [
+          "IF: {model.progress} == 'settled'\nTHEN: settle\nELSE: failed"
+        ],
+        "purpose": "The set is complete or a milestone failed. Which one failed is decided by the accumulated facts, never by arrival order, so the reason is always truthful."
+      }
+    }
+  ],
+  "connections": [
+    {
+      "source": "root",
+      "target": "resume",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "resume",
+      "target": "classify",
+      "relations": [
+        {
+          "type": "fresh",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "classify",
+      "target": "validate",
+      "relations": [
+        {
+          "type": "request",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "classify",
+      "target": "reject",
+      "relations": [
+        {
+          "type": "not-request",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "validate",
+      "target": "validated",
+      "relations": [
+        {
+          "type": "valid",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "validate",
+      "target": "rejected",
+      "relations": [
+        {
+          "type": "invalid",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "validated",
+      "target": "suspend",
+      "relations": [
+        {
+          "type": "checkpoint",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "validated",
+      "target": "dispatch",
+      "relations": [
+        {
+          "type": "next",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "dispatch",
+      "target": "suspend",
+      "relations": [
+        {
+          "type": "checkpoint",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "settle",
+      "target": "end",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "rejected",
+      "target": "end",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "failed",
+      "target": "end",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "reject",
+      "target": "end",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "suspend",
+      "target": "end",
+      "relations": [
+        {
+          "type": "then",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "validate",
+      "target": "check-amount",
+      "relations": [
+        "has-amount"
+      ]
+    },
+    {
+      "source": "check-amount",
+      "target": "validated",
+      "relations": [
+        "valid"
+      ]
+    },
+    {
+      "source": "check-amount",
+      "target": "rejected",
+      "relations": [
+        "invalid"
+      ]
+    },
+    {
+      "source": "await-sor",
+      "target": "sor-outcome",
+      "relations": [
+        {
+          "type": "complete",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "sor-outcome",
+      "target": "settle",
+      "relations": [
+        {
+          "type": "pass",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "sor-outcome",
+      "target": "failed",
+      "relations": [
+        {
+          "type": "fail",
+          "properties": {}
+        }
+      ]
+    },
+    {
+      "source": "dispatch",
+      "target": "await-sor",
+      "relations": [
+        {
+          "type": "next",
+          "properties": {}
+        }
+      ]
+    }
+  ]
+}

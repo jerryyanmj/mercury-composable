@@ -1,0 +1,17 @@
+rest:
+  - service: 'http.flow.adapter'
+    methods: ['POST']
+    url: '/api/graph/{graph_id}'
+    flow: 'graph-executor'
+    timeout: 30s
+    tracing: true
+
+cors:
+  - id: cors_1
+    options:
+      - 'Access-Control-Allow-Origin: *'
+      - 'Access-Control-Allow-Methods: POST, OPTIONS'
+      - 'Access-Control-Allow-Headers: origin, authorization, accept, content-type'
+      - 'Access-Control-Max-Age: 86400'
+    headers:
+      - 'Access-Control-Allow-Origin: *'

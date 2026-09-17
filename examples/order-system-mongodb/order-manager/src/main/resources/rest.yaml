@@ -1,0 +1,33 @@
+rest:
+  - service: 'http.flow.adapter'
+    methods: ['POST']
+    url: '/api/v1/order'
+    flow: 'order-intake-flow'
+    timeout: 30s
+    cors: cors_1
+    tracing: true
+
+  - service: 'http.flow.adapter'
+    methods: ['GET']
+    url: '/api/v1/order/{order_id}'
+    flow: 'order-status-flow'
+    timeout: 15s
+    cors: cors_1
+    tracing: true
+
+  - service: 'http.flow.adapter'
+    methods: ['POST']
+    url: '/api/v1/admin/relay'
+    flow: 'admin-relay-flow'
+    timeout: 60s
+    tracing: true
+
+cors:
+  - id: cors_1
+    options:
+      - 'Access-Control-Allow-Origin: *'
+      - 'Access-Control-Allow-Methods: GET, POST, OPTIONS'
+      - 'Access-Control-Allow-Headers: origin, authorization, accept, content-type'
+      - 'Access-Control-Max-Age: 86400'
+    headers:
+      - 'Access-Control-Allow-Origin: *'

@@ -1,0 +1,4 @@
+graphs:
+  - 'fulfillment-lifecycle'
+
+location: 'classpath:/graph'

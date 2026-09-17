@@ -1,0 +1,1207 @@
+# Order Fulfillment System
+
+###
+# group: 01. Happy Path
+# @name 1. Submit Order  (external party -> orders.inbound)
+# The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.
+POST {{mock}}/api/v1/mock/order
+Content-Type: application/json
+
+{
+  "order_id": "O-HAPPY-{{$timestamp}}",
+  "external_party": "acme",
+  "route": "steward-1",
+  "payload": {
+    "item": "widget",
+    "qty": 2,
+    "amount": 500
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to orders.inbound", () => pm.response.to.have.status(202));
+    // const b = pm.response.json();
+    // pm.test("topic is orders.inbound", () => pm.expect(b.topic).to.eql("orders.inbound"));
+    // pm.collectionVariables.set("order_id", b.order_id);
+%}
+
+###
+# group: 01. Happy Path
+# @name 2. Trigger Manager Outbox Relay
+# Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward.
+POST {{manager}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Manager Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 01. Happy Path
+# @name 3. Capture Fulfillment Id
+# The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("order is in the read model", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order found", () => pm.expect(b.found).to.be.true);
+    // pm.expect(b.lines.length, "a fulfillment line exists").to.be.above(0);
+    // pm.collectionVariables.set("fulfillment_id", b.lines[0].fulfillment_id);
+    // console.log("fulfillment_id =", b.lines[0].fulfillment_id);
+%}
+
+###
+# group: 01. Happy Path
+# @name 4. Trigger Steward Dispatch Window
+# Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED.
+POST {{steward}}/api/v1/admin/dispatch
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("dispatch window opened", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 01. Happy Path
+# @name 5. Trigger Steward Outbox Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Steward Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 01. Happy Path
+# @name 6. SoR Validated  (pass)
+# Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/validated
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_validated}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 01. Happy Path
+# @name 7. SoR Preprocessed  (pass)
+# Publishes the 'preprocessed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/preprocessed
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_preprocessed}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 01. Happy Path
+# @name 8. SoR Processed  (pass)
+# Publishes the 'processed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/processed
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_processed}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 01. Happy Path
+# @name 9. Final Steward Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Final Steward Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 01. Happy Path
+# @name 10. Final Manager Relay (no-op on happy path)
+# Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward.
+POST {{manager}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Final Manager Relay (no-op on happy path)", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 01. Happy Path
+# @name 11. Get Order Status
+# The external report, served entirely from the manager's CQRS read model - it never queries the steward.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("status returned", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order is COMPLETED", () => pm.expect(b.order.order_status).to.eql("COMPLETED"));
+    // pm.test("line is SETTLED", () => pm.expect(b.lines[0].line_status).to.eql("SETTLED"));
+    // pm.test("6 transitions recorded", () => pm.expect(b.transitions).to.eql(6));
+    // console.log("path:", b.history.map(h => h.to_state).join(" -> "));
+%}
+
+###
+# group: 02. SoR Failure - at Validation
+# @name 1. Submit Order  (external party -> orders.inbound)
+# The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.
+POST {{mock}}/api/v1/mock/order
+Content-Type: application/json
+
+{
+  "order_id": "O-FAIL2-{{$timestamp}}",
+  "external_party": "acme",
+  "route": "steward-1",
+  "payload": {
+    "item": "widget",
+    "qty": 2,
+    "amount": 500
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to orders.inbound", () => pm.response.to.have.status(202));
+    // const b = pm.response.json();
+    // pm.test("topic is orders.inbound", () => pm.expect(b.topic).to.eql("orders.inbound"));
+    // pm.collectionVariables.set("order_id", b.order_id);
+%}
+
+###
+# group: 02. SoR Failure - at Validation
+# @name 2. Trigger Manager Outbox Relay
+# Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward.
+POST {{manager}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Manager Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 02. SoR Failure - at Validation
+# @name 3. Capture Fulfillment Id
+# The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("order is in the read model", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order found", () => pm.expect(b.found).to.be.true);
+    // pm.expect(b.lines.length, "a fulfillment line exists").to.be.above(0);
+    // pm.collectionVariables.set("fulfillment_id", b.lines[0].fulfillment_id);
+    // console.log("fulfillment_id =", b.lines[0].fulfillment_id);
+%}
+
+###
+# group: 02. SoR Failure - at Validation
+# @name 4. Trigger Steward Dispatch Window
+# Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED.
+POST {{steward}}/api/v1/admin/dispatch
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("dispatch window opened", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 02. SoR Failure - at Validation
+# @name 5. Trigger Steward Outbox Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Steward Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 02. SoR Failure - at Validation
+# @name 6. SoR Validated  (fail)
+# Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/validated
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "fail"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_validated}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 02. SoR Failure - at Validation
+# @name 7. Final Steward Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Final Steward Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 02. SoR Failure - at Validation
+# @name 8. Get Order Status
+# The external report, served entirely from the manager's CQRS read model - it never queries the steward.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("status returned", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order is FAILED", () => pm.expect(b.order.order_status).to.eql("FAILED"));
+    // pm.test("line is FAILED", () => pm.expect(b.lines[0].line_status).to.eql("FAILED"));
+    // pm.test("4 transitions recorded", () => pm.expect(b.transitions).to.eql(4));
+    // console.log("path:", b.history.map(h => h.to_state).join(" -> "));
+    // const last = b.history[b.history.length - 1];
+    // pm.test("failure attributed to sor_validation", () => pm.expect(last.reason).to.eql("sor_validation"));
+%}
+
+###
+# group: 03. SoR Failure - at Preprocess
+# @name 1. Submit Order  (external party -> orders.inbound)
+# The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.
+POST {{mock}}/api/v1/mock/order
+Content-Type: application/json
+
+{
+  "order_id": "O-FAIL3-{{$timestamp}}",
+  "external_party": "acme",
+  "route": "steward-1",
+  "payload": {
+    "item": "widget",
+    "qty": 2,
+    "amount": 500
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to orders.inbound", () => pm.response.to.have.status(202));
+    // const b = pm.response.json();
+    // pm.test("topic is orders.inbound", () => pm.expect(b.topic).to.eql("orders.inbound"));
+    // pm.collectionVariables.set("order_id", b.order_id);
+%}
+
+###
+# group: 03. SoR Failure - at Preprocess
+# @name 2. Trigger Manager Outbox Relay
+# Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward.
+POST {{manager}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Manager Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 03. SoR Failure - at Preprocess
+# @name 3. Capture Fulfillment Id
+# The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("order is in the read model", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order found", () => pm.expect(b.found).to.be.true);
+    // pm.expect(b.lines.length, "a fulfillment line exists").to.be.above(0);
+    // pm.collectionVariables.set("fulfillment_id", b.lines[0].fulfillment_id);
+    // console.log("fulfillment_id =", b.lines[0].fulfillment_id);
+%}
+
+###
+# group: 03. SoR Failure - at Preprocess
+# @name 4. Trigger Steward Dispatch Window
+# Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED.
+POST {{steward}}/api/v1/admin/dispatch
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("dispatch window opened", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 03. SoR Failure - at Preprocess
+# @name 5. Trigger Steward Outbox Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Steward Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 03. SoR Failure - at Preprocess
+# @name 6. SoR Validated  (pass)
+# Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/validated
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_validated}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 03. SoR Failure - at Preprocess
+# @name 7. SoR Preprocessed  (fail)
+# Publishes the 'preprocessed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/preprocessed
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "fail"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_preprocessed}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 03. SoR Failure - at Preprocess
+# @name 8. Final Steward Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Final Steward Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 03. SoR Failure - at Preprocess
+# @name 9. Get Order Status
+# The external report, served entirely from the manager's CQRS read model - it never queries the steward.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("status returned", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order is FAILED", () => pm.expect(b.order.order_status).to.eql("FAILED"));
+    // pm.test("line is FAILED", () => pm.expect(b.lines[0].line_status).to.eql("FAILED"));
+    // pm.test("5 transitions recorded", () => pm.expect(b.transitions).to.eql(5));
+    // console.log("path:", b.history.map(h => h.to_state).join(" -> "));
+    // const last = b.history[b.history.length - 1];
+    // pm.test("failure attributed to sor_preprocess", () => pm.expect(last.reason).to.eql("sor_preprocess"));
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 1. Submit Order  (external party -> orders.inbound)
+# The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.
+POST {{mock}}/api/v1/mock/order
+Content-Type: application/json
+
+{
+  "order_id": "O-FAIL4-{{$timestamp}}",
+  "external_party": "acme",
+  "route": "steward-1",
+  "payload": {
+    "item": "widget",
+    "qty": 2,
+    "amount": 500
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to orders.inbound", () => pm.response.to.have.status(202));
+    // const b = pm.response.json();
+    // pm.test("topic is orders.inbound", () => pm.expect(b.topic).to.eql("orders.inbound"));
+    // pm.collectionVariables.set("order_id", b.order_id);
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 2. Trigger Manager Outbox Relay
+# Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward.
+POST {{manager}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Manager Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 3. Capture Fulfillment Id
+# The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("order is in the read model", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order found", () => pm.expect(b.found).to.be.true);
+    // pm.expect(b.lines.length, "a fulfillment line exists").to.be.above(0);
+    // pm.collectionVariables.set("fulfillment_id", b.lines[0].fulfillment_id);
+    // console.log("fulfillment_id =", b.lines[0].fulfillment_id);
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 4. Trigger Steward Dispatch Window
+# Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED.
+POST {{steward}}/api/v1/admin/dispatch
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("dispatch window opened", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 5. Trigger Steward Outbox Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Steward Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 6. SoR Validated  (pass)
+# Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/validated
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_validated}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 7. SoR Preprocessed  (pass)
+# Publishes the 'preprocessed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/preprocessed
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_preprocessed}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 8. SoR Processed  (fail)
+# Publishes the 'processed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/processed
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "fail"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_processed}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 9. Final Steward Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Final Steward Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 04. SoR Failure - at Process
+# @name 10. Get Order Status
+# The external report, served entirely from the manager's CQRS read model - it never queries the steward.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("status returned", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order is FAILED", () => pm.expect(b.order.order_status).to.eql("FAILED"));
+    // pm.test("line is FAILED", () => pm.expect(b.lines[0].line_status).to.eql("FAILED"));
+    // pm.test("6 transitions recorded", () => pm.expect(b.transitions).to.eql(6));
+    // console.log("path:", b.history.map(h => h.to_state).join(" -> "));
+    // const last = b.history[b.history.length - 1];
+    // pm.test("failure attributed to sor_process", () => pm.expect(last.reason).to.eql("sor_process"));
+%}
+
+###
+# group: 05. Business Rejection (amount = 0)
+# @name 1. Submit Order  (external party -> orders.inbound)
+# The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.
+POST {{mock}}/api/v1/mock/order
+Content-Type: application/json
+
+{
+  "order_id": "O-ZERO-{{$timestamp}}",
+  "external_party": "acme",
+  "route": "steward-1",
+  "payload": {
+    "item": "widget",
+    "qty": 2,
+    "amount": 0
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to orders.inbound", () => pm.response.to.have.status(202));
+    // const b = pm.response.json();
+    // pm.test("topic is orders.inbound", () => pm.expect(b.topic).to.eql("orders.inbound"));
+    // pm.collectionVariables.set("order_id", b.order_id);
+%}
+
+###
+# group: 05. Business Rejection (amount = 0)
+# @name 2. Trigger Manager Outbox Relay
+# Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward.
+POST {{manager}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Manager Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 05. Business Rejection (amount = 0)
+# @name 3. Trigger Steward Outbox Relay
+# The rejection happens inside the STEWARD's graph, so its fulfillment.status event must be relayed before the manager can know about it. Without this step the manager still reports RECEIVED.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Steward Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 05. Business Rejection (amount = 0)
+# @name 4. Get Order Status
+# Rejected before dispatch.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("status returned", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order is FAILED", () => pm.expect(b.order.order_status).to.eql("FAILED"));
+    // pm.test("line is REJECTED", () => pm.expect(b.lines[0].line_status).to.eql("REJECTED"));
+    // pm.test("2 transitions recorded", () => pm.expect(b.transitions).to.eql(2));
+    // console.log("path:", b.history.map(h => h.to_state).join(" -> "));
+    // pm.test("never dispatched to the SoR", () => pm.expect(b.history.map(h=>h.to_state)).to.not.include("DISPATCHED"));
+%}
+
+###
+# group: 06. Intake Validation (REST)
+# @name Missing order_id
+POST {{manager}}/api/v1/order
+Content-Type: application/json
+
+{
+  "route": "steward-1",
+  "payload": {
+    "amount": 1
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("rejected with 400", () => pm.response.to.have.status(400));
+    // const b = pm.response.json();
+    // pm.test("message names the problem", () => pm.expect(b.message).to.include("Missing order_id"));
+    // pm.test("flagged as an error", () => pm.expect(b.error).to.be.true);
+%}
+
+###
+# group: 06. Intake Validation (REST)
+# @name Missing route
+POST {{manager}}/api/v1/order
+Content-Type: application/json
+
+{
+  "order_id": "O-X",
+  "payload": {
+    "amount": 1
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("rejected with 400", () => pm.response.to.have.status(400));
+    // const b = pm.response.json();
+    // pm.test("message names the problem", () => pm.expect(b.message).to.include("Missing route"));
+    // pm.test("flagged as an error", () => pm.expect(b.error).to.be.true);
+%}
+
+###
+# group: 06. Intake Validation (REST)
+# @name Missing payload
+POST {{manager}}/api/v1/order
+Content-Type: application/json
+
+{
+  "order_id": "O-X",
+  "route": "steward-1"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("rejected with 400", () => pm.response.to.have.status(400));
+    // const b = pm.response.json();
+    // pm.test("message names the problem", () => pm.expect(b.message).to.include("Missing payload"));
+    // pm.test("flagged as an error", () => pm.expect(b.error).to.be.true);
+%}
+
+###
+# group: 06. Intake Validation (REST)
+# @name Empty body
+POST {{manager}}/api/v1/order
+Content-Type: application/json
+
+{}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("rejected with 400", () => pm.response.to.have.status(400));
+    // const b = pm.response.json();
+    // pm.test("message names the problem", () => pm.expect(b.message).to.include("Missing order_id"));
+    // pm.test("flagged as an error", () => pm.expect(b.error).to.be.true);
+%}
+
+###
+# group: 06. Intake Validation (REST)
+# @name Blank order_id
+POST {{manager}}/api/v1/order
+Content-Type: application/json
+
+{
+  "order_id": "   ",
+  "route": "steward-1",
+  "payload": {
+    "amount": 1
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("rejected with 400", () => pm.response.to.have.status(400));
+    // const b = pm.response.json();
+    // pm.test("message names the problem", () => pm.expect(b.message).to.include("Missing order_id"));
+    // pm.test("flagged as an error", () => pm.expect(b.error).to.be.true);
+%}
+
+###
+# group: 06. Intake Validation (REST)
+# @name order_id not starting with O
+POST {{manager}}/api/v1/order
+Content-Type: application/json
+
+{
+  "order_id": "X-BAD",
+  "route": "steward-1",
+  "payload": {
+    "amount": 1
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("rejected with 400", () => pm.response.to.have.status(400));
+    // const b = pm.response.json();
+    // pm.test("message names the problem", () => pm.expect(b.message).to.include("must start with 'O'"));
+    // pm.test("flagged as an error", () => pm.expect(b.error).to.be.true);
+%}
+
+###
+# group: 06. Intake Validation (REST)
+# @name Lowercase o rejected
+POST {{manager}}/api/v1/order
+Content-Type: application/json
+
+{
+  "order_id": "oLOWER",
+  "route": "steward-1",
+  "payload": {
+    "amount": 1
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("rejected with 400", () => pm.response.to.have.status(400));
+    // const b = pm.response.json();
+    // pm.test("message names the problem", () => pm.expect(b.message).to.include("must start with 'O'"));
+    // pm.test("flagged as an error", () => pm.expect(b.error).to.be.true);
+%}
+
+###
+# group: 06. Intake Validation (REST)
+# @name Valid order accepted
+POST {{manager}}/api/v1/order
+Content-Type: application/json
+
+{
+  "order_id": "O-REST-{{$timestamp}}",
+  "external_party": "acme",
+  "route": "steward-1",
+  "payload": {
+    "item": "widget",
+    "qty": 2,
+    "amount": 500
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("accepted (202)", () => pm.response.to.have.status(202));
+    // const b = pm.response.json();
+    // pm.test("fulfillment id starts with F", () => pm.expect(b.fulfillment_id).to.match(/^F/));
+    // pm.test("id format FUL-<order>-<8 hex>", () => pm.expect(b.fulfillment_id).to.match(/^FUL-.+-[0-9a-f]{8}$/));
+%}
+
+###
+# group: 07. Kafka Ingress + Dead Letter
+# @name 1. Valid order via Kafka
+POST {{mock}}/api/v1/mock/order
+Content-Type: application/json
+
+{
+  "order_id": "O-KAFKA-{{$timestamp}}",
+  "external_party": "acme",
+  "route": "steward-1",
+  "payload": {
+    "item": "widget",
+    "qty": 2,
+    "amount": 500
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published", () => pm.response.to.have.status(202));
+    // pm.collectionVariables.set("order_id", pm.response.json().order_id);
+%}
+
+###
+# group: 07. Kafka Ingress + Dead Letter
+# @name 2. Confirm it was ingested
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("found in the read model", () => pm.response.to.have.status(200));
+    // pm.test("order exists", () => pm.expect(pm.response.json().found).to.be.true);
+%}
+
+###
+# group: 07. Kafka Ingress + Dead Letter
+# @name 3. Malformed order via Kafka
+# The mock performs no validation - sending a bad order is the point.
+POST {{mock}}/api/v1/mock/order
+Content-Type: application/json
+
+{
+  "order_id": "BAD-NO-PREFIX",
+  "route": "steward-1",
+  "payload": {
+    "amount": 1
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("the mock publishes it regardless", () => pm.response.to.have.status(202));
+    // pm.collectionVariables.set("bad_order_id", "BAD-NO-PREFIX");
+%}
+
+###
+# group: 07. Kafka Ingress + Dead Letter
+# @name 4. Confirm it was NOT persisted
+# It should be sitting in orders.inbound.dlq instead. Verify with: node node/list-topics.mjs
+GET {{manager}}/api/v1/order/{{bad_order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("responds", () => pm.response.to.have.status(200));
+    // pm.test("never reached the database", () => pm.expect(pm.response.json().found).to.be.false);
+%}
+
+###
+# group: 08. Idempotency
+# @name 1. Submit Order  (external party -> orders.inbound)
+# The real ingress: an external party publishes the order onto Kafka. The manager consumes it into the order-intake-event flow.
+POST {{mock}}/api/v1/mock/order
+Content-Type: application/json
+
+{
+  "order_id": "O-HAPPY-{{$timestamp}}",
+  "external_party": "acme",
+  "route": "steward-1",
+  "payload": {
+    "item": "widget",
+    "qty": 2,
+    "amount": 500
+  }
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to orders.inbound", () => pm.response.to.have.status(202));
+    // const b = pm.response.json();
+    // pm.test("topic is orders.inbound", () => pm.expect(b.topic).to.eql("orders.inbound"));
+    // pm.collectionVariables.set("order_id", b.order_id);
+%}
+
+###
+# group: 08. Idempotency
+# @name 2. Trigger Manager Outbox Relay
+# Drains the manager outbox to Kafka. In DEMO_MODE the scheduler does nothing, so this is what moves the order to the steward.
+POST {{manager}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Manager Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 08. Idempotency
+# @name 3. Capture Fulfillment Id
+# The Kafka ingress does not answer with a fulfillment id (nobody is waiting), so it is read back from the manager and stored for the SoR steps below.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("order is in the read model", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("order found", () => pm.expect(b.found).to.be.true);
+    // pm.expect(b.lines.length, "a fulfillment line exists").to.be.above(0);
+    // pm.collectionVariables.set("fulfillment_id", b.lines[0].fulfillment_id);
+    // console.log("fulfillment_id =", b.lines[0].fulfillment_id);
+%}
+
+###
+# group: 08. Idempotency
+# @name 4. Trigger Steward Dispatch Window
+# Ticks every SCHEDULED fulfillment. Resumes the graph past checkpoint 1: SCHEDULED -> DISPATCHED.
+POST {{steward}}/api/v1/admin/dispatch
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("dispatch window opened", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 08. Idempotency
+# @name 5. Trigger Steward Outbox Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Trigger Steward Outbox Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 08. Idempotency
+# @name 6. SoR Validated  (pass)
+# Publishes the 'validated' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/validated
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_validated}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 08. Idempotency
+# @name 7. SoR Preprocessed  (pass)
+# Publishes the 'preprocessed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/preprocessed
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_preprocessed}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 08. Idempotency
+# @name 8. SoR Processed  (pass)
+# Publishes the 'processed' milestone on its own SoR topic. Each one resumes a workflow that exists only as a Redis key between steps.
+POST {{mock}}/api/v1/sor/processed
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published to the SoR topic", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("correct topic", () => pm.expect(b.topic).to.eql(pm.variables.replaceIn("{{topic_processed}}")));
+    // pm.test("published flag", () => pm.expect(b.published).to.be.true);
+%}
+
+###
+# group: 08. Idempotency
+# @name 9. Final Steward Relay
+# Drains the steward outbox: sor.dispatch and every fulfillment.status event.
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("Final Steward Relay", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 08. Idempotency
+# @name 10. Note the settled state
+# Records the transition count and status this folder must leave untouched.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("responds", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.collectionVariables.set("baseline_transitions", b.transitions);
+    // pm.collectionVariables.set("baseline_status", b.order.order_status);
+    // pm.collectionVariables.set("fulfillment_id", b.lines[0].fulfillment_id);
+%}
+
+###
+# group: 08. Idempotency
+# @name 11. Replay the 'processed' ack
+POST {{mock}}/api/v1/sor/processed
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published again", () => pm.response.to.have.status(200));
+%}
+
+###
+# group: 08. Idempotency
+# @name 12. Replay a stale 'validated' ack
+POST {{mock}}/api/v1/sor/validated
+Content-Type: application/json
+
+{
+  "fulfillment_id": "{{fulfillment_id}}",
+  "outcome": "pass"
+}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("published again", () => pm.response.to.have.status(200));
+%}
+
+###
+# group: 08. Idempotency
+# @name 13. Confirm nothing changed
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("responds", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("transition count unchanged", () => pm.expect(b.transitions).to.eql(Number(pm.collectionVariables.get("baseline_transitions"))));
+    // pm.test("order status unchanged", () => pm.expect(b.order.order_status).to.eql(pm.collectionVariables.get("baseline_status")));
+%}
+
+###
+# group: 09. Operations
+# @name Manager outbox relay
+POST {{manager}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("relayed", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 09. Operations
+# @name Steward outbox relay
+POST {{steward}}/api/v1/admin/relay
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("relayed", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 09. Operations
+# @name Steward dispatch window
+POST {{steward}}/api/v1/admin/dispatch
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("ticked", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // console.log("relayed/ticked:", JSON.stringify(b));
+%}
+
+###
+# group: 09. Operations
+# @name Order status by id
+# Uses {{order_id}}, set by any folder that submits an order. With the default it simply reports found:false.
+GET {{manager}}/api/v1/order/{{order_id}}
+
+> {%
+    // TODO: migrate to HTTP Client Response handler API
+    // pm.test("responds", () => pm.response.to.have.status(200));
+    // const b = pm.response.json();
+    // pm.test("answers found true or false", () => pm.expect(b).to.have.property("found"));
+%}

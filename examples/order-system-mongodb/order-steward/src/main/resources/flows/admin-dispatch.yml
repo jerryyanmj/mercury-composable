@@ -1,0 +1,16 @@
+flow:
+  id: 'admin-dispatch-flow'
+  description: 'Admin: manually trigger the scheduled dispatch job'
+  ttl: 60s
+
+first.task: 'v1.scheduled.dispatch'
+
+tasks:
+  - name: 'v1.scheduled.dispatch'
+    input:
+      - 'text(manual) -> trigger'
+    process: 'v1.scheduled.dispatch'
+    description: 'Tick all SCHEDULED fulfillments'
+    output:
+      - 'result -> output.body'
+    execution: end

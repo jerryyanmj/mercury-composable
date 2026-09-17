@@ -1,0 +1,10 @@
+{
+  "name": "order-system-node",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Topic admin helper for the Order Fulfillment System boot scripts",
+  "type": "module",
+  "dependencies": {
+    "kafkajs": "^2.2.4"
+  }
+}

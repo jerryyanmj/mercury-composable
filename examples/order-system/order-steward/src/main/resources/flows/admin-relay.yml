@@ -1,0 +1,21 @@
+#
+# Demo step: Manually drain the steward outbox to Kafka.
+# The 'manual' trigger distinguishes this from the scheduler, which is suppressed in demo mode.
+#
+flow:
+  id: 'admin-relay'
+  description: 'Manually drain the steward outbox to Kafka'
+  ttl: 20s
+
+first.task: 'v1.steward.outbox.relay'
+
+tasks:
+  - name: 'v1.steward.outbox.relay'
+    input:
+      - 'text(manual) -> trigger'
+    process: 'v1.steward.outbox.relay'
+    description: 'Publish every staged steward outbox row to Kafka now'
+    output:
+      - 'text(application/json) -> output.header.content-type'
+      - 'result -> output.body'
+    execution: end

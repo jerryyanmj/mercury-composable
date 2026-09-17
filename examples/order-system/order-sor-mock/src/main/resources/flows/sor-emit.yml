@@ -1,0 +1,29 @@
+#
+# Publish one SoR milestone on demand.
+#
+#   POST /api/v1/sor/validated     {"fulfillment_id": "FUL-...", "outcome": "pass"}
+#   POST /api/v1/sor/preprocessed  {"fulfillment_id": "FUL-...", "outcome": "fail"}
+#
+# The milestone comes from the path, and it selects the topic - mirroring the real SoR, whose
+# three topics carry that meaning instead of a payload field.
+#
+flow:
+  id: 'sor-emit'
+  description: 'Publish a single SoR milestone acknowledgement'
+  ttl: 15s
+
+first.task: 'v1.sor.mock.emit'
+
+tasks:
+  - name: 'v1.sor.mock.emit'
+    input:
+      - 'input.path_parameter.milestone -> milestone'
+      - 'input.body.fulfillment_id -> fulfillment_id'
+      - 'input.body.outcome -> outcome'
+      - 'input.body.reason -> reason'
+    process: 'v1.sor.mock.emit'
+    description: 'Publish the requested milestone on its own SoR topic'
+    output:
+      - 'text(application/json) -> output.header.content-type'
+      - 'result -> output.body'
+    execution: end

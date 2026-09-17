@@ -1,0 +1,15 @@
+flow:
+  id: 'sor-dispatch-flow'
+  description: 'Simulate System of Record: receive a sor.dispatch event and emit three milestone acks'
+  ttl: 15s
+
+first.task: 'v1.sor.mock.process'
+
+tasks:
+  - input:
+      - 'input.body -> *'
+    process: 'v1.sor.mock.process'
+    output:
+      - 'result -> output.body'
+    description: 'Publish validated, preprocessed, and processed acks to sor.ack'
+    execution: end

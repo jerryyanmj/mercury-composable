@@ -1,0 +1,10 @@
+#
+# Kafka Flow Adapter — SoR Mock
+# Consumes sor.dispatch events and publishes three milestone acks to sor.ack.
+#
+consumer:
+  - topic: 'sor.dispatch'
+    flow: 'sor-dispatch-flow'
+    group: 'order-sor-mock-dispatch-group'
+    dlq-topic: 'sor.dispatch.dlq'
+    serializer: 'json'

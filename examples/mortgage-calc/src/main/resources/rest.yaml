@@ -1,0 +1,36 @@
+#
+# Minimal REST surface: expose the graph engine at POST /api/graph/{graph_id}.
+# Call the calculator with graph_id = mortgage-calc.
+#
+rest:
+  - service: 'http.flow.adapter'
+    methods: ['POST', 'GET']
+    url: '/api/graph/{graph_id}'
+    flow: 'graph-executor'
+    timeout: 30s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+cors:
+  - id: cors_1
+    origin: ${api.origin}
+    options:
+      - "Access-Control-Allow-Origin: *"
+      - "Access-Control-Allow-Methods: GET, DELETE, PUT, POST, PATCH, OPTIONS"
+      - "Access-Control-Allow-Headers: Origin, Authorization, X-Correlation-Id, Accept, Content-Type, X-Requested-With"
+      - "Access-Control-Max-Age: 86400"
+    headers:
+      - "Access-Control-Allow-Origin: *"
+      - "Access-Control-Allow-Methods: GET, DELETE, PUT, POST, PATCH, OPTIONS"
+      - "Access-Control-Allow-Headers: Origin, Authorization, X-Correlation-Id, Accept, Content-Type, X-Requested-With"
+      - "Access-Control-Allow-Credentials: true"
+
+headers:
+  - id: header_1
+    request:
+      drop: ['Upgrade-Insecure-Requests', 'cache-control', 'accept-encoding', 'connection']
+    response:
+      add:
+        - "Strict-Transport-Security: max-age=31536000"
+        - "Cache-Control: no-cache, no-store"

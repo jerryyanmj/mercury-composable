@@ -1,0 +1,19 @@
+flow:
+  id: 'sor-milestone-flow'
+  description: 'SQL-compatible SoR milestone endpoint: POST /api/v1/sor/{milestone} with body {fulfillment_id, outcome}'
+  ttl: 15s
+
+first.task: 'v1.sor.milestone.submit'
+
+tasks:
+  - name: 'v1.sor.milestone.submit'
+    input:
+      - 'input.path_parameter.milestone -> milestone'
+      - 'input.body.fulfillment_id -> fulfillment_id'
+      - 'input.body.outcome -> outcome'
+      - 'input.body.reason -> reason'
+    process: 'v1.sor.milestone.submit'
+    description: 'Publish the SoR milestone outcome — SQL-compatible body interface'
+    output:
+      - 'result -> output.body'
+    execution: end

@@ -1,0 +1,68 @@
+#
+# Accept an order, mint the fulfillment identity, and enqueue the unit of work.
+#
+# The identity is composed HERE rather than inside the function: the id FORMAT is a contract the
+# whole system reads (the steward keys its lifecycle on it, and it becomes the Kafka correlation
+# id), so it belongs somewhere legible. Changing it no longer means editing Java.
+#
+flow:
+  id: 'order-intake'
+  description: 'Accept an order from an external caller, persist it, and enqueue the fulfillment request'
+  ttl: 15s
+  exception: 'v1.order.exception'
+
+first.task: 'v1.order.validate'
+
+tasks:
+  # Runs FIRST, before the identity is composed: f:concat over a null order_id fails inside the
+  # mapping engine, which aborts the flow before any task runs and so never reaches the exception
+  # handler below - the caller would get a bare 500 instead of a 400.
+  - name: 'v1.order.validate'
+    input:
+      - 'input.body -> *'
+    process: 'v1.order.validate'
+    output:
+      - 'result -> model.order'
+    description: 'Reject an incomplete request before anything else happens'
+    execution: sequential
+    next:
+      - 'mint-identity'
+
+  - name: 'mint-identity'
+    input:
+      - 'model.order -> *'
+    process: 'no.op'
+    output:
+      - 'f:uuid() -> model.uuid'
+      - 'f:substring(model.uuid, int(0), int(8)) -> model.suffix'
+    description: 'Generate the unique part of the fulfillment id (8 hex chars is ample here)'
+    execution: sequential
+    next:
+      - 'stage-order'
+
+  - name: 'stage-order'
+    input:
+      - 'model.order.order_id -> order_id'
+      - 'model.order.external_party -> external_party'
+      - 'model.order.route -> route'
+      - 'model.order.payload -> payload'
+      - 'f:concat(text(FUL-), model.order.order_id, text(-), model.suffix) -> fulfillment_id'
+    process: 'v1.order.persist'
+    output:
+      - 'int(202) -> output.status'
+      - 'text(application/json) -> output.header.content-type'
+      - 'result -> output.body'
+    description: 'Persist the order, its routing line and the outbox event in ONE transaction'
+    execution: end
+
+  - name: 'v1.order.exception'
+    input:
+      - 'error.code -> status'
+      - 'error.message -> message'
+    process: 'v1.order.exception'
+    output:
+      - 'result.status -> output.status'
+      - 'text(application/json) -> output.header.content-type'
+      - 'result -> output.body'
+    description: 'Return a structured error instead of a bare stack trace'
+    execution: end

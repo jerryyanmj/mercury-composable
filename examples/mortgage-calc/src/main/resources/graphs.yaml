@@ -1,0 +1,4 @@
+graphs:
+  - 'mortgage-calc'
+
+location: 'classpath:/graph'

@@ -1,0 +1,4 @@
+graphs:
+  - 'plan-funds'
+
+location: 'classpath:/graph'

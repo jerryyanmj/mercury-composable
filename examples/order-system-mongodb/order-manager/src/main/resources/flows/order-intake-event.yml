@@ -1,0 +1,27 @@
+flow:
+  id: 'order-intake-event'
+  description: 'Kafka consumer: ingest an orders.inbound event and persist the order'
+  ttl: 30s
+
+first.task: 'v1.order.validate'
+
+tasks:
+  - name: 'v1.order.validate'
+    input:
+      - 'input.body -> *'
+    process: 'v1.order.validate'
+    description: 'Validate order fields from the Kafka event'
+    output:
+      - 'result -> model.validated'
+    execution: sequential
+    next:
+      - 'v1.order.persist'
+
+  - name: 'v1.order.persist'
+    input:
+      - 'input.body -> *'
+    process: 'v1.order.persist'
+    description: 'Persist the order and stage fulfillment.request in the outbox'
+    output:
+      - 'result -> output.body'
+    execution: end

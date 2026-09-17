@@ -1,0 +1,34 @@
+rest:
+  - service: 'http.flow.adapter'
+    methods: ['POST']
+    url: '/api/v1/mock/order'
+    flow: 'mock-order-flow'
+    timeout: 15s
+    cors: cors_1
+    tracing: true
+
+  - service: 'http.flow.adapter'
+    methods: ['POST']
+    url: '/api/v1/sor/{milestone}'
+    flow: 'sor-milestone-flow'
+    timeout: 15s
+    cors: cors_1
+    tracing: true
+
+  - service: 'http.flow.adapter'
+    methods: ['POST']
+    url: '/api/admin/sor/emit/{sor_reference}/{milestone}/{outcome}'
+    flow: 'sor-emit-flow'
+    timeout: 15s
+    cors: cors_1
+    tracing: true
+
+cors:
+  - id: cors_1
+    options:
+      - 'Access-Control-Allow-Origin: *'
+      - 'Access-Control-Allow-Methods: GET, POST, OPTIONS'
+      - 'Access-Control-Allow-Headers: origin, authorization, accept, content-type'
+      - 'Access-Control-Max-Age: 86400'
+    headers:
+      - 'Access-Control-Allow-Origin: *'
