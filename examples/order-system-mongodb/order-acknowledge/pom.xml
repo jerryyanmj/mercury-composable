@@ -39,12 +39,12 @@
         <dependency>
             <groupId>org.platformlambda</groupId>
             <artifactId>platform-core</artifactId>
-            <version>4.11.9</version>
+            <version>4.12.11</version>
         </dependency>
         <dependency>
             <groupId>org.platformlambda</groupId>
             <artifactId>minimalist-kafka</artifactId>
-            <version>4.11.9</version>
+            <version>4.12.11</version>
         </dependency>
     </dependencies>
 
