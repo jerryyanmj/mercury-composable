@@ -87,7 +87,7 @@ Every `input`/`output` entry is `'source -> target'` (one `->` per rule; a three
 | `input.*` | the HTTP request dataset (`input.body`, `input.header.*`, `input.query.*`, `input.path_parameter.*`, `input.method`, …) |
 | `model.*` | flow-instance state (dot/bracket/`{model.key}` dynamic keys) |
 | `model.parent.*` / `model.root.*` | parent-flow state (in sub-flows) |
-| `error.*` | exception context in a handler (`error.task/.status/.message/.stack`) |
+| `error.*` | exception context in a handler (`error.task/.code/.message/.stack`) |
 | `$.…` | a JSONPath expression |
 | `result` / `input` / `header` / `status` / `datatype` | (in `output` rules) the function's result, the task input, response headers, status code, or result class name |
 | constants | `text(…)`, `int(…)`, `long(…)`, `float(…)`, `double(…)`, `boolean(…)`, `map(k=v,…)`, `file(text:/json:/binary:path)`, `classpath(…)` |
@@ -123,7 +123,9 @@ The full catalog with examples is in [Event Script Syntax](syntax.md#tasks-and-d
 - The engine runs `first.task`, then chains by execution type (`next`/`join`/`pipeline`).
 - A `decision` task routes by the value its `output` maps into `decision`.
 - `flow.exception` catches unhandled task errors; a task's own `exception` overrides it; the handler
-  reads `error.*`. The built-in `resilience.handler` adds retry/backoff.
+  reads `error.*`. The built-in `resilience.handler` adds retry/backoff. With no handler at all,
+  the caller receives the default error body `{type: 'error', status, message}` with the thrown
+  status.
 
 ## Invariants {#invariants}
 

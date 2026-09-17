@@ -102,6 +102,8 @@ nav:
 
   - Orientation:
     - Getting Started: guides/getting-started.md
+    - White Paper: mercury-story.md
+    - The Mercury Family: mercury-family.md
 
   - Foundations:
     - Architecture Overview: guides/architecture.md
@@ -140,8 +142,11 @@ nav:
     - Observability: guides/observability.md
     - Spring Boot Integration: guides/spring-boot.md
     - Event over HTTP: guides/event-over-http.md
+    - HTTP Response Streaming: guides/http-streaming.md
+    - Polyglot Functions (Python & Node.js): guides/polyglot-functions.md
     - Minimalist Kafka: guides/minimalist-kafka.md
     - Twin Kafka (dual cluster): guides/twin-kafka.md
+    - Distributed Cache: guides/distributed-cache.md
     - Schema Registry Mock: guides/schema-registry-mock.md
 
     - Sync-over-Async: guides/sync-over-async.md
@@ -156,7 +161,10 @@ nav:
     - Event Envelope Wire Format: guides/event-envelope-wire-format.md
     - Registration Metadata Contract: guides/registration-metadata-contract.md
     - Interop Test Report (Java ⇄ Rust): test-reports/event-over-http-interop.md
+    - Interop Test Report — Progressive Rendering: test-reports/progressive-rendering-interop.md
     - Interop Test Report — Suspend/Resume: test-reports/suspend-resume-interop.md
+    - Test Report — Streaming Return Route (cross-pod): test-reports/streaming-return-route-cross-pod.md
+    - Test Report — OpenTelemetry forwarder (Dynatrace): test-reports/otel-dynatrace-certification.md
     - Reserved Names & Headers: guides/reserved-names-and-headers.md
     - Actuators & HTTP Client: guides/actuators-and-http-client.md
     - Code Conventions: guides/code-conventions.md

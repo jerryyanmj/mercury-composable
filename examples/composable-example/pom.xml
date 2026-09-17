@@ -3,24 +3,27 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/maven-v4_0_0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
+    <!-- the groupId of an example is the example's own; it is NOT a platform
+         convention (other examples use com.accenture) - use your organization's -->
     <groupId>org.platformlambda</groupId>
     <artifactId>composable-example</artifactId>
     <packaging>jar</packaging>
-    <version>4.11.9</version>
+    <version>4.12.11</version>
     <name>Composable example using Event Script</name>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
         <relativePath/>
     </parent>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <tomcat.version>11.0.24</tomcat.version>
-        <netty.version>4.2.16.Final</netty.version>
-        <jackson-2-bom.version>2.22.1</jackson-2-bom.version>
+        <tomcat.version>11.0.25</tomcat.version>
+        <netty.version>4.2.17.Final</netty.version>
+        <jackson-2-bom.version>2.22.2</jackson-2-bom.version>
+        <jackson-bom.version>3.2.2</jackson-bom.version>
         <log4j2.version>2.26.1</log4j2.version>
         <kafka.version>4.3.1</kafka.version>
         <gson.version>2.14.0</gson.version>
@@ -39,7 +42,7 @@
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-bom</artifactId>
-                <version>2025.0.6</version>
+                <version>2025.0.7</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -50,7 +53,20 @@
         <dependency>
             <groupId>org.platformlambda</groupId>
             <artifactId>event-script-engine</artifactId>
-            <version>4.11.9</version>
+            <version>4.12.11</version>
+        </dependency>
+
+        <!--
+            OpenTelemetry trace forwarding. Carrying the dependency does NOT turn the feature on:
+            the forwarder is @OptionalService("otel.forwarding") and the default is false, so this
+            app behaves exactly as before until DevOps opts in per environment. That "dependency
+            present, feature off" shape is the thing this example demonstrates - and it is why the
+            app doubles as the regression harness for the forwarder.
+        -->
+        <dependency>
+            <groupId>org.platformlambda</groupId>
+            <artifactId>opentelemetry-forwarder</artifactId>
+            <version>4.12.11</version>
         </dependency>
 
         <dependency>

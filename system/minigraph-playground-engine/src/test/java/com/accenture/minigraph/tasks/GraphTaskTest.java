@@ -19,6 +19,8 @@
 package com.accenture.minigraph.tasks;
 
 import com.accenture.minigraph.start.PlaygroundLoader;
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.platformlambda.core.models.AsyncHttpRequest;
@@ -26,9 +28,12 @@ import org.platformlambda.core.models.EventEnvelope;
 import org.platformlambda.core.system.PostOffice;
 import org.platformlambda.core.util.AppConfigReader;
 import org.platformlambda.core.util.MultiLevelMap;
+import org.platformlambda.core.util.Utility;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -45,13 +50,45 @@ class GraphTaskTest {
     private static final String ASYNC_HTTP_CLIENT = "async.http.request";
     private static final long TIMEOUT = 8000;
     private static String target;
+    private static HttpServer stubPeer;
 
     @BeforeAll
-    static void beforeAll() {
+    static void beforeAll() throws IOException {
         PlaygroundLoader.main(new String[0]);
         var config = AppConfigReader.getInstance();
         var port = config.getProperty("rest.server.port");
         target = "http://localhost:" + port;
+        startStubPeer(Utility.getInstance().str2int(config.getProperty("stub.peer.port", "8391")));
+    }
+
+    @AfterAll
+    static void afterAll() {
+        if (stubPeer != null) {
+            stubPeer.stop(0);
+        }
+    }
+
+    /**
+     * A minimal polyglot peer: an /api/event endpoint that decodes the relayed
+     * event envelope and answers with a standard-format reply envelope - the
+     * same wire contract a python or node.js function host speaks.
+     */
+    private static void startStubPeer(int port) throws IOException {
+        stubPeer = HttpServer.create(new InetSocketAddress("127.0.0.1", port), 0);
+        stubPeer.createContext("/api/event", exchange -> {
+            var request = new EventEnvelope(exchange.getRequestBody().readAllBytes());
+            var reply = new EventEnvelope().setBody(Map.of(
+                    "language", "stub",
+                    "route", String.valueOf(request.getTo()),
+                    "echo", request.getBody() instanceof Map? request.getBody() : Map.of()));
+            var payload = reply.toBytes(EventEnvelope.Format.STANDARD);
+            exchange.getResponseHeaders().set("Content-Type", "application/octet-stream");
+            exchange.sendResponseHeaders(200, payload.length);
+            try (var out = exchange.getResponseBody()) {
+                out.write(payload);
+            }
+        });
+        stubPeer.start();
     }
 
     @SuppressWarnings("unchecked")
@@ -156,6 +193,22 @@ class GraphTaskTest {
         log.info("graph.task exception handler routing works");
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void foreignRouteViaEventOverHttp() throws TimeoutException {
+        // 'polyglot.stub.function' is not registered locally - it resolves through the
+        // declarative event-over-http map (yaml.event.over.http) to the stub peer, the
+        // way python/node.js polyglot functions join a 'knowledge graph'
+        var response = runGraph("unit-test-task-7", Map.of("text", "polyglot"), Map.of());
+        assertEquals(200, response.getStatus());
+        assertInstanceOf(Map.class, response.getBody());
+        var mm = new MultiLevelMap((Map<String, Object>) response.getBody());
+        assertEquals("stub", mm.getElement("language"));
+        assertEquals("polyglot.stub.function", mm.getElement("route"));
+        assertEquals("polyglot", mm.getElement("echo.text"));
+        log.info("graph.task reached a foreign route through the event-over-http map");
+    }
+
     @Test
     void missingTaskRouteFailsFast() throws TimeoutException {
         var response = runGraph("unit-test-task-5", Map.of("hello", "world"), Map.of());
@@ -163,6 +216,23 @@ class GraphTaskTest {
         assertTrue(String.valueOf(response.getBody()).contains("does not exist"),
                 "unexpected error response: " + response.getBody());
         log.info("graph.task fails fast for a missing route");
+    }
+
+    @Test
+    void invalidOutputMappingSurfacesAsError() throws TimeoutException {
+        // an output-mapping LHS may only be a constant or a result./model./<node>. element.
+        // An illegal 'input.*' LHS throws while handling the task response, INSIDE the async
+        // completion callback - before guardedCompletion the Mono never terminated, so the
+        // caller waited out its TTL with no error logged; now it returns the mapping error
+        var response = runGraph("unit-test-task-8", Map.of("hello", "world"), Map.of());
+        assertNotEquals(200, response.getStatus());
+        var error = String.valueOf(response.getBody());
+        // the message names the node and the offending mapping, and points at the input-side-only rule
+        assertTrue(error.contains("Invalid output mapping 'input.body.hello -> output.body.echo' in node bad-output-task"),
+                "unexpected error response: " + error);
+        assertTrue(error.contains("'input.*' is valid only on the input side"),
+                "message should name the input-side-only rule: " + error);
+        log.info("graph.task invalid output mapping surfaces as an error instead of a timeout");
     }
 
     @Test

@@ -26,10 +26,14 @@ import org.junit.jupiter.api.Test;
 import org.platformlambda.core.util.ConfigReader;
 import org.platformlambda.core.util.common.ConfigBase;
 
+import java.util.Map;
 import java.util.Properties;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * An empty {@link ConfigReader} is a no-op {@link ConfigBase} (every {@code getProperty(key, default)}
@@ -45,8 +49,9 @@ class KafkaClientConfigTest {
     @Test
     void producerLoadsTemplateAndPinsSerializers() {
         Properties p = KafkaClientConfig.producerProperties(EMPTY);
-        assertEquals(StringSerializer.class.getName(), p.getProperty("key.serializer"));
-        assertEquals(ByteArraySerializer.class.getName(), p.getProperty("value.serializer"));
+        assertEquals(StringSerializer.class, p.get("key.serializer"),
+                "set as a Class object, not a name, so no classloader lookup can lose it");
+        assertEquals(ByteArraySerializer.class, p.get("value.serializer"));
         assertEquals("all", p.getProperty("acks"), "non-pinned value comes from the template");
         assertNotNull(p.getProperty("bootstrap.servers"), "connection comes from the template");
     }
@@ -54,8 +59,9 @@ class KafkaClientConfigTest {
     @Test
     void producerDefaultsToSimpleRandomPartitioner() {
         Properties p = KafkaClientConfig.producerProperties(EMPTY);
-        assertEquals(SimpleRandomPartitioner.class.getName(), p.getProperty("partitioner.class"),
-                "random distribution is the default when the template does not choose a partitioner");
+        assertEquals(SimpleRandomPartitioner.class, p.get("partitioner.class"),
+                "random distribution is the default when the template does not choose a partitioner, "
+                        + "supplied as a Class object so no classloader lookup can lose it");
     }
 
     @Test
@@ -69,8 +75,67 @@ class KafkaClientConfigTest {
     @Test
     void consumerLoadsTemplateAndPinsDeserializers() {
         Properties p = KafkaClientConfig.consumerProperties(EMPTY);
-        assertEquals(StringDeserializer.class.getName(), p.getProperty("key.deserializer"));
-        assertEquals(ByteArrayDeserializer.class.getName(), p.getProperty("value.deserializer"));
+        assertEquals(StringDeserializer.class, p.get("key.deserializer"),
+                "set as a Class object, not a name, so no classloader lookup can lose it");
+        assertEquals(ByteArrayDeserializer.class, p.get("value.deserializer"));
         assertNotNull(p.getProperty("bootstrap.servers"));
+    }
+
+    private static ConfigBase config(Map<String, Object> values) {
+        return new ConfigReader().load(values);
+    }
+
+    @Test
+    void bothClientsAreEnabledByDefault() {
+        assertTrue(KafkaClientConfig.producerEnabled(EMPTY));
+        assertTrue(KafkaClientConfig.consumerEnabled(EMPTY));
+    }
+
+    @Test
+    void onlyTheLiteralFalseDisablesAClient() {
+        assertFalse(KafkaClientConfig.producerEnabled(config(Map.of("kafka.producer.enabled", "false"))));
+        assertFalse(KafkaClientConfig.consumerEnabled(config(Map.of("kafka.consumer.enabled", " FALSE "))),
+                "case and surrounding blanks are tolerated");
+        assertTrue(KafkaClientConfig.producerEnabled(config(Map.of("kafka.producer.enabled", "true"))));
+        // a veto, not a trigger: anything that is not 'false' leaves the client on
+        assertTrue(KafkaClientConfig.producerEnabled(config(Map.of("kafka.producer.enabled", "no"))));
+    }
+
+    @Test
+    void eachClusterReadsItsOwnFlag() {
+        ConfigBase config = config(Map.of("kafka.producer.enabled", "true",
+                "secondary.kafka.producer.enabled", "false"));
+        assertTrue(KafkaClientConfig.producerEnabled(config));
+        assertFalse(KafkaClientConfig.clientEnabled(config, "secondary.kafka.producer.enabled"),
+                "a bridge disables one cluster's producer without touching the other's");
+    }
+
+    @Test
+    void healthProbeUsesTheConsumerTemplateByDefault() {
+        Properties p = KafkaClientConfig.healthProbeProperties(EMPTY);
+        assertEquals(StringDeserializer.class, p.get("key.deserializer"),
+                "set as a Class object, not a name, so no classloader lookup can lose it");
+        assertNotNull(p.getProperty("auto.offset.reset"), "the consumer template is used verbatim");
+    }
+
+    @Test
+    void healthProbeFallsBackToTheProducerTemplateOnAProduceOnlyLeg() {
+        Properties p = KafkaClientConfig.healthProbeProperties(config(
+                Map.of("kafka.consumer.enabled", "false")));
+        assertNotNull(p.getProperty("bootstrap.servers"),
+                "connection settings are named identically in both client surfaces");
+        assertEquals(ByteArrayDeserializer.class, p.get("value.deserializer"),
+                "the probe is still a consumer, so the wire contract is pinned");
+        assertNull(p.getProperty("acks"),
+                "producer-only settings are filtered out rather than logged as unknown config");
+        assertNull(p.getProperty("auto.offset.reset"), "the consumer template was not consulted");
+    }
+
+    @Test
+    void healthProbeKeepsTheConsumerTemplateWhenBothClientsAreDisabled() {
+        Properties p = KafkaClientConfig.healthProbeProperties(config(
+                Map.of("kafka.consumer.enabled", "false", "kafka.producer.enabled", "false")));
+        assertNotNull(p.getProperty("auto.offset.reset"),
+                "an inert module has nothing to probe; the consumer template stays the default");
     }
 }

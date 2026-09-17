@@ -1,6 +1,8 @@
 import unittest
 import importlib.util
+import hashlib
 import os
+import re
 import tempfile
 from pathlib import Path
 import sys
@@ -118,7 +120,7 @@ class TestDanglingCrossFile(unittest.TestCase):
 """)
             os.makedirs(os.path.join(mem, "sessions"), exist_ok=True)
 
-            cont, pinned, arch, extra, sessions, refs = memory_lint.load_repo(root)
+            cont, pinned, arch, extra, sessions, refs, threads = memory_lint.load_repo(root)
             # the vision fact is available for link resolution but NOT counted as a fact
             self.assertIn("new-fact", extra)
             self.assertNotIn("new-fact", cont)
@@ -338,6 +340,40 @@ class TestContinuityHealth(unittest.TestCase):
         self.assertIn("Condense shipped decisions", w[0])
         self.assertNotIn("a review is due to lean it down", w[0])
 
+    def test_closed_thread_bloat_counts_only_closed_blocks(self):
+        # (11) counting rule: non-empty lines inside `- [x]` blocks (checkbox through
+        # footer), a block ending at the next open thread or heading. Open threads and
+        # headings never count (the bloat class is completed ship narratives —
+        # mercury-composable field report, 64% of continuity).
+        cont_text = (
+            "## Open Threads\n\n"
+            "- [x] **Shipped X.** line two of the record\n"
+            "  more narrative\n"
+            "  <!-- id: shipped-x | created: 2026-01-01 | last_used: 2026-01-01 "
+            "| uses: 1 | tier: active -->\n"
+            "\n"
+            "- [ ] **Open thing.** must not count\n"
+            "  narrative of the open thread\n"
+        )
+        self.assertEqual(memory_lint.closed_narrative_lines(cont_text), 3)
+        self.assertEqual(memory_lint.check_closed_thread_bloat(cont_text, 150), [])
+        w = memory_lint.check_closed_thread_bloat(cont_text, 2)
+        self.assertEqual(len(w), 1)
+        self.assertIn("[closed-thread-bloat] 3 line(s)", w[0])
+        self.assertIn("condense them to 3-6-line stubs", w[0])
+        self.assertIn("origin session log", w[0])
+
+    def test_closed_narrative_knob_default_and_parse(self):
+        with tempfile.TemporaryDirectory() as root:
+            self.assertEqual(
+                memory_lint.load_windows(root)["closed_narrative_max_lines"], 150)
+            os.makedirs(os.path.join(root, "memory"), exist_ok=True)
+            with open(os.path.join(root, "memory", "decay-policy.md"), "w",
+                      encoding="utf-8") as f:
+                f.write("- closed_narrative_max_lines: 99\n")
+            self.assertEqual(
+                memory_lint.load_windows(root)["closed_narrative_max_lines"], 99)
+
     def test_healthy_ok(self):
         cont_text = "- **last_review:** 2026-06-27 | through 2026-06-27-120000\n"
         sessions = ["2026-06-27-120000.md"]
@@ -382,6 +418,615 @@ class TestStaleMetadata(unittest.TestCase):
         cont = {"open-fact": {"tier": "working", "created": "2026-01-01"}}
         refs = [{"open-fact"}, {"open-fact"}, set()]
         self.assertEqual(memory_lint.check_stale_metadata(cont, {"open-fact"}, refs, self.STEMS, 3, 2, 4), [])
+
+
+class TestSecretMaterial(unittest.TestCase):
+    # (10) [secret-material]: committed memory surfaces must not carry credentials/PII
+    # (field incident: a rendered kafka JAAS secret pasted into a session log, caught by a
+    # client-side DLP scanner). Advisory; must NEVER echo the matched value into the report.
+    def _env_value(self, name, value):
+        previous = os.environ.get(name)
+        self.addCleanup(
+            lambda: os.environ.pop(name, None)
+            if previous is None
+            else os.environ.__setitem__(name, previous)
+        )
+        os.environ[name] = value
+        return os.environ[name]
+
+    def _secret(self, name, length=24, prefix="", uppercase=False):
+        digest = hashlib.sha256(name.encode("utf-8")).hexdigest()
+        material = "".join(ch.upper() if i % 2 else ch for i, ch in enumerate(digest))
+        if uppercase:
+            material = material.upper()
+        return self._env_value(name, prefix + material[:length])
+
+    @staticmethod
+    def _setup(root, files):
+        mem = os.path.join(root, "memory")
+        os.makedirs(mem, exist_ok=True)
+        defaults = {"continuity.md": "# c\nclean\n"}
+        for rel, body in {**defaults, **files}.items():
+            full = os.path.join(mem, rel)
+            os.makedirs(os.path.dirname(full), exist_ok=True)
+            with open(full, "w", encoding="utf-8") as f:
+                f.write(body)
+
+    def test_credential_assignment_flagged_value_not_echoed(self):
+        secret = self._secret("AGENT_MEMORY_TEST_ASSIGNMENT")
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-06-120000.md":
+                    f"# Session\n```\nbearer.auth.client.secret={secret}\n```\n",
+            })
+            w = memory_lint.check_secret_material(root)
+            self.assertEqual(len(w), 1)
+            self.assertIn("[secret-material]", w[0])
+            self.assertIn("memory/sessions/2026-08-06-120000.md:3", w[0])
+            self.assertIn("credential-assignment", w[0])
+            self.assertIn("key 'bearer.auth.client.secret'", w[0])
+            self.assertNotIn(secret, w[0])  # the report must never amplify the secret
+
+    def test_placeholders_are_safe_but_nonempty_defaults_flag(self):
+        placeholder = self._env_value(
+            "AGENT_MEMORY_TEST_PLACEHOLDER", "change" + "me-please"
+        )
+        fallback = self._secret("AGENT_MEMORY_TEST_TEMPLATE_FALLBACK")
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-06-120000.md": "\n".join([
+                    "# Session",
+                    "clientSecret='${KAFKA_CLIENT_SECRET}'",
+                    "password: (REDACTED)",
+                    "api_key: <your-key-here>",
+                    "client_secret: {{VAULT_REF}}",
+                    "client_secret: placeholder-value",
+                    "access_token: 2026-08-06-153509",
+                    "max_tokens_password: 128000000",
+                    f"password={placeholder}",
+                    # env-var references with default-value / dotted forms are placeholders too
+                    # (field FP, mercury-composable 2026-08-13 — line quoted VERBATIM below):
+                    "  (`redis.host`/`redis.port`/`redis.password=${REDIS_PASSWORD:}`/`redis.ssl`/`redis.database`/`redis.timeout.ms`)",
+                    "client_secret: ${vault.paths.kafka}",
+                    f"password=${{REDIS_URL:-{fallback}}}",
+                ]) + "\n",
+            })
+            w = memory_lint.check_secret_material(root)
+            self.assertEqual(len(w), 1)
+            self.assertIn("credential-assignment", w[0])
+            self.assertIn("(1 hit(s)", w[0])
+
+    def test_known_token_shapes_flagged(self):
+        github_token = self._secret(
+            "AGENT_MEMORY_TEST_GITHUB_TOKEN", length=40, prefix="ghp_"
+        )
+        aws_key = self._secret(
+            "AGENT_MEMORY_TEST_AWS_KEY", length=16, prefix="AKIA", uppercase=True
+        )
+        private_key_header = self._env_value(
+            "AGENT_MEMORY_TEST_PRIVATE_KEY_HEADER",
+            "-" * 5 + "BEGIN " + "RSA " + "PRIVATE " + "KEY" + "-" * 5,
+        )
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-06-120000.md": "\n".join([
+                    "# Session",
+                    f"pushed with {github_token}",
+                    f"aws key {aws_key}",
+                    private_key_header,
+                ]) + "\n",
+            })
+            cats = "\n".join(memory_lint.check_secret_material(root))
+            self.assertIn("github-token", cats)
+            self.assertIn("aws-access-key-id", cats)
+            self.assertIn("private-key-block", cats)
+
+    def test_email_pii_flagged_public_forms_excluded(self):
+        private_email = self._env_value(
+            "AGENT_MEMORY_TEST_PRIVATE_EMAIL",
+            "fixture.person" + "@" + "some-client-corp" + "." + "com",
+        )
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-06-120000.md": "\n".join([
+                    "# Session",
+                    f"contact {private_email} about rotation",
+                    "Co-Authored-By: Claude Code <noreply@anthropic.com>",
+                    "tagger 12345+acn-user@users.noreply.github.com",
+                    "remote git@github.com:acn-ericlaw/agent-memory.git",
+                    "docs use alice@example.com",
+                ]) + "\n",
+            })
+            w = memory_lint.check_secret_material(root)
+            self.assertEqual(len(w), 1)
+            self.assertIn("email", w[0])
+            self.assertIn("(1 hit(s)", w[0])
+
+    def test_ssn_card_luhn_and_dates_not_confused(self):
+        ssn = self._env_value(
+            "AGENT_MEMORY_TEST_SSN", "-".join(("123", "45", "6789"))
+        )
+        card = self._env_value(
+            "AGENT_MEMORY_TEST_CARD", " ".join(("4539", "1488", "0343", "6467"))
+        )
+        invalid_card = self._env_value(
+            "AGENT_MEMORY_TEST_INVALID_CARD", " ".join(("1234", "5678", "9012", "3456"))
+        )
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-06-120000.md": "\n".join([
+                    "# Session",
+                    f"ssn {ssn} leaked",
+                    f"card {card} on file",
+                    "dated 2026-08-06, stem 2026-08-06-153509, v4.33.0",  # none of these
+                    f"not a card: {invalid_card}",
+                ]) + "\n",
+            })
+            cats = "\n".join(memory_lint.check_secret_material(root))
+            self.assertIn("ssn", cats)
+            self.assertIn("payment-card", cats)
+            self.assertIn("(1 hit(s)", [x for x in memory_lint.check_secret_material(root) if "payment-card" in x][0])
+
+    def test_home_path_flagged_ci_users_excluded(self):
+        private_home = self._env_value(
+            "AGENT_MEMORY_TEST_HOME_PATH",
+            "/" + "Users" + "/" + "fixture-user" + "/projects/foo",
+        )
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "continuity.md": f"# c\n- repo: {private_home}\n",
+                "sessions/2026-08-06-120000.md": "# Session\nCI ran in /home/runner/work and ~/sandbox/foo\n",
+            })
+            w = memory_lint.check_secret_material(root)
+            self.assertEqual(len(w), 1)
+            self.assertIn("home-path", w[0])
+            self.assertIn("memory/continuity.md:2", w[0])
+
+    def test_waiver_line_and_placeholder_home_paths_not_flagged(self):
+        # A log DOCUMENTING a leak cleanup legitimately quotes the patterns — the explicit
+        # line waiver keeps the advisory signal, not noise; `/Users/...` is a placeholder.
+        waived_secret = self._secret("AGENT_MEMORY_TEST_WAIVED_SECRET")
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-06-120000.md": "\n".join([
+                    "# Session",
+                    f"the leaked line was password={waived_secret} <!-- lint:allow-secret-material -->",
+                    "docs quote `/Users/...` as the placeholder form",
+                ]) + "\n",
+            })
+            self.assertEqual(memory_lint.check_secret_material(root), [])
+
+    def test_quoted_assignments_authorization_and_embedded_placeholders_flagged(self):
+        quoted_secret = self._secret("AGENT_MEMORY_TEST_QUOTED_SECRET")
+        authorization_secret = self._secret("AGENT_MEMORY_TEST_AUTHORIZATION")
+        embedded_secret = self._secret("AGENT_MEMORY_TEST_EMBEDDED_PLACEHOLDER")
+        fallback_secret = self._secret("AGENT_MEMORY_TEST_NONEMPTY_FALLBACK")
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-13-120000.md": "\n".join([
+                    "# Session",
+                    f'{{"client_secret": "{quoted_secret}"}}',
+                    f"Authorization: Bearer {authorization_secret}",
+                    f"client_secret=dummy{embedded_secret}",
+                    f"client_secret=${embedded_secret}",
+                    f"client_secret=${{CLIENT_SECRET:-{fallback_secret}}}",
+                ]) + "\n",
+            })
+            w = memory_lint.check_secret_material(root)
+            self.assertEqual(len(w), 2)
+            joined = "\n".join(w)
+            self.assertIn("credential-assignment", joined)
+            self.assertIn("(4 hit(s)", joined)
+            self.assertIn("authorization-header", joined)
+            self.assertNotIn(quoted_secret, joined)
+            self.assertNotIn(authorization_secret, joined)
+
+    def test_all_caps_enum_constants_are_key_scoped(self):
+        # First field FP (mercury-composable, 2026-08-13): config docs quoted in a session log —
+        # a credential-keyed property set to an ALL-CAPS enum constant is a source TYPE, not a
+        # credential — including the markdown inline-code form (`key=VALUE`), where the closing
+        # backtick must not ride into the value (v4.33.2, the form the real field line used).
+        # Mixed-case values on the same key class must still flag, backticked or bare.
+        mixed_secret = self._secret("AGENT_MEMORY_TEST_MIXED_SECRET")
+        backticked_secret = self._secret("AGENT_MEMORY_TEST_BACKTICKED_SECRET")
+        uppercase_secret = self._secret(
+            "AGENT_MEMORY_TEST_UPPERCASE_SECRET", length=24, uppercase=True
+        )
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-13-120000.md": "\n".join([
+                    "# Session",
+                    "bearer.auth.credentials.source: OAUTHBEARER",
+                    "sasl.password.mode=STATIC_TOKEN",
+                    "markdown form: `bearer.auth.credentials.source=OAUTHBEARER` + `bearer.auth.issuer.endpoint.url` /",
+                    f"still real: client_secret={mixed_secret}",
+                    f"backticked real: `api_key={backticked_secret}`",
+                    f"uppercase real: client_secret={uppercase_secret}",
+                ]) + "\n",
+            })
+            w = memory_lint.check_secret_material(root)
+            self.assertEqual(len(w), 1)
+            self.assertIn("key 'client_secret'", w[0])
+            self.assertIn("(3 hit(s)", w[0])
+
+    def test_placeholder_exemptions_tolerate_trailing_sentence_punctuation(self):
+        # Field note (mercury-composable, 2026-09-17): a comment SENTENCE mentioning a setting —
+        # `credentials.source=OAUTHBEARER,` — flagged while the bare setting was exempt. The
+        # assignment capture stops only at whitespace/quotes/backticks/`;`, so trailing sentence
+        # punctuation rode into the value and defeated every fullmatch exemption except the knob's
+        # (placeholder words, templates, angle placeholders alike). v4.40.1: retry once with `).,`
+        # stripped — AFTER the as-is pass, so `$(…)` keeps matching; a real value still flags.
+        real = self._secret("AGENT_MEMORY_TEST_TRAILING_PUNCT_REAL")
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-09-17-120000.md": "\n".join([
+                    "# Session",
+                    "# with credentials.source=OAUTHBEARER, the provider validates the token",
+                    "set credentials.source=OAUTHBEARER.",
+                    "(credentials.source=OAUTHBEARER)",
+                    "e.g. password=changeme.",
+                    "e.g. client.secret=${CLIENT_SECRET}.",
+                    "e.g. api.key=<your-key-here>,",
+                    "still exempt as-is: client.secret=$(vault_read_secret_app)",
+                    f"still real, punctuation or not: client_secret={real}.",
+                ]) + "\n",
+            })
+            w = memory_lint.check_secret_material(root)
+            self.assertEqual(len(w), 1)
+            self.assertIn("key 'client_secret'", w[0])
+            self.assertIn("(1 hit(s)", w[0])
+
+    def test_self_knob_settings_are_not_credentials(self):
+        # Field FP (mercury-composable, 2026-08-19): the pre-commit guard's own blocking message
+        # prints "AGENT_MEMORY_SECRET_GUARD=advisory", so a session log documenting that guidance
+        # self-flagged (the key contains SECRET; "advisory" meets the value floor). The knob's
+        # documented settings are exempt — but ONLY those values: an arbitrary value under the
+        # same key must still flag (no smuggling envelope). Fixture lines quote the guard's
+        # guidance line and the field repro line VERBATIM (v4.33.2 lesson) — the guidance line's
+        # closing paren rides into the captured value, which the exemption must tolerate.
+        opaque = self._secret("AGENT_MEMORY_TEST_KNOB_OPAQUE")
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-19-120000.md": "\n".join([
+                    "# Session",
+                    "  git commit --no-verify    (or opt down: AGENT_MEMORY_SECRET_GUARD=advisory)",
+                    "Opt down with AGENT_MEMORY_SECRET_GUARD=advisory if needed.",
+                    "The default is AGENT_MEMORY_SECRET_GUARD=enforcing.",
+                    "inline form: `AGENT_MEMORY_SECRET_GUARD=advisory`",
+                    "git-config spelling: `agent-memory.secretguard=advisory`",
+                ]) + "\n",
+            })
+            self.assertEqual(memory_lint.check_secret_material(root), [])
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "sessions/2026-08-19-130000.md":
+                    f"# Session\nAGENT_MEMORY_SECRET_GUARD={opaque}\n",
+            })
+            w = memory_lint.check_secret_material(root)
+            self.assertEqual(len(w), 1)
+            self.assertIn("key 'AGENT_MEMORY_SECRET_GUARD'", w[0])
+            self.assertNotIn(opaque, w[0])
+
+    def test_archive_scanned_and_counts_aggregated(self):
+        password = self._secret("AGENT_MEMORY_TEST_ARCHIVE_PASSWORD")
+        api_key = self._secret("AGENT_MEMORY_TEST_ARCHIVE_API_KEY")
+        client_secret = self._secret("AGENT_MEMORY_TEST_ARCHIVE_CLIENT_SECRET")
+        with tempfile.TemporaryDirectory() as root:
+            self._setup(root, {
+                "archive/2026-Q2.md":
+                    f"# a\npassword={password}\napi_key={api_key}\n"
+                    f"client_secret={client_secret}\n",
+            })
+            w = memory_lint.check_secret_material(root)
+            self.assertEqual(len(w), 1)  # one report per file per category
+            self.assertIn("credential-assignment", w[0])
+            self.assertIn("(3 hit(s), first at line 2)", w[0])
+            self.assertIn("memory/archive/2026-Q2.md:2", w[0])
+
+
+class TestScanFilesMode(unittest.TestCase):
+    # (v4.34.0) `--scan-files`: credential-class scan of arbitrary config files — the
+    # pre-commit hook / CI-wrapper surface behind the field incident (a Postman JSON and an
+    # OpenShift YAML with live credentials, committed outside memory/).
+    def _env_value(self, name, value):
+        previous = os.environ.get(name)
+        self.addCleanup(
+            lambda: os.environ.pop(name, None)
+            if previous is None
+            else os.environ.__setitem__(name, previous)
+        )
+        os.environ[name] = value
+        return os.environ[name]
+
+    def _secret(self, name):
+        import hashlib
+        digest = hashlib.sha256(name.encode("utf-8")).hexdigest()
+        material = "".join(ch.upper() if i % 2 else ch for i, ch in enumerate(digest))
+        return self._env_value(name, material[:24])
+
+    def test_scan_files_is_credential_class_only(self):
+        secret = self._secret("AGENT_MEMORY_TEST_SCANFILES")
+        with tempfile.TemporaryDirectory() as root:
+            props = os.path.join(root, "src", "app.properties")
+            os.makedirs(os.path.dirname(props))
+            with open(props, "w", encoding="utf-8") as f:
+                f.write(f"spring.datasource.password={secret}\n")
+            pj = os.path.join(root, "package.json")
+            with open(pj, "w", encoding="utf-8") as f:
+                f.write('{"author": "Dev One <dev.one@some-client-corp.com>"}\n')
+            w = memory_lint.scan_secret_files([props, pj])
+            self.assertEqual(len(w), 1)  # the email is a memory-layer check, not a config one
+            self.assertIn("credential-assignment", w[0])
+            self.assertIn(props.replace(os.sep, "/"), w[0])
+            self.assertNotIn(secret, w[0])  # never echo the value
+
+    def test_scan_files_config_placeholder_forms_not_flagged(self):
+        # The four FP classes from the 661-file field probe (2026-08-14) must stay quiet:
+        # single-brace JAAS template, template-with-placeholder-default, test-affixed fixture,
+        # dotted route reference in an authorization value — plus a GH-Actions expression.
+        with tempfile.TemporaryDirectory() as root:
+            cfg = os.path.join(root, "conf.yaml")
+            with open(cfg, "w", encoding="utf-8") as f:
+                f.write("\n".join([
+                    "#sasl.jaas.config=…PlainLoginModule required username={CHANGE_THIS} password={CHANGE_THIS};",
+                    "authorization: '${DEMO_PEER_TOKEN:demo}'",
+                    "bearer.auth.client.secret=test-secret",
+                    '- "authorization: v1.basic.auth"',
+                    "api_key: ${{secrets.SR_KEY}}",
+                ]) + "\n")
+            self.assertEqual(memory_lint.scan_secret_files([cfg]), [])
+
+    def test_scan_files_postman_split_form(self):
+        # Postman's `"key": "client_secret", "value": "…"` convention — the literal incident
+        # artifact class; a `{{variable}}` reference stays a placeholder.
+        secret = self._secret("AGENT_MEMORY_TEST_POSTMAN")
+        with tempfile.TemporaryDirectory() as root:
+            col = os.path.join(root, "collection.json")
+            with open(col, "w", encoding="utf-8") as f:
+                f.write('{"key": "client_secret", "value": "' + secret + '"},\n'
+                        '{"key": "client_secret", "value": "{{client_secret}}"}\n')
+            w = memory_lint.scan_secret_files([col])
+            self.assertEqual(len(w), 1)
+            self.assertIn("key 'client_secret'", w[0])
+            self.assertIn("(1 hit(s)", w[0])
+            self.assertNotIn(secret, w[0])
+
+
+class TestShippedScriptHygiene(unittest.TestCase):
+    def test_scanner_neutral_identifiers(self):
+        # Field regression (Snyk, enterprise deployment, 2026-08-25): hardcoded-secret
+        # detectors key on identifier-contains-trigger-word + string-literal assignment,
+        # and the prose guidance constant's old name rejected downstream builds. Prose
+        # constants in the shipped scripts must stay scanner-neutral. Trigger words are
+        # assembled at runtime so this test never commits the flagged shape itself.
+        words = ["SEC" + "RET", "TOK" + "EN", "PASS" + "WORD", "PASS" + "WD",
+                 "CREDEN" + "TIAL", "API" + "KEY", "API_" + "KEY"]
+        assign_rx = re.compile(
+            r"^[ \t]*(?:const |let |var )?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\(?\s*[\"'`]",
+            re.M)
+        here = Path(__file__).resolve().parent
+        offenders = []
+        for f in sorted(here.iterdir()):
+            if f.suffix not in (".py", ".mjs"):
+                continue
+            for m in assign_rx.finditer(f.read_text(encoding="utf-8")):
+                ident = m.group(1).upper()
+                if any(w in ident for w in words):
+                    offenders.append(f"{f.name}: {m.group(1)}")
+        self.assertEqual(offenders, [])
+
+
+class TestThreadFiles(unittest.TestCase):
+    # (12) the thread-file contract (v4.39.0): one Open Thread per file, named after its
+    # footer id. Filename = identity is what makes concurrent thread work merge-free.
+    VALID = """- [ ] **Ship it.** The plan.
+  <!-- id: ship-it | created: 2026-09-01 | last_used: 2026-09-01 | uses: 1 | tier: working -->
+"""
+
+    def test_valid_thread_file_passes(self):
+        self.assertEqual(memory_lint.check_thread_files([("thread-ship-it.md", self.VALID)]), [])
+
+    def test_misnamed_file_flagged(self):
+        out = memory_lint.check_thread_files([("thread-wrong-name.md", self.VALID)])
+        self.assertEqual(len(out), 1)
+        self.assertIn("[thread-file]", out[0])
+        self.assertIn("should be named thread-ship-it.md", out[0])
+
+    def test_missing_footer_flagged(self):
+        out = memory_lint.check_thread_files([("thread-x.md", "- [ ] no footer here\n")])
+        self.assertEqual(len(out), 1)
+        self.assertIn("no fact footer", out[0])
+
+    def test_two_footers_flagged(self):
+        two = self.VALID + "- [ ] second\n  <!-- id: other | created: 2026-09-01 | last_used: 2026-09-01 | uses: 1 | tier: working -->\n"
+        out = memory_lint.check_thread_files([("thread-ship-it.md", two)])
+        self.assertEqual(len(out), 1)
+        self.assertIn("holds 2 footers", out[0])
+
+    def test_non_bullet_start_flagged(self):
+        text = "# A heading instead of the block\n" + self.VALID
+        out = memory_lint.check_thread_files([("thread-ship-it.md", text)])
+        self.assertEqual(len(out), 1)
+        self.assertIn("does not start with", out[0])
+
+
+class TestDuplicateIds(unittest.TestCase):
+    # (13) an id exists exactly once across the live layer — the backstop for a same-id
+    # creation collision on parallel branches (the silent-fork shape).
+    def test_unique_ids_pass(self):
+        cont = "- fact\n  <!-- id: a-fact | tier: active -->\n"
+        threads = [("thread-b-thread.md", "- [ ] t\n  <!-- id: b-thread | tier: working -->\n")]
+        self.assertEqual(memory_lint.check_duplicate_ids(cont, threads), [])
+
+    def test_id_in_continuity_and_thread_file_flagged(self):
+        cont = "- fact\n  <!-- id: same-id | tier: active -->\n"
+        threads = [("thread-same-id.md", "- [ ] t\n  <!-- id: same-id | tier: working -->\n")]
+        out = memory_lint.check_duplicate_ids(cont, threads)
+        self.assertEqual(len(out), 1)
+        self.assertIn("[duplicate-id] same-id has 2 footers", out[0])
+        self.assertIn("memory/open-threads/thread-same-id.md", out[0])
+
+    def test_id_in_two_thread_files_flagged(self):
+        threads = [
+            ("thread-same-id.md", "- [ ] t\n  <!-- id: same-id | tier: working -->\n"),
+            ("thread-other.md", "- [ ] t2\n  <!-- id: same-id | tier: working -->\n"),
+        ]
+        out = memory_lint.check_duplicate_ids("# Continuity\n", threads)
+        self.assertEqual(len(out), 1)
+        self.assertIn("same-id", out[0])
+
+
+class TestDuplicateStateKeys(unittest.TestCase):
+    # (14) Project State fields are scalars — absorbed from PR #27 (Roland Heusser):
+    # the backstop for a union-style hand merge that kept both sides of a bumped scalar.
+    def _root(self, cont_text):
+        d = tempfile.mkdtemp()
+        os.makedirs(os.path.join(d, "memory"), exist_ok=True)
+        with open(os.path.join(d, "memory", "continuity.md"), "w", encoding="utf-8") as f:
+            f.write(cont_text)
+        return d
+
+    def test_duplicate_scalar_flagged_with_both_lines(self):
+        root = self._root(
+            "# C\n\n## Project State\n\n- **project:** x\n- **last_review:** 2026-08-01\n"
+            "- **last_review:** 2026-08-20\n\n## Key Decisions\n"
+        )
+        out = memory_lint.check_duplicate_state_keys(root)
+        self.assertEqual(len(out), 1)
+        self.assertIn("[duplicate-state-key]", out[0])
+        self.assertIn("'last_review' is set twice", out[0])
+        self.assertIn("also line 6", out[0])
+
+    def test_repeated_key_outside_project_state_ok(self):
+        root = self._root(
+            "# C\n\n## Project State\n\n- **project:** x\n\n## Key Decisions\n\n"
+            "- **project:** mention one\n- **project:** mention two\n"
+        )
+        self.assertEqual(memory_lint.check_duplicate_state_keys(root), [])
+
+    def test_unique_scalars_ok(self):
+        root = self._root("# C\n\n## Project State\n\n- **project:** x\n- **status:** y\n")
+        self.assertEqual(memory_lint.check_duplicate_state_keys(root), [])
+
+
+class TestThreadLayerIntegration(unittest.TestCase):
+    # Thread files are live continuity-domain facts: load_repo merges their footers and
+    # checkbox pinning; conflict markers and closed-thread bloat see them too.
+    def _layer(self):
+        root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(root, "memory", "sessions"), exist_ok=True)
+        os.makedirs(os.path.join(root, "memory", "open-threads"), exist_ok=True)
+        with open(os.path.join(root, "memory", "continuity.md"), "w", encoding="utf-8") as f:
+            f.write("# Continuity\n\n## Project State\n\n- **project:** t\n")
+        return root
+
+    def test_load_repo_merges_thread_facts_and_pins(self):
+        root = self._layer()
+        with open(os.path.join(root, "memory", "open-threads", "thread-live-gap.md"), "w", encoding="utf-8") as f:
+            f.write("- [ ] **Gap.** open work\n  <!-- id: live-gap | created: 2026-09-01 | last_used: 2026-09-01 | uses: 1 | tier: working -->\n")
+        with open(os.path.join(root, "memory", "open-threads", "thread-done-gap.md"), "w", encoding="utf-8") as f:
+            f.write("- [x] **Done.** closed work\n  <!-- id: done-gap | created: 2026-09-01 | last_used: 2026-09-01 | uses: 1 | tier: working -->\n")
+        cont, pinned, arch, extra, sessions, refs, threads = memory_lint.load_repo(root)
+        self.assertIn("live-gap", cont)
+        self.assertIn("done-gap", cont)
+        self.assertIn("live-gap", pinned)     # unchecked -> pinned, never decays
+        self.assertNotIn("done-gap", pinned)  # checked -> decay-eligible for the sweep
+        self.assertEqual(len(threads), 2)
+        self.assertEqual(memory_lint.check_thread_files(threads), [])
+
+    def test_conflict_marker_in_thread_file_is_error(self):
+        root = self._layer()
+        with open(os.path.join(root, "memory", "open-threads", "thread-t.md"), "w", encoding="utf-8") as f:
+            f.write("- [ ] t\n<<<<<<< HEAD\n  <!-- id: t | tier: working -->\n")
+        out = memory_lint.check_conflict_markers(root)
+        self.assertEqual(len(out), 1)
+        self.assertIn("memory/open-threads/thread-t.md:2", out[0])
+
+    def test_closed_bloat_counts_thread_files(self):
+        # 4 closed-record lines in continuity + 4 in a thread file > cap 6 -> flagged once.
+        cont_text = "- [x] closed A\n  line\n  line\n  <!-- id: a | tier: working -->\n"
+        threads = [("thread-b.md", "- [x] closed B\n  line\n  line\n  <!-- id: b | tier: working -->\n")]
+        out = memory_lint.check_closed_thread_bloat(cont_text, 6, threads)
+        self.assertEqual(len(out), 1)
+        self.assertIn("8 line(s)", out[0])
+        self.assertEqual(memory_lint.check_closed_thread_bloat(cont_text, 8, threads), [])
+
+
+class TestThreadStale(unittest.TestCase):
+    # (15) [thread-stale] (v4.40.0): an unchecked thread unreferenced past thread_stale_window is
+    # STALLED — a closure signal for a human gate (REVIEW.md step 8). Advisory only; the pin is
+    # untouched and the tool never closes a thread. Field origin: mercury-composable — a pinned
+    # thread's "still open" items had all shipped, unnoticed for 184 sessions.
+    STEMS = ["2026-06-01-000000", "2026-06-02-000000", "2026-06-03-000000", "2026-06-04-000000"]
+
+    def test_thread_stale_knob_default_and_parse(self):
+        with tempfile.TemporaryDirectory() as root:
+            self.assertEqual(memory_lint.load_windows(root)["thread_stale_window"], 40)
+            os.makedirs(os.path.join(root, "memory"), exist_ok=True)
+            with open(os.path.join(root, "memory", "decay-policy.md"), "w", encoding="utf-8") as f:
+                f.write("- thread_stale_window: 7\n")
+            self.assertEqual(memory_lint.load_windows(root)["thread_stale_window"], 7)
+
+    def test_pinned_thread_past_window_flagged(self):
+        cont = {"gap": {"tier": "working", "created": "2026-01-01"}}
+        refs = [{"gap"}, set(), set(), set()]  # last referenced 3 sessions ago
+        w = memory_lint.check_thread_stale(cont, {"gap"}, refs, self.STEMS, 2)
+        self.assertEqual(len(w), 1)
+        self.assertIn("[thread-stale] gap sslu 3 > thread_stale_window 2", w[0])
+        self.assertIn("closure gate", w[0])
+        self.assertIn("REVIEW.md step 8", w[0])
+        self.assertIn("re-affirms it under Memory References", w[0])
+
+    def test_pinned_thread_within_window_ok(self):
+        # strict '>' like [overdue]: sslu == window is not stalled
+        cont = {"gap": {"tier": "working", "created": "2026-01-01"}}
+        refs = [{"gap"}, set(), set(), set()]
+        self.assertEqual(memory_lint.check_thread_stale(cont, {"gap"}, refs, self.STEMS, 3), [])
+
+    def test_unpinned_facts_ignored(self):
+        # a checked thread / ordinary fact past the window is [overdue]'s business, not this check's
+        cont = {"done": {"tier": "working", "created": "2026-01-01"}}
+        refs = [{"done"}, set(), set(), set()]
+        self.assertEqual(memory_lint.check_thread_stale(cont, set(), refs, self.STEMS, 2), [])
+
+    def test_never_referenced_counts_from_created(self):
+        # a thread no session ever named still stalls — measured from `created` (its seeded first
+        # use); without a created date it cannot be measured and is left alone
+        cont = {"legacy-gap": {"tier": "working", "created": "2026-01-01"}}
+        refs = [set(), set(), set(), set()]
+        w = memory_lint.check_thread_stale(cont, {"legacy-gap"}, refs, self.STEMS, 2)
+        self.assertEqual(len(w), 1)
+        self.assertIn("sslu 4 (never referenced; counted from created) > thread_stale_window 2", w[0])
+        cont = {"undated-gap": {"tier": "working"}}
+        self.assertEqual(memory_lint.check_thread_stale(cont, {"undated-gap"}, refs, self.STEMS, 2), [])
+
+    def test_thread_layer_end_to_end(self):
+        # through the real surfaces: a thread file + session logs + a tuned policy knob
+        root = tempfile.mkdtemp()
+        os.makedirs(os.path.join(root, "memory", "sessions"), exist_ok=True)
+        os.makedirs(os.path.join(root, "memory", "open-threads"), exist_ok=True)
+        with open(os.path.join(root, "memory", "continuity.md"), "w", encoding="utf-8") as f:
+            f.write("# Continuity\n\n## Project State\n\n- **project:** t\n")
+        with open(os.path.join(root, "memory", "decay-policy.md"), "w", encoding="utf-8") as f:
+            f.write("- thread_stale_window: 2\n")
+        with open(os.path.join(root, "memory", "open-threads", "thread-stalled-gap.md"), "w", encoding="utf-8") as f:
+            f.write("- [ ] **Gap.** filed and left behind\n  <!-- id: stalled-gap | created: 2026-06-01 | last_used: 2026-06-01 | uses: 1 | tier: working -->\n")
+        with open(os.path.join(root, "memory", "open-threads", "thread-live-gap.md"), "w", encoding="utf-8") as f:
+            f.write("- [ ] **Live.** worked on\n  <!-- id: live-gap | created: 2026-06-01 | last_used: 2026-06-04 | uses: 2 | tier: working -->\n")
+        logs = {
+            "2026-06-01-000000.md": "# S\n\n## Memory References\n\n- stalled-gap (created)\n- live-gap (created)\n",
+            "2026-06-02-000000.md": "# S\n\n## Memory References\n\n(none)\n",
+            "2026-06-03-000000.md": "# S\n\n## Memory References\n\n(none)\n",
+            "2026-06-04-000000.md": "# S\n\n## Memory References\n\n- live-gap\n",
+        }
+        for name, text in logs.items():
+            with open(os.path.join(root, "memory", "sessions", name), "w", encoding="utf-8") as f:
+                f.write(text)
+        cont, pinned, arch, extra, sessions, refs, threads = memory_lint.load_repo(root)
+        stems = [os.path.basename(s)[:-3] for s in sessions]
+        w = memory_lint.check_thread_stale(cont, pinned, refs, stems, memory_lint.load_windows(root)["thread_stale_window"])
+        self.assertEqual(len(w), 1)
+        self.assertIn("[thread-stale] stalled-gap sslu 3 > thread_stale_window 2", w[0])
 
 
 if __name__ == "__main__":

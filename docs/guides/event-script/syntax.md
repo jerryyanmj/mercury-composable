@@ -551,7 +551,7 @@ to a task or the generic exception handler that attaches to the flow itself.
 The error dataset includes the following:
 
 1. error.task - this is the task name of the task that throws exception
-2. error.status - the status code of the exception
+2. error.code - the status code of the exception
 3. error.message - the error message
 4. error.stack - stack trace if any
 
@@ -1074,6 +1074,14 @@ will be selected (`1` selects the first task, `2` the second, `N` the N-th). An 
 supports more than two branches - much like a `switch` statement in code - while a boolean decision is the
 two-way special case (`true` = `1` = first, `false` = `2` = second).
 
+**Runtime semantics for a bad decision value** — a `null` or missing decision aborts the flow
+("returned invalid decision"), and an integer **above** the branch count aborts likewise; but
+`0`, negative integers, and any non-boolean, non-numeric value (e.g. the *string* `"false"`)
+are coerced through integer conversion clamped to a minimum of `1`, so they **silently select
+the first branch**. Return a real boolean or a valid 1-based integer from the function, or
+stage the value through a typed model variable
+(e.g. `input.query.flag -> model.flag:boolean(yes=true)`) — never rely on coercion.
+
 ```yaml
 tasks:
   - input:
@@ -1480,9 +1488,12 @@ A plugin function can be configured in the left-hand-side of an input/output dat
 `f:` prefix with your plugin name. i.e. `f:pluginName(variables...)`
 
 A plugin can access variables in the `model.`, `input.`, `output.` namespaces. You may also use constants such as
-`text(value)`, `int(value)`. For constant text value, it should not contain the comma (`,`) character because comma
-is used as a separator for the plugin's argument variables. If comma must be used in a text constant, set the
-constant as a model variable and apply the model variable as an argument to a plugin.
+`text(value)`, `int(value)`. The argument tokenizer splits on **top-level commas only**, so a comma inside a
+nested constant is safe — e.g. `f:json(text({"a": 1, "b": 2}))` passes the whole JSON as one argument. One
+caution: an *unbalanced* close-parenthesis inside a text constant can confuse the splitter; if your text needs
+one, set the value in a model variable first and pass the model variable as the argument. Nested plugin calls
+(an `f:` expression as another plugin's argument) are not supported — the engine deliberately ignores them to
+prevent execution loops.
 
 For model, input and output variables, you may also use JSON-Path syntax to extract value as argument to a plugin.
 
@@ -1509,151 +1520,57 @@ For example:
 > double; all-integral inputs keep exact 64-bit arithmetic, including integer division. Once a
 > double enters, precision follows IEEE-754 (integers exact to 2^53).
 
-#### Arithmetic
-
-`add`
-:   At least two numbers (all whole ⇒ exact long result; any decimal ⇒ double)
-
-`subtract`
-:   At least two numbers (all whole ⇒ exact long result; any decimal ⇒ double)
-
-`multiply`
-:   At least two numbers (all whole ⇒ exact long result; any decimal ⇒ double)
-
-`div`
-:   At least two numbers (all whole ⇒ integer division; any decimal ⇒ double division)
-
-`mod`
-:   Two individual numbers (all whole ⇒ long; any decimal ⇒ double)
-
-`increment`
-:   A single number (whole ⇒ long; decimal ⇒ double)
-
-`decrement`
-:   A single number (whole ⇒ long; decimal ⇒ double)
-
-`round`
-:   A number and optional decimal places (whole ≥ 0, default 0) — half-up rounding on the decimal representation (1.005 → 1.01 at 2 places)
-
-#### Generator
-
-`uuid`
-:   None
-
-`dateTime`
-:   None.
-
-`now`
-:   text(iso), text(local) or text(ms)
-
-#### Logical
-
-`eq`
-:   At least two Objects
-
-`ne`
-:   At least two Objects
-
-`isNull`
-:   A single Object
-
-`notNull`
-:   A single Object
-
-`ternary`
-:   Three variables, the first variable must evaluate to a Boolean
-
-`and`
-:   At least two boolean
-
-`or`
-:   At least two boolean
-
-`not`
-:   A single boolean
-
-`gt`
-:   Two individual whole numbers
-
-`lt`
-:   Two individual whole numbers
-
-`startsWith`
-:   Two strings, case insensitive.
-
-`endsWith`
-:   Two strings, case insensitive.
-
-`includes`
-:   Two strings, case insensitive OR one list and one string
-
-#### Collection
-
-`isEmpty`
-:   A single Collection, Map, String or array — true when it has no elements. Use `isNull` /
-    `notNull` for null checks; a null or unsupported input is an error.
-
-`getFirst`
-:   A single non-empty List — returns its first element.
-
-`getLast`
-:   A single non-empty List — returns its last element.
-
-#### Type Conversion
-
-`b64`
-:   Either a base64 encoded String, OR a byte array.
-
-`binary`
-:   Either a byte[], Map or String
-
-`length`
-:   Either a byte[], List or String
-
-`substring`
-:   Two to three variables. The first must be a String; the second must be an integer; the third is optional.
-
-`concat`
-:   At least two Strings to be concatenated
-
-`boolean`
-:   A list of variables that can evaluate to a boolean
-
-`double`
-:   A list of variables that can evaluate to a double
-
-`float`
-:   A list of variables that can evaluate to a float
-
-`int`
-:   A list of variables that can evaluate to an integer
-
-`long`
-:   A list of variables that can evaluate to a long integer
-
-`text`
-:   A list of variables that can evaluate to a String
-
-`listOfMap`
-:   Convert "a map of lists" to "a list of maps" — **order-preserving**: list order follows array index order (guaranteed)
-
-`updateListOfMap`
-:   Update "a list of maps" with "maps of lists"
-
-`removeKey`
-:   Remove one or more keys from a map or "list of maps". Syntax: `f:removeKey(source, text(key1), text(key2), …)` — see the worked example below.
-
-`defaultValue`
-:   If the first argument is null, return the 2nd argument
-
-`parseDate`
-:   Parse a date string to ISO, Local or Milliseconds.
-
-`parseDateTime`
-:   Parse a date-time string to ISO, Local or Milliseconds.
-
-`validate`
-:   Perform simple field validation. See details below.
+| Type                | Plugin `name`   | Expected Inputs                                                                                                       |
+|:--------------------|:----------------|:----------------------------------------------------------------------------------------------------------------------|
+| **Arithmetic**      | add             | At least two numbers (all whole ⇒ exact long result; any decimal ⇒ double)                                           |
+| **Arithmetic**      | subtract        | At least two numbers (all whole ⇒ exact long result; any decimal ⇒ double)                                           |
+| **Arithmetic**      | multiply        | At least two numbers (all whole ⇒ exact long result; any decimal ⇒ double)                                           |
+| **Arithmetic**      | div             | At least two numbers (all whole ⇒ integer division; any decimal ⇒ double division)                                   |
+| **Arithmetic**      | mod             | Two individual numbers (all whole ⇒ long; any decimal ⇒ double)                                                      |
+| **Arithmetic**      | increment       | A single number (whole ⇒ long; decimal ⇒ double)                                                                     |
+| **Arithmetic**      | decrement       | A single number (whole ⇒ long; decimal ⇒ double)                                                                     |
+| **Arithmetic**      | round           | A number and optional decimal places (whole ≥ 0, default 0) — half-up rounding on the decimal representation (1.005 → 1.01 at 2 places) |
+| **Generator**       | uuid            | None                                                                                                                  |
+| **Generator**       | dateTime        | None.                                                                                                                 |
+| **Generator**       | now             | text(iso), text(local) or text(ms)                                                                                    |
+| **Logical**         | eq              | Two Objects, plus up to two optional modifiers: `text(ignoreCase)` compares two strings case-insensitively; `text(ignoreType)` compares the text forms of the two values, allowing relaxed comparison of numbers and booleans so that `"123" == 123`, `"123.456" == 123.456` and `"true" == true`; use both together for a case-insensitive text-form comparison. e.g. `f:eq(model.a, model.b, text(ignoreCase))` |
+| **Logical**         | ne              | Two Objects, plus the same optional `text(ignoreCase)` / `text(ignoreType)` modifiers as `eq` — returns the exact complement of `eq`                                                                  |
+| **Logical**         | isNull          | A single Object                                                                                                       |
+| **Logical**         | notNull         | A single Object                                                                                                       |
+| **Logical**         | ternary         | Three variables, the first variable must evaluate to a Boolean                                                        |
+| **Logical**         | and             | At least two boolean                                                                                                  |
+| **Logical**         | or              | At least two boolean                                                                                                  |
+| **Logical**         | not             | A single boolean                                                                                                      |
+| **Logical**         | gt              | Two individual whole numbers                                                                                          |
+| **Logical**         | lt              | Two individual whole numbers                                                                                          |
+| **Logical**         | startsWith      | Two strings, case insensitive.                                                                                        |
+| **Logical**         | endsWith        | Two strings, case insensitive.                                                                                        |
+| **Logical**         | includes        | Two strings, case insensitive OR one list and one string                                                              |
+| **Collection**      | isEmpty         | A single Collection, Map, String or array — true when it has no elements. Use `isNull` / `notNull` for null checks; a null or unsupported input is an error. |
+| **Collection**      | getFirst        | A single non-empty List — returns its first element.                                                                  |
+| **Collection**      | getLast         | A single non-empty List — returns its last element.                                                                   |
+| **Type Conversion** | b64             | Either a base64 encoded String, OR a byte array.                                                                      |
+| **Type Conversion** | binary          | Either a byte[], Map or String                                                                                        |
+| **Type Conversion** | length          | Either a byte[], List or String                                                                                       |
+| **Type Conversion** | substring       | Two to three variables.<br/>The first must be a String;<br/>the second must be an integer;<br/>the third is optional. |
+| **Type Conversion** | concat          | At least two Strings to be concatenated                                                                               |
+| **Type Conversion** | boolean         | A list of variables that can evaluate to a boolean                                                                    |
+| **Type Conversion** | double          | A list of variables that can evaluate to a double                                                                     |
+| **Type Conversion** | float           | A list of variables that can evaluate to a float                                                                      |
+| **Type Conversion** | int             | A list of variables that can evaluate to an integer                                                                   |
+| **Type Conversion** | long            | A list of variables that can evaluate to a long integer                                                               |
+| **Type Conversion** | text            | A list of variables that can evaluate to a String                                                                     |
+| **Type Conversion** | json            | A single JSON text (String or byte[]) — an object `{...}` becomes a map, an array `[...]` becomes a list. See details below. |
+| **Type Conversion** | listOfMap       | Convert "a map of lists" to "a list of maps" — **order-preserving**: list order follows array index order (guaranteed) |
+| **Type Conversion** | updateListOfMap | Update "a list of maps" with "maps of lists"                                                                          |
+| **Type Conversion** | removeKey       | Remove one or more keys from a map or "list of maps". Syntax: `f:removeKey(source, text(key1), text(key2), …)` — see the worked example below. |
+| **Key Normalization** | camelCase     | Normalize every key of a map (recursively, incl. maps inside lists) to camelCase. See the worked example below. |
+| **Key Normalization** | snakeCase     | Normalize every key of a map (recursively, incl. maps inside lists) to snake_case. See the worked example below. |
+| **Type Conversion** | defaultValue    | If the first argument is null, return the 2nd argument                                                                |
+| **Type Conversion** | parseDate       | Parse a date string to ISO, Local or Milliseconds.                                                                    |
+| **Type Conversion** | parseDateTime   | Parse a date-time string to ISO, Local or Milliseconds.                                                               |
+| **Type Conversion** | validate        | Perform simple field validation. See details below.                                                                   |
+| **Configuration**   | setConfig       | A parameter name (non-empty string) and its value (any object, converted to text). Sets the value as a system property so that it overrides the corresponding base configuration parameter at run-time. Returns true when applied, false for invalid input. See details below. |
 
 *DateTime plugins*
 
@@ -1715,6 +1632,64 @@ throwing an validation error. For example,
 - f:validate(input.body.id, text(id; String; evaluate))
 
 Please note that the validation rule uses semicolon as separator because comma is used for tokenization.
+
+*JSON parsing plugin*
+
+The 'json' plugin parses JSON text into a live dataset in one data mapping statement —
+an object `{...}` becomes a map, an array `[...]` becomes a list. The input can be a text
+constant, a model variable, or any mapping source holding a JSON string or byte array.
+
+- f:json(text([])) -> model.my_empty_list
+- f:json(text({"hello": [1, 2, {"nested": "demo"}]})) -> model.my_nested_dataset
+- f:json(model.raw_json_text) -> model.parsed
+
+This makes simple dataset creation a one-liner — e.g. seeding an empty list before
+building it up with append-mode (`[]`) mapping rules — without writing a composable
+function for it.
+
+Behavior notes:
+
+1. Only the JSON composite forms are accepted. A scalar such as `42` or `hello` throws
+   "Input is not JSON" — the scalar constants (`text`, `int`, `long`, `float`, `double`,
+   `boolean`) already cover those.
+2. Whole numbers parse as long and decimals as double. Small whole numbers are downcast
+   to integer when the dataset later rides an event — standard serialization behavior.
+3. Blank input returns an empty map instead of aborting the flow.
+4. The parser is lenient: unquoted keys are accepted, and a trailing comma inserts a
+   trailing null element (`[1, 2,]` becomes `[1, 2, null]`). Prefer strict JSON.
+5. Malformed JSON throws "Unable to parse JSON: (reason)"; a null or non-text input
+   throws "Input must be a JSON in string or byte array". Both abort the task as a user
+   error (HTTP 400 at the flow edge).
+6. `{model.key}` and `[model.index]` references inside the JSON text are resolved as
+   runtime substitutions *before* parsing — useful for composing dynamic JSON; be aware
+   of it if your JSON legitimately contains such text.
+
+*Configuration override plugin*
+
+The 'setConfig' plugin sets or overrides a configuration parameter at run-time by saving it as a
+system property. Since a system property takes precedence over the base application configuration,
+any subsequent configuration read — e.g. a `map(my.parameter)` constant in a data mapping statement
+or an `AppConfigReader` lookup inside a user function — will see the updated value.
+
+Syntax is "f:setConfig(key, value)". The key must be a non-empty string. The value can be any
+object — a text constant or a model variable — and it is converted to text with
+`String.valueOf(value)` because configuration parameter values are stored as strings.
+
+- f:setConfig(text(my.parameter), text(demo)) -> model.updated
+- f:setConfig(text(my.parameter), model.secret) -> model.updated
+
+It returns true when the parameter is set, or false when the key is missing or empty, or the
+value is null.
+
+The typical use case is secret hydration: a flow retrieves secrets from a cloud "secret manager"
+at start-up and sets them as configuration parameters for the rest of the application to consume.
+
+Please be careful about the application life cycle:
+
+1. The override applies to the whole application instance and stays effective until the
+   application restarts — not just for the calling flow instance.
+2. Components that have already consumed a parameter at start-up will not see the update.
+   Run the flow that sets the parameters before the dependent components read them.
 
 *JSON-Path helpers*
 
@@ -1833,6 +1808,37 @@ for external consumption:
 
 For details, please refer to configuration example in header-and-json-path-test.yml and the unit test 
 `headerAndJsonPathTest()` in the FlowTests class of the event-script-engine module.
+
+*camelCase and snakeCase*
+
+Legacy systems — often XML-to-JSON transformations — deliver key formats that vary per source:
+`MyExampleKey`, `My_Example_key` and `my_example_Key` are the same logical key. The
+`camelCase(mapOrList)` and `snakeCase(mapOrList)` plugins segmentize each key and re-case the
+segments: underscore, hyphen and dot are separators; a lower-case-or-digit to upper-case
+transition starts a new segment; and an upper-case run followed by a lower-case letter splits
+before its last upper-case letter (the acronym rule — `myXMLKey` becomes `myXmlKey` /
+`my_xml_key`). Digits ride with their segment (`address1Line`). Values are never touched —
+only keys, at every nesting depth (including maps inside lists). Two distinct source keys can
+normalize to the same target (`MyKey` and `my_key` both become `myKey`); the later entry in
+map order wins. Normalization is idempotent, and a key with no letter or digit segments at
+all (e.g. `"___"`) is kept as-is. Both engines ship the identical algorithm and error
+messages (portable-flow contract).
+
+Beyond legacy cleanup, the plugins also do **impedance matching** between systems with
+different key conventions: an incoming camelCase request payload can be transformed to
+snake_case for processing and forwarding to a downstream system that expects it — one
+mapping statement at either boundary, no per-field mapping.
+
+```yaml
+# converge a legacy payload's mixed key formats before mapping it onward
+- 'f:camelCase(input.body) -> model.normalized'
+
+# a list of maps normalizes element by element
+- 'f:snakeCase(input.body.list) -> output.body.records'
+
+# impedance matching: a camelCase request payload forwarded to a snake_case system
+- 'f:snakeCase(input.body) -> model.downstream_request'
+```
 
 ### Writing your own custom Simple Plugins
 

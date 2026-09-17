@@ -22,6 +22,371 @@ in that ADR's own *Rationale* section.
 
 ---
 
+## ADR-0024 — The elastic queue spills to a dependency-free file FIFO, and that choice sets the dispatch model {#adr-0024}
+**Status:** Accepted · **Date:** 2026-09-16 · **Serves:** vision-mercury-composable · **Formalizes:** elastic-queue-file-store
+<!-- id: adr-0024 | status: accepted -->
+
+**Abstract.** Every route's back-pressure overflow buffer (`ElasticQueue`) holds the
+first 20 events in memory and spills the overflow to a **per-route sequence of
+append-only segment files** under the temp directory (`FileElasticStore`), with a segment
+deleted as soon as it is fully read. The spill tier is transient — nothing survives a
+restart — and carries no third-party dependency. The Berkeley DB JE store that preceded
+it, and the `elastic.queue.store` switch that selected between them, are **retired**
+(v4.12.10); so are the `deferred.commit.log` property and the `elastic.queue.cleanup`
+reserved route, which existed only to serve it. `ElasticStore` remains as the interface
+seam, now with a single implementation.
+
+The second half of this decision is the consequence that makes it architectural rather
+than an implementation detail: **because the file store's blocking I/O parks a virtual
+thread instead of pinning its carrier, every route dispatches off the event loop on its
+own virtual thread.** The Vert.x consumer enqueues to a bounded per-route mailbox and a
+per-route virtual thread runs the state machine and the spill I/O. There is one dispatch
+mode; the store and the dispatch model are not independently configurable.
+
+**Rationale.** Berkeley DB worked and, on a *single isolated route*, benchmarked
+competitively — faster on some scenarios. That is precisely why the decision needed
+evidence beyond a microbenchmark. In a real multi-route service sharing one Vert.x event
+loop, a carrier-pinning store forces spill I/O to run **inline on that shared loop**, so a
+burst on one route inflates the tail latency of unrelated latency-sensitive routes. The
+measured comparison (retained at `benchmark/benchmark-reporter/analysis/`) showed +56%
+throughput, a ~47× better write p99.9, and stalls over 20 ms falling from 90 to 3 — but
+the decisive result was the mixed-workload probe, which isolates exactly the property a
+single-workload benchmark cannot reveal.
+
+Alternatives considered. *Keep both stores permanently* — rejected: two spill
+implementations, two dispatch modes, and a configuration combination
+(virtual threads + a pinning store) that had to be made unreachable by construction, all
+to preserve a fallback the field never needed. *Keep the switch but default to `file`* —
+this was in fact the transitional state, carried deliberately through one field-canary
+period so installations could flip back with one property; it ended when no installation
+reported an ElasticQueue issue on the file store. *Make durability an option* — rejected
+as a category error: the buffer exists to absorb a slow consumer within one process
+lifetime, and a durable spill tier would imply replay semantics the event system does not
+offer.
+
+Consequences. platform-core sheds its `com.sleepycat:je` dependency, narrowing the
+dependency surface that field security scanning must clear. `ServiceQueue` loses its
+dual-mode branch. An application that still sets `elastic.queue.store` is unaffected in
+behaviour — the property is simply no longer read — because the value it would have
+selected is what now runs unconditionally. The remaining tunables are
+`elastic.queue.segment.size.bytes` and `elastic.queue.dispatch.mailbox.size`; the one
+measured blemish of the file store, a rare OS dirty-page-flush outlier, is removed by
+pointing the temp directory at tmpfs.
+
+## ADR-0023 — Claims-fixture gate: documentation behavior claims are drift-tested {#adr-0023}
+**Status:** Accepted · **Date:** 2026-09-06 · **Serves:** vision-mercury-composable · **Formalizes:** claims-fixture-gate
+<!-- id: adr-0023 | status: accepted -->
+
+**Abstract.** High-value prose claims about engine behavior (defaults, precedence,
+thresholds, failure semantics) are registered in `docs/guides/claims-registry.json`. CI
+verifies both sides of every claim: the normative sentence must still appear on its page
+(doc-canon check 8, whitespace-normalized case-insensitive containment) and the named
+engine test must still exist as a method definition — while the tests themselves pin the
+behavior in the normal build. A registered claim states exactly what its test pins.
+
+**Context.** The AI grammar coverage study (2026-09-06) found all ten of its documentation
+drift items in ungated prose, while the gated surfaces (DSL catalogs, guide fixtures,
+golden vectors) held almost perfectly. The Rust edition's divergence-note mechanism had
+even *observed* one drift item and documented around it instead of failing a build. Ten
+registry entries would have caught every finding. Alternatives considered: line-number
+pins (rot with every edit) and AST/NLP documentation parsing (over-engineering); chosen:
+distinctive quoted substrings plus test-definition existence checks — deterministic and
+stdlib-only. The registry is itself a grammar asset: it ships inside the version-matched
+contract and is listed in `llms.txt`, so an AI agent may treat registered claims as
+source-verified.
+
+**Consequences.** "Verified" extends from catalog shape to stated behavior. New claims
+enter through the same friction → fix → gate feedback circuit that grew the grammar
+(ten to twenty high-value claims is the intended steady state, not hundreds). The format
+is engine-neutral: the Rust engine carries its own registry when the held sibling sweep
+unblocks. Seeded with eleven claims pinned by seven new `Claim*Test` classes and four
+existing tests.
+
+---
+
+## ADR-0022 — graph.js is deprecated: backward compatibility only {#adr-0022}
+**Status:** Accepted · **Date:** 2026-09-02 · **Serves:** vision-mercury-composable · **Formalizes:** graphjs-phase-out-direction
+<!-- id: adr-0022 | status: accepted -->
+
+**Abstract.** The `graph.js` skill is deprecated. It remains shipped for backward
+compatibility while existing field applications refactor off it, but new graphs must not
+use it and AI agents are instructed never to generate it. The sanctioned pattern is
+`graph.math` for decisions plus `graph.task` for anything the safe dialect cannot express.
+
+**Context.** graph.js evaluates JavaScript at runtime (GraalVM) — code injection by
+another name, which fails enterprise security review; the field is already refactoring
+it out. A 2026-09 field AI-agent exercise additionally reported a silent-correctness
+defect (equality comparisons with quoted string literals evaluate to false without any
+error, mis-routing IF branches) and demonstrated that the graph.math + graph.task rebuild
+is more legible — rule order becomes visible nodes instead of a script. Per the standing
+phase-out direction (2026-07-31), the skill is contained, not hardened: the defect is
+documented, not fixed. The Rust engine never carried graph.js, so deprecation also closes
+an engine-parity gap. Removal lands in a future major release.
+
+**Consequences.** Deprecation banners in the skills reference and AI agent guide; the
+CompileGraph gate continues to accept existing models; graph.js work remains excluded
+from Rust lock-step scope.
+
+---
+
+## ADR-0021 — The companion endpoint is synchronous only: the fire-and-forget sibling is retired {#adr-0021}
+**Status:** Accepted · **Date:** 2026-09-02 · **Serves:** vision-mercury-composable · **Formalizes:** (rides ADR-0008's constraint)
+<!-- id: adr-0021 | status: accepted -->
+
+**Abstract.** `POST /api/companion/{id}` (fire-and-forget, `{status:"accepted"}`) is
+retired; `POST /api/companion/{id}/sync` (ADR-0008) is the only companion endpoint. The
+bare URL now answers 404 through REST automation; `/sync` is unchanged, so field drivers
+need no migration.
+
+**Context.** ADR-0008 added `/sync` as an additive sibling so AI agents see command
+outcomes in-band. A 2026-09 field AI-agent exercise showed the async endpoint is an
+attractive trap: the guide dedicated to the companion documented only the async form, and
+an agent that followed it was blind to errors, scraped a browser console for results, and
+sleep-padded every command (measured: 12 s vs 0.1 s for a 25-command build). The field has
+driven `/sync` exclusively for multiple sprints, so the maintainer retired the async form
+outright rather than keeping a documented-legacy hazard. Re-pointing the bare URL at sync
+semantics was rejected: old fire-and-forget scripts would silently receive a different
+response contract; a loud 404 is the unambiguous retirement.
+
+**Consequences.** One endpoint, one contract, no ambiguity for agents or docs; a
+breaking change note rides the next release; the Rust engine retires its twin in
+lock-step.
+
+---
+
+## ADR-0020 — Route pools: numbered singleton lanes as a first-class platform registration {#adr-0020}
+**Status:** Accepted · **Date:** 2026-08-30 · **Serves:** vision-mercury-composable · **Formalizes:** route-pool-registration-design
+<!-- id: adr-0020 | status: accepted -->
+
+**Abstract.** `Platform.registerRoutePool(prefix, lambda, count)` registers a set of
+private singleton routes `{prefix}.{n}` for n = 0 to count-1 and returns the member
+names in order; `releaseRoutePool(prefix)` removes the set symmetrically. Each member is
+a strict FIFO lane (instances=1, one shared stateless lambda), so a caller that checks
+out a lane gets per-conversation event ordering while other lanes serve concurrent
+traffic — the pattern the HTTP edge's SSE reply lanes (`async.http.response.stream.{n}`)
+introduced, promoted from an open-coded loop in AppStarter to a platform API with
+registry-level identity (a pool registry mapping prefix to lane count). Pools are always
+private: lane checkout is an in-process rendezvous, so advertising members to the
+service mesh would be meaningless. Registering an existing pool reloads it (the previous
+member set is released first, house reload semantics); individual register/release calls
+that touch a pool member are warned, never refused — range-checked, so a neighbor route
+such as `{prefix}.10` beside a count-3 pool is never misclassified. Pool mutations are
+atomic under a `ReentrantLock` (virtual-thread-friendly on Java 21).
+`getLocalRoutingTable()` is deliberately untouched: it remains the truthful live
+registry consumed by mesh route advertising and Spring autowiring; the compact pool
+rendering stays display-only in the actuator (`compressRouteFamilies`).
+
+**Rationale.** The v4.12.0 streaming milestone shipped the lane-pool pattern without an
+abstraction: 500 `registerPrivate` calls, no release counterpart, and no way for the
+platform to tell a pool from 500 coincidentally numbered routes; upcoming consumers
+(graph-run streaming, wrapper relay pools under the AI SDLC work) would each re-open-code
+it. Alternatives rejected: naming the API `registerStreams` (one character from the
+existing `registerStream(String, StreamFunction)` with entirely different semantics —
+and the abstraction is a pool of ordered lanes, not a stream); collapsing pool members
+inside `getLocalRoutingTable()` (the collapsed display key is not a valid route name,
+and the table has functional consumers — the Kafka mesh advertises from it, rest-spring-4
+autowires from it); an `isPrivate` flag (no remote use case exists, and the platform
+expresses privacy as method pairs, never booleans); renaming the lane family to
+`http.response.stream.{n}` (the lanes are sibling instances of `async.http.response` —
+renaming the child while the parent stays would split the `async.http.*` namespace
+family, and the name already shipped in traces, actuator views and docs).
+
+---
+
+## ADR-0019 — The HTTP client consumes SSE progressively; Event-over-HTTP streams on the same call {#adr-0019}
+**Status:** Accepted · **Date:** 2026-08-29 · **Serves:** vision-mercury-composable · **Formalizes:** async-http-client-sse-streaming-design
+<!-- id: adr-0019 | status: accepted -->
+
+**Abstract.** `async.http.request` consumes a `text/event-stream` response progressively
+and relays it as the platform's own streaming protocol: one `x-event-stream: data`
+envelope per upstream SSE event to the caller's reply route (the event's data as body,
+`event:` name as `x-event-name`, head control - upstream status plus the SSE content
+type - on the first envelope), `eof` on a clean end, and an in-band `exception` on idle
+expiry or a mid-stream disconnect. Activation is explicit and standard: the request must
+declare `Accept: text/event-stream`, the response must actually be SSE, and the request
+must carry a `reply_to`; anything else keeps the buffered single-shot behavior. For a
+stream, the request timeout becomes the per-read idle allowance (any upstream bytes,
+keep-alive comments included, reset it). Payloads are never interpreted - provider
+conventions such as `data: [DONE]` forward verbatim, keeping the client vendor-neutral.
+Because the streaming producer contract is the one the HTTP edge already consumes, a
+streaming endpoint's function can forward its own `reply_to` and correlation id into the
+client call and the application becomes an SSE-to-SSE relay by configuration. The same
+enhancement is the transport for Event-over-HTTP peer streaming (python/node wrapper
+functions and engine⇄engine): the peer's `/api/event` answers the SAME call with an SSE
+response using a hybrid control/data framing - control signals (the head, `eof`,
+`exception`, and any segment that cannot round-trip as text) ride base64-encoded MsgPack
+envelope frames under the reserved SSE event name `envelope`, while token segments ride
+raw SSE frames with near-zero overhead - negotiated by the same Accept contract, so
+version skew degrades explicitly, never silently.
+
+**Rationale.** Progressive delivery had reached the HTTP edge (ADR-0018) but not the two
+consumption paths AI-era workloads need: an engine function consuming an LLM provider's
+token stream, and a polyglot wrapper function streaming results back to the engine. One
+mechanism closes both because the Event-over-HTTP relay already flows through
+AsyncHttpClient. Alternatives rejected: an on-demand WebSocket channel (breaks the
+wrapper scope fence, grows four codebases, historically gateway-hostile, and drifts
+toward the standing-connection mesh the framework keeps opt-in); per-segment POSTs back
+to the reply lane (FIFO forces serialized posts - one round trip per token - and opens
+an inbound path to reply lanes); gRPC/HTTP-2 push (a foreign dependency stack); and
+long-polling (chatty and stateful). Streaming on the response of the engine's own
+request adds no inbound surface, is ordered by TCP for free, and rides the wire shape
+gateways already accommodate for LLM traffic.
+
+---
+
+## ADR-0018 — HTTP response streaming rides the multi-shot reply route; the wire stays standards-only {#adr-0018}
+**Status:** Accepted · **Date:** 2026-08-28 · **Serves:** vision-mercury-composable · **Formalizes:** http-response-streaming-design
+<!-- id: adr-0018 | status: accepted -->
+
+**Abstract.** A function streams an HTTP response (LLM token segments, agent progress
+events, live updates) by exercising the platform's native streaming pattern: the callee
+sends a sequence of events to the caller-provided reply route until an
+end-of-transmission signal. Each event carries the reserved **envelope** header
+`x-event-stream: data | eof | exception` (the ObjectStream vocabulary); the marker is
+internal protocol consumed by the REST automation edge — like `x-stream-id` and `x-ttl`,
+it never appears on the wire. The public HTTP surface is standards-only: Server-Sent
+Events framing when the content type is `text/event-stream` (typed events, a terminal
+`done` event carrying trailing metadata, in-band `error` events, keep-alive comments),
+chunked transfer with JSON Lines otherwise. A streaming endpoint is declared with
+`stream: true` in rest.yaml, which checks out a dedicated ordered reply lane for the
+request's lifetime — a single-instance route (`async.http.response.stream.{n}`) drawn
+in FIFO rotation from a pool of 500 (the `async.http.response` concurrency; refined
+2026-08-31 from the original LIFO stack so consecutive requests take successive lanes
+and a released lane, rejoining at the tail, rests longest before reuse), returned when
+the request context closes — a rotating variant of the "ready" signal pattern of the
+reactive manager/worker design. All segments of one request ride its own lane (strict FIFO) while different
+requests stream concurrently through their own lanes; an exhausted pool rejects further
+streaming requests immediately with HTTP-503 (deterministic back-pressure, no
+configuration knob). The first event commits the response head; each
+arrival extends the idle timeout; stalls fail in-band; client disconnects turn late
+segments into no-op drops; a bounded drain-aware buffer guards slow clients. Responses
+without the marker are single-shot, exactly as before, and the legacy `x-stream-id`
+relay is untouched.
+
+**Rationale.** The prerequisite for AI-era workloads is progressive delivery over plain
+HTTP — SSE is the de facto wire for chat token streams (OpenAI, Anthropic, Gemini and
+every compatible server), agent progress protocols (MCP Streamable HTTP, A2A), and the
+live-watch window of long-running workflows. The alternative — building on the existing
+`Flux`/`x-stream-id` relay — was rejected: the producer API is Reactor-typed and
+JVM-only (invisible to Event Script, knowledge graphs, and the polyglot wrappers, which
+is exactly where LLM tokens will come from), structured segments buffered at the edge
+instead of streaming, and the relay has no SSE framing or in-band terminal events. The
+multi-shot reply route adds no new substrate — anything that can send an envelope to a
+route can stream, which keeps the mechanism language-neutral by construction: flow
+tasks, graph nodes, and Event-over-HTTP peers join by sending the same envelopes. A
+custom HTTP header was rejected in favor of the envelope marker so the wire stays fully
+standard (RFC 6648 discourages new X- wire headers; the envelope already has a reserved
+x- vocabulary).
+
+## ADR-0017 — Spring Boot integration targets Boot 4 only; the Boot 3 lane is retired {#adr-0017}
+**Status:** Proposed · **Date:** 2026-08-27 · **Serves:** vision-mercury-composable · **Formalizes:** stack-integration-spring-boot4
+<!-- id: adr-0017 | status: proposed -->
+
+**Abstract.** The optional Spring Boot integration is provided by a single module,
+`system/rest-spring-4` (with `examples/rest-spring-4-example` as its reference
+application), targeting Spring Boot 4. The Spring Boot 3 lane — `system/rest-spring-3`
+and `examples/rest-spring-3-example` — is removed from the reactor. The integration
+surface carries over unchanged: the RestServer bootstrap, the `spring.boot.main`
+override, `@PreLoad` autowiring, and the same configuration keys — so migrating an
+application is a dependency swap plus that application's own Spring Boot 3 → 4 upgrade.
+Spring remains optional and is never required by platform-core: the lightweight built-in
+non-blocking HTTP server stays the default.
+
+**Rationale.** The Spring community stopped issuing security patches for Spring Boot 3,
+and field deployment pipelines enforce that directly: dependency security scanning
+(Snyk) rejects Spring Boot 3 dependencies outright and requires Spring Framework 7 or
+newer, so a build carrying the Boot 3 lane blocks deployment. Continuing to ship a
+Boot 3 integration would hand field installations a permanently-unpatchable web
+dependency lane — the opposite of the framework's security posture, where field
+deployments are gated by dependency scanners (cf. the netty and lz4 remediation
+rounds). Maintaining two lanes also doubled every Spring upgrade sweep
+(both `spring-boot-starter-parent` versions, two example applications) while exposing
+the same integration surface. The alternative — freezing `rest-spring-3` for legacy
+consumers — was rejected: an EOL web stack is a liability regardless of freshness of the
+rest of the build, and the migration cost is a dependency swap. Applications that must
+stay on Spring Boot 3 can remain on Mercury releases up to this one.
+
+## ADR-0016 — Polyglot functions are Event-over-HTTP peers, not subprocesses or ports {#adr-0016}
+**Status:** Proposed · **Date:** 2026-08-22 · **Serves:** vision-mercury-composable · **Formalizes:** polyglot-event-over-http-design
+<!-- id: adr-0016 | status: proposed -->
+
+**Abstract.** Functions written in Python and Node.js join Event Script flows and
+MiniGraph knowledge graphs as long-lived **Event API peers**: each official wrapper
+([mercury-python](https://github.com/Accenture/mercury-python),
+[mercury-nodejs](https://github.com/Accenture/mercury-nodejs)) hosts `POST /api/event`
+with the engines' exact semantics and speaks the standard envelope wire format, verified
+against the golden conformance vectors shared by the Java and Rust engines. The engine
+addresses a polyglot route through the existing declarative `yaml.event.over.http` map —
+non-blocking on the JVM (the relay is an interceptor; no thread is held per in-flight
+call) — so a flow task or `graph.task` node calls a Python or Node.js function exactly as
+if it were local, with trace context, the `my_cid` → `my_correlation_id` injection, and
+the portable error contract (handler errors ride HTTP 200 with envelope status; transport
+errors keep 400/403/404/408 with engine-identical messages) intact. The wrapper scope is
+fenced: envelope codec, Event API host, `preload` registry, thin `PostOffice` client, a
+primitive in-process event bus (per-route FIFO mailboxes with faithful `instances`; no
+spill tier, no queue cap), the engines' actuator endpoints, the minimalist utilities
+(configuration with the `resources/` convention and `-Dkey=value` overrides,
+engine-format logging with `log.format=text|json|compact`, trace context), and a dev
+runner — **no orchestration**: flows, graphs, persistence, and pub/sub stay on the
+engines. The single engine change is the `graph.task` route-existence guard consulting
+the Event-over-HTTP map (Java + Rust lock-step, shipped in v4.11.11). The wire
+conformance vectors are the acceptance gate for every wrapper, and each wrapper release
+extends the interop test report.
+
+**Rationale.** The alternative designs were a full language port and an
+engine-managed subprocess runner, and both were investigated. A full port re-implements
+the composable core (event bus, flow engine, graph engine) per language — the Node.js
+legacy port demonstrated the cost: it fell ~2 years behind and was retired. A
+subprocess runner (functions as child processes over stdio) was prototyped and shelved:
+on JDK 21 pipe I/O and `Process.waitFor` pin virtual-thread carriers, forcing
+kernel-thread isolation per in-flight call, plus process-tree lifecycle management and
+per-call interpreter startup — an operational stability surface the peer model does not
+have, with the niche benefit (single-artifact embedded scripting) deferred until field
+demand exists. The peer model reuses what already works: the function contract is
+route-name + envelope (nothing in it is Java), the Event API endpoint already carries it
+across instances and across the Rust engine, and the declarative map already abstracts
+location. Keeping orchestration out of the wrappers preserves the architecture's one
+boundary — the engine tier owns sequencing, retries, and back-pressure (a leaf host
+fails fast by deadline instead of hoarding work) — and keeps each wrapper small enough
+to stay in lock-step through a conformance suite rather than a porting effort.
+Engine-consistent utilities and actuator endpoints are part of the decision, not
+convenience: polyglot installations put every language's telemetry, logs, probes, and
+dashboards in front of one DevSecOps team, so presentation parity is a field
+requirement. The Node.js wrapper is also the sanctioned answer to the retired legacy
+port — a fresh re-port was never going to stay current; a thin protocol wrapper can.
+
+## ADR-0015 — AI discovery is a standalone composable app, not a runtime dependency {#adr-0015}
+**Status:** Proposed · **Date:** 2026-08-21 · **Serves:** vision-mercury-composable · **Formalizes:** thread-ai-contract-provider
+<!-- id: adr-0015 | status: proposed -->
+
+**Abstract.** Mercury serves a version-matched operational contract for AI agents from a
+standalone composable app, `system/ai-contract-provider`: read-only REST discovery endpoints
+(port 8999) wired `rest.yaml` → Event Script flow → function, plus a local `--export` mode
+that writes the offline `mercury-platform` Agent Skill with a hash manifest written last.
+The dependency arrow points **into** the app — it depends on platform-core and
+event-script-engine; no framework module depends on it, and no framework module changes.
+Contract claims live in one `contracts.yaml` catalog whose behavior anchor classes are
+resolved by `Class.forName` in the module's tests (MiniGraph anchors through a test-scope
+dependency), so a renamed behavior class fails the reactor build. The served
+`mercury_version` is read from the platform-core dependency's own `pom.properties`, and
+startup refuses a mixed framework assembly.
+
+**Rationale.** The motivating defect was documentation drift: the guides taught a
+`rest.yaml` flow binding (`flow:` without `service:`) that the production `RoutingEntry`
+parser rejects, and nothing tied the docs to the runtime. An earlier design packaged the
+contract as a library that platform-core, event-script-engine, and the playground engine
+all depended on, with ServiceLoader providers and playground chat commands. That inverted
+the dependency graph (the lean core acquired a docs artifact), broke in Spring Boot
+packaging (CodeSource-based resource reads), and leaked a Java-only command surface into
+the playground webapp and command catalog that the Rust engine also ships — a cross-engine
+parity break. A standalone app keeps the framework untouched, reads resources only through
+the classloader (packaging-independent), keeps discovery off the shared playground surface
+(no Rust lock-step obligation — the REST API itself is the portable contract), and is
+itself a reference implementation of the composable pattern it documents. Since all
+Mercury modules release together under one version, a build-verified static catalog gives
+the same drift guarantee as runtime provider discovery with far less machinery; filesystem
+export stays a local operator action rather than a remote capability.
+
 ## ADR-0014 — Generic exception context: one handler serves every `exception=` route {#adr-0014}
 **Status:** Proposed · **Date:** 2026-08-10 · **Serves:** vision-mercury-composable · **Formalizes:** thread-field-graph-scoped-state-and-error-context
 <!-- id: adr-0014 | status: proposed -->

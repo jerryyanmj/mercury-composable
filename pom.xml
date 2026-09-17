@@ -8,25 +8,27 @@
     <groupId>com.accenture.mercury</groupId>
     <artifactId>parent-mercury</artifactId>
     <packaging>pom</packaging>
-    <version>4.11.9</version>
+    <version>4.12.11</version>
     <name>Parent Mercury</name>
 
     <modules>
         <!-- Core libraries -->
         <module>system/platform-core</module>
-        <module>system/rest-spring-3</module>
         <module>system/rest-spring-4</module>
         <module>system/event-script-engine</module>
         <module>system/minigraph-playground-engine</module>
         <module>system/mini-scheduler</module>
         <module>system/minimalist-kafka</module>
         <module>system/twin-kafka</module>
+        <module>system/ai-contract-provider</module>
 
         <!-- Extensions -->
         <module>extensions/reactive-postgres</module>
         <module>extensions/opentelemetry-forwarder</module>
+        <module>extensions/redis-connection</module>
         <module>extensions/sync-over-async</module>
         <module>extensions/minigraph-state-redis</module>
+        <module>extensions/distributed-cache</module>
 
         <!-- Core cloud libraries -->
         <module>connectors/core/cloud-connector</module>
@@ -46,7 +48,6 @@
              gained unit tests; pg-example stays standalone because its tests download an
              embedded Postgres binary) -->
         <module>examples/lambda-example</module>
-        <module>examples/rest-spring-3-example</module>
         <module>examples/rest-spring-4-example</module>
         <module>examples/composable-example</module>
         <module>examples/kotlin-example</module>
@@ -54,10 +55,18 @@
         <module>examples/minigraph-playground</module>
         <module>examples/kafka-demo</module>
         <module>examples/sync-over-async-demo</module>
+        <module>examples/distributed-cache-example</module>
         <module>examples/twin-kafka-demo</module>
         <module>examples/order-system</module>
         <module>examples/order-system-mongodb</module>
         <module>examples/plan-fund-merge</module>
+
+        <!-- Starter templates for the three layers (copy one out to begin a new
+             project; standalone poms - no reactor parent - listed here so every
+             build proves they stay current) -->
+        <module>templates/starter-function</module>
+        <module>templates/starter-flow</module>
+        <module>templates/starter-graph</module>
 
         <!-- Executable for benchmark tests
         <module>benchmark/benchmark-reporter</module>-->

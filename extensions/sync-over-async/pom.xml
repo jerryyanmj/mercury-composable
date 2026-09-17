@@ -5,30 +5,35 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.platformlambda</groupId>
     <artifactId>sync-over-async</artifactId>
-    <version>4.11.9</version>
+    <version>4.12.11</version>
     <packaging>jar</packaging>
-    <name>Sync-over-async (Redis-assisted Kafka request/reply)</name>
+    <name>Sync-over-async (request/reply and streaming for async backends)</name>
     <description>
-        A self-initializing extension that exposes synchronous REST semantics over asynchronous Kafka
-        processing across horizontally scaled pods. Redis carries the cross-pod return route: the
-        response payload lands in Redis (SETEX) and a per-pod Pub/Sub channel wakes the originating pod,
-        keyed by correlation-id.
+        A self-initializing extension that exposes synchronous REST semantics over asynchronous
+        processing across horizontally scaled pods, and generalizes the same rendezvous to a streaming
+        return route for cross-pod progressive rendering. Redis carries the return route: segments are
+        appended to a per-correlation-id rendezvous queue (a Redis List, stored before any signal) and a
+        per-pod Pub/Sub channel wakes the originating pod, which drains the queue destructively. A
+        one-shot response is the degenerate stream; transport-neutral by composition (platform-core +
+        Lettuce only).
     </description>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
     </parent>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>21</java.version>
-        <netty.version>4.2.16.Final</netty.version>
-        <jackson-2-bom.version>2.22.1</jackson-2-bom.version>
+        <netty.version>4.2.17.Final</netty.version>
+        <jackson-2-bom.version>2.22.2</jackson-2-bom.version>
+        <jackson-bom.version>3.2.2</jackson-bom.version>
         <log4j2.version>2.26.1</log4j2.version>
         <!-- Security override for the transitive httpcore5/httpcore5-h2 (Snyk HIGH, CWE-770) pulled
-             in via minimalist-kafka's Confluent registry client. Spring Boot's dependencyManagement
+             in via minimalist-kafka's Confluent registry client - a test-classpath path here now that
+             minimalist-kafka is test scope, kept patched all the same. Spring Boot's dependencyManagement
              pins the vulnerable 5.4.2 (management beats nearest-wins), so each module resolving the
              Confluent chain must override the property itself - see minimalist-kafka's pom. -->
         <httpcore5.version>5.4.3</httpcore5.version>
@@ -42,13 +47,13 @@
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-bom</artifactId>
-                <version>2025.0.6</version>
+                <version>2025.0.7</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- Converge Guava to platform-core's version: Confluent's serdes (via minimalist-kafka)
-                 otherwise win with an older 32.0.1, leaving this module on a different Guava (and
-                 failureaccess) than the rest of the reactor. Pinning here keeps one Guava companion. -->
+            <!-- Converge Guava to platform-core's version: Confluent's serdes (via the test-scoped
+                 minimalist-kafka) otherwise win with an older 32.0.1 on the test classpath, leaving
+                 the tests on a different Guava (and failureaccess) than the runtime. -->
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
@@ -65,19 +70,40 @@
     </repositories>
 
     <dependencies>
-        <!-- The minimalist-kafka building blocks (Kafka notification function + flow adapter). It brings
-             event-script-engine (flow runtime + REST automation, and platform-core) and the Kafka client
-             transitively, so the facade only adds the Redis return-route engine on top. -->
+        <!-- The facade is transport-neutral: production code speaks only the module's self-contained
+             correlation-id key (SyncRuntime.CID) and the platform-core function contract, so the
+             application declares its own Kafka library next to this extension (minimalist-kafka;
+             twin-kafka for a second cluster). platform-core supplies the function runtime here. -->
+        <dependency>
+            <groupId>org.platformlambda</groupId>
+            <artifactId>platform-core</artifactId>
+            <version>4.12.11</version>
+        </dependency>
+
+        <!-- The shared Redis client layer (standalone/cluster seam, config, auth, health probe). This
+             module is a consumer of the foundation: it programs against RedisBackend<String> and binds the
+             health probe to soa.redis.health. lettuce-core is still declared directly below because the
+             return-route engine uses the Lettuce API (RedisClient, Pub/Sub, StringCodec) beyond the seam. -->
+        <dependency>
+            <groupId>org.platformlambda</groupId>
+            <artifactId>redis-connection</artifactId>
+            <version>4.12.11</version>
+        </dependency>
+
+        <!-- Kafka building blocks for the end-to-end regression only (notification function + flow
+             adapter, bringing event-script-engine and the Kafka client onto the test classpath).
+             Test scope keeps the published artifact free of any transport dependency. -->
         <dependency>
             <groupId>org.platformlambda</groupId>
             <artifactId>minimalist-kafka</artifactId>
-            <version>4.11.9</version>
+            <version>4.12.11</version>
+            <scope>test</scope>
         </dependency>
 
-        <!-- Guava's failureaccess companion is required at runtime by Confluent's serdes (Guava
-             LocalCache -> InternalFutureFailureAccess), reached transitively via minimalist-kafka.
-             Declared explicitly so it is a first-class classpath entry and cannot be dropped by
-             strict/curated dependency resolution in the field. -->
+        <!-- Guava's failureaccess companion is required at runtime by Guava itself (arriving with
+             platform-core; Confluent's serdes exercise the same Guava LocalCache path on the test
+             classpath). Declared explicitly so it is a first-class classpath entry and cannot be
+             dropped by strict/curated dependency resolution in the field. -->
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>failureaccess</artifactId>
@@ -110,6 +136,17 @@
                 <exclusion>
                     <groupId>at.yawk.lz4</groupId>
                     <artifactId>lz4-java</artifactId>
+                </exclusion>
+                <!-- CVE-2026-90559 (out-of-bounds write in Snappy.uncompress(ByteBuffer, ByteBuffer),
+                     CVSS 8.7): NVD records snappy-java as affected "through 1.1.10.8", which is the
+                     NEWEST release (2025-07-19) - there is no version to upgrade to, so the codec is
+                     excluded like lz4 above rather than pinned. Mercury configures no compression.type,
+                     so nothing here produces snappy-compressed records; an application that produces
+                     or consumes snappy-compressed records must declare snappy-java itself. Drop this
+                     exclusion once a fixed snappy-java is released. -->
+                <exclusion>
+                    <groupId>org.xerial.snappy</groupId>
+                    <artifactId>snappy-java</artifactId>
                 </exclusion>
                 <exclusion>
                     <groupId>commons-collections</groupId>
@@ -221,6 +258,12 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <version>3.5.4</version>
+                <configuration>
+                    <!-- One JVM per test class: two classes boot the whole application (AutoStart with
+                         REST automation on a fixed port) - RestFlowMvpTest and StreamingRestE2eTest -
+                         and the platform is a per-JVM singleton, so they must not share a fork. -->
+                    <reuseForks>false</reuseForks>
+                </configuration>
             </plugin>
             <plugin>
                 <groupId>org.jacoco</groupId>

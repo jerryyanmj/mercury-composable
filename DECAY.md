@@ -17,8 +17,11 @@
 
 ## 1. Fact metadata
 
-Every fact in `memory/continuity.md` carries an HTML-comment footer. Invisible
-when rendered, readable and editable by any agent or human, diff-friendly.
+Every fact carries an HTML-comment footer. Invisible when rendered, readable and
+editable by any agent or human, diff-friendly. Facts live on two surfaces that these
+rules treat identically: `memory/continuity.md`, and — for Open Threads — one file per
+thread under `memory/open-threads/` (`thread-<id>.md`, filename = the fact id;
+v4.39.0, so concurrent thread work merges without conflict — see `.agent/schema.md`).
 
 ```markdown
 - POST-only for mutations, no PUT/PATCH (legacy decision, do not change)
@@ -27,7 +30,7 @@ when rendered, readable and editable by any agent or human, diff-friendly.
 
 | Field | Set | Recomputed at review? |
 |---|---|---|
-| `id` | once at creation; kebab-case, unique within the file; never changes | no |
+| `id` | once at creation; kebab-case, unique across continuity + thread files; never changes | no |
 | `created` | once at creation (date the fact entered memory) | no |
 | `last_used` | date of the most recent session that referenced the id | **yes** |
 | `uses` | count of sessions that referenced the id | **yes** |
@@ -50,8 +53,10 @@ rows above). `id` and `created` are immutable. Ordinary facts are born `working`
 
 ### Assigning an id
 Lowercase, hyphenated, derived from the fact's gist (`webhook-fire-forget`,
-`drizzle-over-prisma`). Unique within `continuity.md`. Once assigned it is
-permanent — it is the handle that session logs use to reference the fact.
+`drizzle-over-prisma`). Unique across the live layer — `continuity.md` and every
+`memory/open-threads/thread-<id>.md` (`memory-lint` flags a `[duplicate-id]`). Once
+assigned it is permanent — it is the handle that session logs use to reference the
+fact, and for a thread it is also the filename.
 
 ---
 
@@ -125,6 +130,9 @@ Windows come from `memory/decay-policy.md` (integers, in sessions).
 4. Unchecked Open Thread (`- [ ]`) → **pinned**, never decays (incomplete work). Its **pinned-ness**
    (being unchecked) is what protects it — **not** the tier label, which the tooling therefore leaves
    as-is (`memory-lint` won't flag a pinned thread's tier, `refresh-metadata` won't rewrite it; v4.26.1).
+   Pinned is not *unwatched*: once `sessions_since_last_used` exceeds `thread_stale_window` the
+   thread is **stalled** — it still never decays, but the review lists it in a human closure gate
+   (§6; `REVIEW.md` step 8; v4.40.0).
 5. `created` ≤ `working_window` sessions ago AND `uses ≤ 1` → **working**.
 6. `sessions_since_last_used ≤ active_window` → **active**.
 7. `active_window < sessions_since_last_used ≤ archive_window` → **archive-candidate**.
@@ -147,7 +155,22 @@ its completion is older than `archive_window` sessions (see `REVIEW.md`).
 > **Never-decay ≠ never-checked.** `core` facts and Architectural Invariants can quietly
 > become *wrong* when circumstances change. The review periodically prompts a human to
 > re-confirm them (or supersede the false ones, §9) — see `verify_invariants_every` in
-> `decay-policy.md` and `REVIEW.md` routine step 6.
+> `decay-policy.md` and `REVIEW.md` routine step 7. **Unchecked Open Threads can quietly
+> become *loose ends*** the same way: under competing priorities a thread is filed and left
+> behind, its "still open" items ship elsewhere, and nothing revisits the record — pinned comes
+> to mean *unexamined*. So a thread not referenced for more than `thread_stale_window` sessions
+> (a never-referenced one counts from `created`) is **stalled** (v4.40.0). Stalled is a **signal
+> for closure, decided by a human**: the review lists every stalled thread in one closure gate
+> (`REVIEW.md` step 8); the owner closes each (a 3–6-line close record; anything undelivered is
+> recorded as *deliberately dropped*, never silently lost) or re-affirms it by naming it under
+> that session's `## Memory References` — the only thing that resets the count. The pin is
+> untouched throughout, and the tool never closes a thread on its own. (Field report:
+> mercury-composable, 2026-09-16.)
+>
+> **One lifecycle per record.** A commitment tracked *inside* another record inherits that
+> record's lifecycle, not its own: a "still open" sub-list inside a thread has no signal of
+> its own, and a Project-State scalar (e.g. `status`) is overwritten wholesale at its next
+> update. If an item can be completed independently, give it its own thread.
 
 ---
 
@@ -258,9 +281,10 @@ Everything above is *backward*-looking — it keeps memory faithful to what happ
 *intended*. Full design: `docs/DESIGN-vbdi-lifecycle.md`. The rule-level essentials the
 memory layer enforces:
 
-- **The primitives.** *Current State* = `continuity.md` (read at session start). *Vision* =
-  `memory/vision.md` (the target; `core`, invariant-verified). *Blueprint* = typed
-  `(blueprint)` Open Threads = the Vision↔Current-State gap. *Design* = Key Decisions /
+- **The primitives.** *Current State* = `continuity.md` + the Open Thread files (read at
+  session start). *Vision* = `memory/vision.md` (the target; `core`, invariant-verified).
+  *Blueprint* = typed `(blueprint)` Open Threads (one file each under
+  `memory/open-threads/`) = the Vision↔Current-State gap. *Design* = Key Decisions /
   Architectural Invariants (and, **optionally**, a human-facing `docs/arch-decisions/ADR.md` decision log
   — Architecture Decision Records, read on demand, never in the per-session path; its
   supersede/deprecate-never-delete lifecycle mirrors §9, and — once the log exists — is **kept in

@@ -40,6 +40,12 @@ GET /livenessprobe
 | /health        | Application health check endpoint                              |
 | /livenessprobe | Check if application is running normally                       |
 
+For readability, `/info/routes` renders pool-style route families compactly: routes that
+differ only by a trailing numeric suffix, with the same number of instances and contiguous
+numbering, collapse into one display entry - e.g. the 500 streaming reply lanes appear as
+`"async.http.response.stream.0 - 499": 1`. This is display-only; the routing table itself
+is unchanged.
+
 ## System provided REST endpoints
 
 When REST automation is turned on, the following essential REST endpoints will be provided if they are
@@ -88,7 +94,7 @@ rest:
     timeout: 10s
 ```
 
-> *Note*: When using the rest-spring-3 library, the actuator endpoints are always available from the
+> *Note*: When using the rest-spring-4 library, the actuator endpoints are always available from the
           Spring Boot's HTTP port and they cannot be changed.
 
 ## Custom health services
@@ -553,7 +559,8 @@ If you want to enforce Integer or Long, please design a PoJo to fit your use cas
 However, floating point numbers (Float and Double) are rendered without type matching.
 
 For untyped numbers, you may use the convenient type conversion methods in the platform-core's
-Utility class. For examples, util.str2int and util.str2long.
+Utility class (import `org.platformlambda.core.util.Utility`; obtain it with
+`Utility.getInstance()`). For examples, util.str2int and util.str2long.
 <br/>
 
 ## See also

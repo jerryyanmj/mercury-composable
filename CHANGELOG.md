@@ -8,6 +8,1062 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
+## Version 4.12.11, 9/16/2026
+
+### Added
+
+1. **OpenTelemetry trace forwarding is now an opt-in feature with a master switch — and it is
+   certified against a real vendor backend.** `otel.forwarding` (default **false**) gates the
+   forwarder through `@OptionalService`, so carrying the `opentelemetry-forwarder` dependency
+   registers nothing: an application ships one artifact and DevOps decides per environment whether
+   traces leave the process, either in `application.properties` or at launch with
+   `-Dotel.forwarding=true` and no rebuild. `composable-example` demonstrates exactly that shape —
+   dependency present, feature off — and doubles as the regression harness for it.
+
+   Two hardening changes travel with it. **Credentials resolve per export**, through a `Supplier`
+   rather than once in the constructor: a `@PreLoad` function is built before any
+   `@MainApplication` credential bootstrap runs, so a token published later by a vault loader would
+   otherwise be frozen out for the life of the process. And **export failures diagnose themselves** —
+   the SDK's HTTP failure renders as a bare class name, so the forwarder now names the span, the
+   trace, the HTTP status, the backend's own message, and the configuration key to look at. The two
+   rejections that actually happen get explicit hints: a 404 is nearly always the signal path
+   missing from the endpoint (the exporter wants the full `.../v1/traces` URL, not the vendor's base
+   URL), and a 401/403 is the credential.
+
+   **Certified end to end against Dynatrace SaaS**, exporting side *and* backend: six spans in one
+   trace, queryable in the Dynatrace UI under the configured service name, with the span tree
+   reconstructed from `parent_span_id`, span kinds mapped (`server` at the HTTP edge, `internal`
+   downstream), and the instrumentation scope reporting the running release's version. An **A-B-A
+   credential experiment** (real token → 0 of 6 export failures, bogus token → 6 of 6, real token →
+   0 of 6) establishes that a clean run means the backend accepted the spans rather than the
+   forwarder silently skipping them; the application returned HTTP 201 in all three legs, so a
+   telemetry backend outage degrades observability and nothing else. Full record:
+   [Test Report — OpenTelemetry forwarder against Dynatrace](docs/test-reports/otel-dynatrace-certification.md).
+   Splunk Observability Cloud's header form is documented and parsed but has not been run live.
+
+### Fixed
+
+1. **`kafka.health` builds its probe client regardless of the thread context classloader.** A field
+   deployment logged `Class org.apache.kafka.common.serialization.StringDeserializer could not be
+   found` every five seconds, for hours, while the same JVM's real producers and consumers used the
+   same `kafka-clients` jar without trouble. Kafka resolves a class-*name* configuration value
+   through `Utils.getContextOrKafkaClassLoader()`, which prefers the thread context classloader and
+   falls back to Kafka's own loader **only when the TCCL is `null`** — so a non-null but *wrong*
+   context loader fails a lookup that a null one would have completed. `kafka.health` is a
+   `@KernelThreadRunner` and warms up on the platform's kernel-thread executor, where a pooled thread
+   need not have inherited the application's loader; `KafkaFlowAdapter` builds a consumer from the
+   identical configuration on an ordinary thread and was unaffected — that difference was the
+   diagnosis.
+
+   Client construction now runs with the module's own loader as the context loader, scoped and
+   restored in a `finally` so nothing leaks back to the pooled thread's next task.
+   `secondary.kafka.health` extends the same class and inherits the fix.
+
+   Passing deserializer *instances* instead — the first remedy proposed — is provably incomplete:
+   with a blind-classloader test in place it removes the two deserializer lookups and the very next
+   class-name setting fails instead (`metric.reporters` → `JmxReporter`, from the same jar). Kafka
+   resolves metric reporters, the partition assignor, interceptors and SASL callback handlers the
+   same way, so the classloader is the thing to fix rather than one setting at a time. The
+   regression test needs no broker and no container: `KafkaHealthCheckClassLoaderTest` builds the
+   probe on a thread whose context loader is a parentless, empty `URLClassLoader`, which reproduces
+   the field's message verbatim against the pre-fix code.
+
+### Changed
+
+1. **A Kafka template that can never work now fails `/health` instead of reporting healthy forever.**
+   The passing `Waiting for Kafka connection` status exists for exactly one situation — a credential
+   a later `@MainApplication` bootstrap will publish, where failing the check would invite the
+   orchestrator to restart a pod that cannot possibly produce the value. Everything else reported as
+   passing is how a real defect hides, which is precisely what happened above: an unresolvable class
+   logged every five seconds while `/health` stayed green throughout. A class that is absent from the
+   classpath will not appear because we waited, so that case now answers **503** with
+   `Kafka client configuration is unusable - <reason>`, deliberately naming the *configuration*
+   rather than the network so the reader looks at the classpath instead of the cluster.
+
+   **Worth a glance after upgrading**, in one narrow case: an application whose Kafka template
+   genuinely cannot build a client has been reporting healthy and will now report 503. That is the
+   correction, not a regression — but it is the one behaviour change in this release that a
+   deployment can notice. Detection is by message text, because Kafka discards the
+   `ClassNotFoundException` when it wraps it, and the default is *waiting* — so a reworded Kafka
+   message degrades to the previous, lenient semantics rather than to spurious outages.
+
+2. **Class-valued Kafka client settings are supplied as class objects, not names.**
+   `KafkaClientConfig` wrote the serializers, deserializers and default partitioner as class names,
+   so every client built from those templates depended on the building thread's context loader
+   resolving them — the failure mode above. A `Class` object short-circuits `ConfigDef.parseType`
+   (`if (value instanceof Class) return value`), so no classloader is consulted at all. The
+   `kafka-connector` module has always done it this way; this converges `minimalist-kafka` with it.
+   Nothing to configure, and a template that names its own `partitioner.class` still wins.
+
+3. **The health probe's client construction was tidied to hold no resource it does not own.** Two
+   changes, neither altering behaviour. The probe no longer hands deserializer *instances* to its
+   consumer — once the properties carry `Class` objects those are redundant, since Kafka constructs
+   the deserializers itself without consulting a loader, and handing them in left the method holding
+   two `Closeable`s it must *not* close (the returned consumer owns them). And the classloader
+   scoping moved into its own `withModuleClassLoader` helper, so the method that *creates* the
+   consumer no longer wraps it in a `try`/`finally`: that shape reads as a missing
+   try-with-resources, which cannot apply to a factory — closing the consumer before returning it is
+   precisely the bug. Each half is now honest about what it does, which clears SonarQube
+   `java:S2095` and `java:S2093` by construction rather than by suppression.
+
+   The classloader override — the actual fix — is unchanged and still load-bearing: with it
+   disabled, all six tests in `KafkaHealthCheckClassLoaderTest` fail.
+
+4. **The `opentelemetry-forwarder` now releases its exporter through the platform's shutdown
+   lifecycle** — `Platform.onShutdown(...)` instead of a hand-rolled
+   `Runtime.getRuntime().addShutdownHook(new Thread(...))`. The extension had been missed when the
+   in-tree cases were migrated in v4.12.9, so its final flush raced every other component's teardown
+   on its own thread; it is now ordered and error-isolated with the rest. No configuration change.
+
+5. Internal only: cleared IDE and SonarQube findings in `platform-core` **test** code — two unused
+   imports, a redundant `@SuppressWarnings`, and javadoc corrections (unformatted blocks, a stale
+   cross-reference). No runtime code, no test logic and no coverage was changed.
+
+### Removed
+
+1. **`otel.trace.forwarder.enabled` is retired**, superseded by `otel.forwarding`. It was a
+   second-level in-process disable that made an already-registered forwarder a no-op; with the
+   `@OptionalService` gate in front of it, the only way to *use* it became the contradictory pair
+   `otel.forwarding=true` + `otel.trace.forwarder.enabled=false`. The gate does the same job more
+   cheaply — no exporter, no thread pool, no shutdown hook — and `Telemetry` already skips a
+   forwarder route that is not registered, so nothing logs or warns.
+
+   **No action required, and no way to be surprised into exporting:** an application that sets it to
+   `false` today lands on `otel.forwarding`'s default of *off* after upgrading. An application that
+   wants forwarding off simply leaves the master switch alone.
+
+---
+## Version 4.12.10, 9/15/2026
+
+### Added
+
+1. **A release-over-release benchmark log** — `benchmark/benchmark-reporter/BENCHMARK-LOG.md`, with
+   the first milestone entry recorded against this release. `benchmark-reporter` was built as a
+   one-off A/B harness for the two elastic-queue stores; it is now a single-store benchmark of the
+   in-memory event system, and the log makes performance a tracked property of each milestone rather
+   than something measured once. Each run saves a timestamped report and finding under `analysis/`.
+
+   The v4.12.10 entry is also the regression check on this release's riskiest change — collapsing
+   `ServiceQueue` to one dispatch mode. **No regression:** the latency probe measured *while* a
+   different route's spill runs improved at every percentile against the July baseline (p99.9
+   1.54 → 1.141 ms), which is the isolation property ADR-0024 commits to. The log keeps the original
+   Berkeley-DB-vs-file comparison too, because its result is counter-intuitive and no longer
+   reproducible: Berkeley DB won most of the *isolated* benchmarks — 64% faster on one, 2.7× on
+   overload throughput — and was still the wrong choice, because a latency-sensitive route's tail was
+   8× worse at p99.9 while another route spilled.
+
+### Changed
+
+1. **Separate Redis clients for sync-over-async and the distributed cache — documented as the
+   intended design.** The guides presented shared-vs-separate as an even choice; it is not. Each
+   module should own its Redis client (`soa.redis.*` and `redis.*` respectively), and the
+   `soa.redis.*` → `redis.*` fallback exists for **backward compatibility** — sync-over-async
+   predates the cache and was configured under plain `redis.*`, and applications running it alone
+   still may be. No code change: `RedisBackendFactory` already builds a client per call and every
+   endpoint-defining key resolves per namespace, so two instances differing in server, credentials,
+   TLS, and even topology already work. New *Separate Redis clients, by design* section in the
+   distributed-cache guide names the decisive operational reason — a cache with an eviction policy
+   can evict a `request:{cid}` rendezvous key **mid-request** — plus the partial-override trap (the
+   fallback is per key) and the need to list both health probes.
+
+### Removed
+
+1. **The Berkeley DB elastic-queue store is retired** (`BdbElasticStore`), completing the migration
+   begun in v4.11. Every route's back-pressure overflow buffer now spills to the dependency-free
+   per-route segmented file FIFO unconditionally, and **platform-core no longer depends on
+   `com.sleepycat:je`**. Retired with it: the `elastic.queue.store` switch, the
+   `deferred.commit.log` property, and the `elastic.queue.cleanup` reserved route — all of which
+   existed only to serve the Berkeley DB store.
+
+   **No action required.** `file` has been the default since the store became selectable, and the
+   field canary reported no ElasticQueue issues, which is what gated this removal. An application
+   that still sets `elastic.queue.store` is unaffected: the property is no longer read, and the
+   value it would have selected is what runs unconditionally. Nothing in the buffer was ever
+   durable across a restart, so there is no data migration.
+
+   **`ServiceQueue` now has one dispatch mode.** The store determined it — a carrier-pinning store
+   had to run inline on the event loop, a virtual-thread-safe one could run off it — so retiring
+   the pinning store collapses the branch: every route dispatches on its own virtual thread via a
+   bounded mailbox, always. Tunables are unchanged (`elastic.queue.dispatch.mailbox.size`,
+   `elastic.queue.segment.size.bytes`, both now documented in the Configuration Reference).
+   See **ADR-0024**, and the measured comparison that justified the switch, retained at
+   `benchmark/benchmark-reporter/analysis/`.
+
+2. `benchmark-reporter` is now a **single-store benchmark of the in-memory event system** rather
+   than an A/B harness — a documented performance baseline for validating milestone releases. The
+   original Berkeley-DB-vs-file analysis and both report snapshots are kept in `analysis/` as the
+   historical record of why the store changed.
+
+---
+## Version 4.12.9, 9/15/2026
+
+### Added
+
+1. **Streaming return route — cross-pod progressive rendering** (sync-over-async;
+   design decisions D1–D8 and experiments E1–E4, PRs #365–#374). In a horizontally
+   scaled deployment the pod that produces progressive events is generally not the pod
+   holding the user's HTTP connection; this closes that gap with Redis alone — no broker
+   on the path. A UI pod opens a streaming *rendezvous* keyed by a business
+   correlation-id; any pod (or any engine — the wire contract is shared with the Rust
+   port) posts ordered segments through `StreamResponder`, and the UI pod renders them
+   progressively out its SSE edge. One Redis List mechanism serves both patterns — a
+   one-shot response is the degenerate stream — with store-first appends, atomic
+   append+TTL, destructive drains, best-effort wake-ups healed by final drains, and
+   TTL-bounded crash recovery. `StreamBridge` + `EventStreamSink` wire a rendezvous to a
+   `stream: true` endpoint in one call (SSE head, idle watchdog with the single final
+   drain, 503 back-pressure before the head commits). The demo ships permanent
+   `stream-ui` / `stream-producer` profiles with a chaos runbook, and the cross-pod test
+   report records the live validation — including a real LLM token stream produced on
+   one pod through the platform's SSE consumer and rendered by another.
+
+2. Developer guide: *Pausing in a unit test* — `Utility.getInstance().sleep(ms)` replaces
+   `Thread.sleep(ms)` in test code (SonarQube `java:S2925`), part of the PR #376 quality
+   round.
+
+3. **Clustered Redis for sync-over-async** — the return route now runs against a single-node
+   Redis or a Redis Cluster (e.g. AWS ElastiCache cluster-mode-enabled) with no code change.
+   Two keys select the client: `soa.redis.cluster.detect=auto` (default) probes the seed at
+   start-up (`INFO` → `cluster_enabled:1`); anything else defers to the boolean
+   `soa.redis.cluster.mode` (`true` = cluster, `false` = standalone), which is also the
+   fallback when an `auto` probe is inconclusive. The boolean form matches a common
+   cache-config convention, so it can be shared with a co-resident `redis.cluster.mode`.
+   `soa.redis.cluster.nodes` lists cluster seeds (`host:port,…`), or a single seed /
+   configuration endpoint suffices — the client discovers the shard topology. The route is
+   cluster-safe by construction: every key operation is
+   single-key, and the one two-key delete is split so no command spans two hash slots; classic
+   Pub/Sub wake-ups still cross the cluster bus. Authentication is identical for both
+   topologies — a new optional `soa.redis.username` supports an ACL/RBAC user (AWS applies one
+   credential set to the whole replication group), sourced like `soa.redis.password` from the
+   environment (a lower-`sequence` credential bootstrap publishes the vault secrets first). The
+   producer-side `StreamResponder` and the `soa.redis.health` check are cluster-aware through
+   the same seam. Standalone deployments are unchanged. (Config keys use the `soa.redis.*`
+   namespace — see Changed.)
+
+4. **Distributed cache module** (`extensions/distributed-cache`) — a generic Redis-backed L2
+   cache exposed as one composable action function, route `v1.cache.redis`. Opt in with
+   `redis.cache.enabled=true`; the same function then serves Layer 1 (PostOffice), Layer 2 (an
+   Event Script task with output data mapping) and Layer 3 (a `graph.task` node). Operations:
+   `PUT`/`GET`/`MGET`/`MPUT`/`DELETE`/`PUT_IF_NOT_PRESENT` plus FIFO `LIST_PUSH`/`LIST_POP`/
+   `LIST_LEN`, over opaque `byte[]` values (the caller owns serialisation, for cross-layer and
+   cross-language interop). Every stored key carries a TTL from birth — `SETEX`, atomic
+   `SET NX EX`, atomic `RPUSH`+`EXPIRE` — and `MPUT` is a pipelined per-entry `SETEX`
+   (TTL-preserving, unlike a raw `MSET`). Cluster-safe by construction: single-key ops route to
+   their slot, a cross-slot `MGET` is scatter-gathered by the Lettuce cluster client, and `MPUT`
+   pipelines independent single-key writes. Tunables: `redis.cache.instances` (worker
+   concurrency, all sharing one multiplexed connection — no pool), `redis.cache.default.ttl`
+   (default `1h`), `redis.cache.key.prefix` (an app namespace). The reserved `redis.health`
+   check ships with it. Reuses the shared `redis-connection` foundation under the plain
+   `redis.*` namespace, so it coexists with sync-over-async's `soa.redis.*` or shares one Redis
+   via the fallback. Design: `draft-design-specs/distributed-cache.md`. Rust port in lockstep.
+
+5. **Platform shutdown lifecycle** — `Platform.getInstance().onShutdown(Runnable)` (PR #390). The
+   platform owns a single JVM shutdown hook, installed lazily on the first registration; callbacks
+   run in reverse registration order (last opened, first released) and each is isolated, so one
+   failing callback cannot block the rest. It replaces hand-rolled
+   `Runtime.getRuntime().addShutdownHook(new Thread(...))` calls — uncoordinated threads with no
+   ordering and no error isolation — and the three in-tree cases (`PersistentWsClient`,
+   `BdbElasticStore`, `FileElasticStore`) are migrated onto it. The distributed cache registers its
+   Redis-connection close the same way, so the connection is released only when one was actually
+   opened.
+
+6. **General purpose MsgPack serialization** — `MsgPack.packMapOrList(Object)` /
+   `MsgPack.unpackMapOrList(byte[])` (PR #396). `MsgPack.pack`/`unpack` are the *event payload*
+   codec: they wrap a PoJo or primitive with its type under the reserved `_T`/`_D` keys and strip
+   them on the way back, so a user Map that happens to carry a `_T` key comes back changed. The new
+   pair never applies that encoding — a Map or List round-trips verbatim — making `MsgPack` usable
+   as an application's own portable binary serializer. Map or List only; encode a PoJo yourself
+   first (for example with `SimpleMapper`). The two roles are now layered rather than tangled: the
+   new methods are the primitives and `pack`/`unpack` delegate to them, so `pack`/`unpack`
+   behaviour is unchanged. Prefer this pair over `EventEnvelope.toBytes()` for a value another
+   language pack must read. See *API Overview → Binary serialization with MsgPack*.
+
+7. **Worked example: one distributed cache across all three layers**
+   (`examples/distributed-cache-example`, PRs #392, #395, #397). The same profile GET/POST/DELETE
+   CRUD exposed three times over one shared `cache-demo:` cache — Layer 1 as a single PostOffice
+   function, Layer 2 as one Event Script flow (an `input.method` → action mapper plus a decision),
+   Layer 3 as one graph with a decision node — so a profile written through one layer reads back
+   unchanged through the other two. The cache value is a plain MsgPack-packed Map (item 6), which
+   is both compact and the form every language pack reads, so the example doubles as the interop
+   harness for the Rust port. End-to-end tests run on an embedded Redis; the runnable app uses
+   `helpers/redis-standalone`.
+
+8. **The Layer 3 starter template ships dev mode** (`templates/starter-graph`, PR #397). The
+   template now carries the MiniGraph Playground UI, the session WebSocket, the AI companion
+   endpoint, and the `scripts/playground-session-broker.mjs` broker, gated by a single
+   `app.env=dev` line — so a new knowledge-graph project can be co-authored with an AI agent from
+   its first run, and removing that one line closes the whole surface for production. The
+   distributed-cache example enables the same surface alongside its ordinary Layer 1 and Layer 2
+   routes, showing that dev mode is additive rather than a separate application.
+
+### Changed
+
+1. **sync-over-async adopts a `soa.redis.*` config namespace (backward-compatible).** The
+   module's Redis keys now have preferred `soa.`-prefixed forms — `soa.redis.host`,
+   `soa.redis.port`, `soa.redis.username`, `soa.redis.password`, `soa.redis.ssl`,
+   `soa.redis.database`, `soa.redis.timeout.ms`, `soa.redis.cluster.detect`,
+   `soa.redis.cluster.mode`, `soa.redis.cluster.nodes`, `soa.redis.health.timeout`,
+   `soa.redis.health.startup.grace` —
+   so sync-over-async owns its own Redis configuration and does not collide with another
+   `redis.*` consumer in the same application (a distributed-cache library, or
+   `minigraph-state-redis`) that may point at a different server, auth, or topology. **No
+   migration required:** each key falls back to the un-prefixed `redis.*` form when the `soa.`
+   one is absent, so existing deployments keep working; set `soa.redis.*` only to override the
+   fallback or to decouple from a co-resident `redis.*` consumer. The health **route** rename
+   from PR #377 (`redis.health` → `soa.redis.health`, freeing the plain name for the planned
+   generic Redis distributed-cache module) still stands — update
+   `mandatory.health.dependencies` / `optional.health.dependencies` to `soa.redis.health`
+   (route names have no fallback). `soa.redis.health` probes the sync-over-async Redis; a
+   `minigraph-state-redis` deployment needs its own check for its `redis.*` server.
+
+2. **sync-over-async is transport-neutral, and minimalist-kafka moves to test scope
+   there** (PR #364). The facade tasks speak the module's own flow-level `cid` key; the
+   Kafka wire header belongs to the transport and is configurable there
+   (`kafka.correlation.id.header`, with per-binding overrides). **Consumer note:** an
+   application that relied on sync-over-async's transitive `minimalist-kafka` dependency
+   must now declare `minimalist-kafka` itself.
+
+3. **Redis client layer extracted to a shared `redis-connection` foundation.** The
+   standalone/cluster seam (`RedisBackend`), connection config (`RedisConfig`), factory, auth,
+   TLS, and the PING health-probe now live in `extensions/redis-connection`, which both
+   sync-over-async and the new distributed cache depend on — no module re-implements Redis
+   wiring. `RedisBackend` is generic in its value type (`RedisBackend<String>` for
+   sync-over-async's text payloads, `RedisBackend<byte[]>` for the cache's opaque values), and
+   `RedisConfig.from(config, prefix)` reads a module's namespace (`soa.redis.*` or `redis.*`)
+   with the same `redis.*` fallback. Each module binds the shared health-probe with a thin
+   `@PreLoad` subclass fixing its own route (`soa.redis.health` / `redis.health`). Pure
+   refactor — no wire-format or behaviour change, and no config change for existing
+   sync-over-async deployments.
+
+4. **A Layer 3 application needs one graph endpoint, not one per graph** (PR #397). The graph id in
+   `POST /api/graph/{graph_id}` is a URL path parameter, so a single `rest.yaml` entry and the stock
+   `graph-executor` flow serve every model an application deploys — adding a graph means adding its
+   id to `graphs.yaml`, never a bespoke route. The distributed-cache example's hand-written
+   `/api/l3/profile` endpoint and its per-graph flow were removed in favour of the standard pair,
+   and the AI agent guide now scaffolds from `templates/starter-graph` (which ships the complete
+   surface) rather than trimming a fuller example down.
+
+   A related packaging note for graph applications: depend on **`minigraph-playground-engine`
+   alone**. It brings `event-script-engine` and `platform-core` transitively, and declaring all
+   three creates a resource collision — the Playground UI is `classpath:/public/index.html` inside
+   the engine while `platform-core` ships a placeholder page at the same path, so whichever jar
+   comes first on the classpath wins. Tests, `curl`, and the companion endpoint all stay green when
+   this goes wrong; only a browser reveals it.
+
+### Fixed
+
+1. platform-core HTTP client: `:` stays raw in URI path segments (RFC 3986 allows it as
+   `pchar`), so Google-style custom methods (`.../models/<model>:streamGenerateContent` —
+   every Google Cloud `:verb` API) no longer 404 (PR #372, with a regression pin).
+
+2. Test suites no longer assert liveness on a racy **closing** post (PRs #378, #379): a
+   drain already in flight can pop the terminal segment, deliver it, and close the
+   rendezvous before the producer's own route check runs, so `post` may answer `false`
+   although the segment WAS delivered. The producer contract holds ("false = stop
+   producing") — the assertions, not the engine, were wrong. Surfaced by the Rust port
+   running the same scenarios under a different scheduler.
+
+3. Sonar/IDE quality round across the sync-over-async extension and demo (PR #376) —
+   cognitive-complexity and duplicate-literal cleanups, `synchronized` lazy-init for
+   plain fields, and the `SyncRuntime.activeStreams()` observer accessor so diagnostics
+   never obtain the closeable coordinator. A follow-up round after the clustered-Redis work
+   (PR #386) cleared three more: an unused return from `PendingRequests.remove()`,
+   try-with-resources for the cluster-detection probe client, and coverage for the explicit
+   `cluster.mode` branch.
+
+4. **A failure inside a MiniGraph async skill callback now surfaces as the node's error instead of
+   hanging silently** (PRs #393, #394). `graph.task`, `graph.extension` and `graph.api.fetcher`
+   completed through `Mono.create(sink -> pending.thenAccept(...))`, so an exception thrown inside
+   that callback was swallowed by the unobserved `CompletableFuture` stage: the sink never
+   completed and the caller timed out with **zero diagnostics** — the graph appeared to traverse
+   fully and downstream calls logged success, so it read as a transport fault. Both async skills
+   now complete through a guarded path that unwraps a failed future and routes a throwing handler
+   to `sink.error`, rendering the failure exactly like a synchronous skill throw with trace context
+   intact. The two output-mapping errors were reworded to name the offending node, quote the
+   `lhs -> rhs`, and state the rule directly: an output-mapping left side must be a constant or a
+   `result.` / `model.` / `<node>.` element — `input.*` is valid only on the input side. To echo an
+   input value, stage it at a mapper or decision node and map it out from `model.`.
+
+5. The `mini-scheduler` job-list endpoint tolerates a state file caught mid-write (PR #384).
+   `ScheduleAdmin.getJobList()` answered 500 when a scheduled job was concurrently rewriting a
+   state file: the sample writer truncates before writing, so a concurrent read sees 0 bytes, Gson
+   returns a null map, and the timing lookup threw an NPE. The single-job GET path already
+   tolerated the same transient read; the list path now does too, contributing an entry with no
+   timing rather than failing the whole list.
+
+### Security
+
+1. **CVE-2026-87823 / SNYK-JAVA-COMGITHUBLUBEN-19659584** (CWE-190 integer overflow,
+   CVSS 8.8, no known exploit): `kafka-clients` 4.3.1 — the newest release — ships the
+   vulnerable transitive `com.github.luben:zstd-jni` 1.5.6-10 and no kafka-clients
+   upgrade carries the fix, so the fixed **zstd-jni 1.5.7-16** is pinned directly
+   (runtime scope, like the transitive it replaces) in `minimalist-kafka`,
+   `kafka-connector` and `kafka-standalone`. Maven nearest-wins resolution makes the pin
+   effective for every downstream consumer — all ten Snyk-flagged projects re-resolve
+   1.5.7-16. Remove the pins when kafka-clients ships zstd-jni ≥ 1.5.7-14. (The Rust
+   port is not exposed: its Kafka client builds without the zstd codec.)
+
+2. **CVE-2026-90559 / SNYK-JAVA-ORGXERIALSNAPPY-19778376** (CWE-787 out-of-bounds write
+   in `Snappy.uncompress(ByteBuffer, ByteBuffer)` — destination buffer capacity is never
+   validated against the decompressed size; CVSS 8.7, no known exploit): `kafka-clients`
+   pulls `org.xerial.snappy:snappy-java` 1.1.10.7 transitively, and NVD records every
+   version **through 1.1.10.8 — the newest release (2025-07-19)** as affected, so unlike
+   the zstd-jni finding there is nothing to pin to. The snappy codec is **excluded**
+   instead at all six Kafka artifact declaration sites (kafka-connector,
+   minimalist-kafka's client and embedded test broker, twin-kafka, sync-over-async,
+   kafka-standalone) — extending the same opt-in codec contract as lz4: no framework
+   module enables Kafka compression, codecs load lazily and the producer default is
+   `none`. An application that produces or consumes snappy-compressed records must
+   declare `org.xerial.snappy:snappy-java` itself, as it already must for lz4. Drop the
+   exclusions once a fixed snappy-java is released. (Upstreamed from a field-authored
+   patch. The Rust port does not use snappy-java — librdkafka's snappy support is its
+   own C implementation, a different codebase not covered by this CVE.)
+
+3. **No credential literals in test fixtures** (CWE-798, PR #381). The field's Snyk Code policy
+   escalates hard-coded-credential findings to High, and two test literals in the Redis
+   health-check auth suite tripped it. Rather than suppress the findings, the literals are gone:
+   the fixture credential is generated per test run and the embedded server is started with that
+   value (authoritative by construction), and the deliberately-wrong credential for the WRONGPASS
+   scenario is derived from it by suffix — guaranteed unequal, still not a literal. A repo-wide
+   sweep confirms no credential literal remains.
+
+---
+## Version 4.12.8, 9/12/2026
+
+### Added
+
+1. `redis.health` — a ready-made health check for the Redis used by the sync-over-async
+   extension (route auto-registers when the jar is on the classpath; opt in via
+   `mandatory.health.dependencies` / `optional.health.dependencies`). One PING on a
+   dedicated connection proves connectivity, TLS and authentication; the
+   `minigraph-state-redis` extension reads the same `redis.*` parameters, so one probe
+   covers a deployment using either or both. Tunables: `redis.health.timeout` (5s) and
+   `redis.health.startup.grace` (30s). Every critical infrastructure component needs a
+   health check service.
+
+### Fixed
+
+1. `kafka.health` and `secondary.kafka.health` resolve their probe client configuration
+   **lazily** — at client build time, re-resolved on every rebuild — never in the
+   constructor (upstreamed from a field merge request). A `@PreLoad` function is
+   constructed before any `@MainApplication` credential bootstrap publishes its system
+   properties (the vault pattern), so a constructor-resolved `sasl.jaas.config` template
+   froze the credential as missing for the life of the instance and every probe failed
+   forever with Kafka's `ConfigException: The OAuth configuration option clientId value
+   is required`; deployments had to demote `kafka.health` out of
+   `mandatory.health.dependencies`. The check now heals on the first probe after the
+   credential lands — no restart.
+
+2. While a health probe's configuration is still **unusable** — the client cannot be
+   built from it, or the server rejects the credentials (Redis `NOAUTH`/`WRONGPASS`, the
+   signature of a password that has not landed yet) — `type=health` reports a **passing**
+   `Waiting for ... connection` status instead of failing `/health`: an orchestrator
+   restart cannot produce a missing credential. Only a genuine connectivity failure
+   (client built, server unreachable) fails the check with status 503.
+
+### Changed
+
+1. The Kafka health checks run on **kernel threads** (`@KernelThreadRunner`), joining
+   `SimpleKafkaNotification` and `SchemaCodec`: the Kafka consumer performs network I/O
+   on the calling thread inside `synchronized` sections, which pins a virtual-thread
+   carrier on Java 21 (JEP 491 lifts that only in JDK 24+). `redis.health` deliberately
+   stays on virtual threads — Lettuce does its I/O on its own event-loop threads and the
+   caller merely awaits a future, which unmounts cleanly.
+
+2. A failed health probe returns a 503 response carrying a key-value message —
+   `{"text": "<reason>", "code": 503}` — instead of a bare exception string: the status
+   code is what the health aggregation (and Kubernetes) detects; the map is for the
+   DevOps reader.
+
+3. Health-check hardening from the review round: `AtomicReference` instead of volatile
+   reference fields, fail-fast `Objects.requireNonNull` on the probe-config suppliers
+   (with the non-null result contract documented), the background warm-up on the
+   platform's managed executors, and the twin's fallback tunable helper relocated to its
+   only user (`SecondaryKafkaHealthCheck`).
+
+---
+## Version 4.12.7, 9/11/2026
+
+### Added
+
+1. Three-layer starter templates under `templates/` — `starter-function` (Layer 1),
+   `starter-flow` (Layer 2) and `starter-graph` (Layer 3, a zero-code knowledge-graph
+   service behind the CompileGraph gate): copy-out projects with standalone build files
+   that ship BOTH Maven and Gradle (keep one, delete the other — the Gradle option
+   applies to templates only; the engine reactor stays Maven). Each template carries a
+   README and an AGENTS.md that routes a fresh AI agent to the entry-point playbook.
+   Reactor-listed so every build proves them, with a new `templates-gradle` CI job
+   verifying the Gradle side. Lock-step with the Rust engine's template crates — the
+   Layer 2 flow YAML and the Layer 3 graph model are byte-identical across engines.
+
+2. Fresh-agent entry-point playbook in the AI developer guide ("Starting a
+   collaboration — two typical entry points"): the greenfield conversation (confirm
+   intent, offer AI-enablement, recommend the knowledge-graph path as a question,
+   scaffold from a starter template) and the existing-repository case (offer
+   AI-enablement first, fold hand-written per-tool context into the shared memory
+   layer, then orient). Packaged in the AI contract, so fresh agents receive it
+   version-matched.
+
+3. The Mercury Family page (`docs/mercury-family.md`) — the five-member family
+   (agent-memory, mercury-composable, mercury, mercury-python, mercury-nodejs) with a
+   home-page hero button and an Orientation nav entry, following agent-memory's
+   promotion into the family at github.com/Accenture/mercury-go.
+
+### Fixed
+
+1. The simple-plugin allowlist gate now scans method bodies, not just class shape:
+   `RecursiveClassTypeExaminer` walks call and field owners, `new`/cast/`instanceof`
+   types, lambda and method-reference handles (invokedynamic, including
+   `ConstantDynamic`), class literals and try/catch types, and the loader keeps the
+   code attribute (`SKIP_CODE` dropped). A plugin whose signature is clean can no
+   longer reach `java.io`, `java.net` or threads from inside `calculate()` — the
+   sub-millisecond, no-side-effects containment the allowlist declares is now
+   enforced. `TypeConversionUtils` and `KeyNormalizationUtils` are formally
+   allowlisted; nested classes are analyzed as part of the plugin. Proven through the
+   real loader by `SimplePluginGateTest`, with the ~50 built-ins as the regression net.
+
+### Changed
+
+1. The Methodology guide is synthesized around Intent-Driven Development — IDD leads
+   (the three developer steps and the grammar-composition recursion from the story
+   deck), followed by the knowledge-graph path, the composable design principles and
+   the event-driven core. The flow-schema-reference plugin-allowlist note now states
+   the enforced behavior.
+
+2. Documentation site polish: two-column home page with default-size hero buttons and
+   a relaxed layered-ascent table; story-deck slide 7 states its essence in plain
+   language ("Change what AI generates: artifacts a human can read."); the Orientation
+   nav label simplified to "White Paper".
+
+---
+## Version 4.12.6, 9/10/2026
+
+### Added
+
+1. `f:camelCase` and `f:snakeCase` key-normalization simple plugins: legacy systems —
+   often XML-to-JSON transformations — deliver the same logical key as `MyExampleKey`,
+   `My_Example_key`, or `my_example_Key`. The plugins segmentize each key (underscore,
+   hyphen and dot separators; case transitions with the acronym rule — `myXMLKey`
+   becomes `myXmlKey` / `my_xml_key`) and re-case recursively through nested maps and
+   lists; values are never touched, and normalization is idempotent. Beyond legacy
+   cleanup they do impedance matching between key conventions (e.g. a camelCase request
+   payload transformed to snake_case for a downstream system). Lock-step with the Rust
+   engine — identical algorithm, error messages, and shared flow fixture.
+
+2. Stepwise traversal logging for deployed graph execution (field request): the
+   production `graph.executor` emits the same trail the Playground dry-run narrates —
+   `Walk to {node}`, `Executed {node} with skill {skill} in {time} ms`,
+   `Graph traversal completed in {time} ms`, `Graph traversal aborted: {reason}` — as
+   INFO structured records (`{id, text, graph}`, where `id` is the run's trace id,
+   falling back to the flow instance id) so OpenTelemetry dashboards can join app logs
+   with exported spans, and log-analytics platforms index the keys directly in the
+   json/compact formats. Gated by `graph.traversal.log` (default `true`;
+   `-Dgraph.traversal.log=false` to reduce log volume). The executor runs zero-traced,
+   so the app-log-context block never accompanies these lines — the record's `id` key
+   is the correlation surface. Lock-step with the Rust engine.
+
+3. MiniGraph Playground UX modernization (community contribution, PR #341, refined
+   through maintainer-guided rounds): the Help panel, minimap, and graph run controls
+   forward-ported to the modernized webapp — node create/edit and mock graph input as
+   in-place left-slot panels (no modals) with per-mode default widths, the minimap as a
+   draggable floating island with a `Ctrl+M` toggle, JSON-Path simplified to a
+   payload-only tool, and frontend-only undo via compensating commands.
+
+### Fixed
+
+1. The temp graph-model endpoint (`GET /api/graph/model/{graph_id}/{sequence}`)
+   answered 400 for a nonexistent or housekeeping-expired draft — a missing resource
+   now answers **404** as if it is not there, matching the deployed-graph
+   "compiled or 404" precedent. The `{sequence}` path parameter is documented as what
+   it is: an artificial cache-buster minted per describe/export reply, deliberately not
+   part of the resource identity.
+
+2. Playground webapp build: the vendor-router chunk had silently vanished from the
+   bundle chunking after the react-router v8 package consolidation — the matcher is
+   fixed and the chunk restored; nanoid is bumped past a high-severity npm audit
+   finding (dev tooling and bundle hygiene, no runtime behavior change).
+
+### Changed
+
+1. The Playground UI reads the **live session graph** (`GET /api/graph/session/{id}`)
+   as its single graph source — initial load, navigation restore, and mutation
+   auto-refresh fetch it directly, with no `describe graph` round-trip and no temp-file
+   link for the view. `describe graph` / `export graph` stay human-operator (and
+   companion-agent) console commands with their snapshot + link unchanged; clicking a
+   console link row brings the current graph forward. The packaged webapp bundle
+   carries the change.
+
+---
+## Version 4.12.5, 9/9/2026
+
+### Fixed
+
+1. `Utility.str2date` parsed two legitimate `java.time` string shapes to the epoch,
+   silently corrupting timestamps. A minute-boundary value (second and nanosecond both
+   zero) serializes without the `":ss"` component — `OffsetDateTime.toString()` emits
+   `"2026-09-09T01:26+08:00"` — and the ISO branch rejected it, returning
+   `new Date(0)`; this also surfaced as a rare flaky `EventEnvelope` round-trip test in
+   CI. A second, older hole: the no-fractional path never stripped the colon from a
+   `"+HH:MM"` zone offset, so any second-precision non-UTC ISO string (nanosecond zero —
+   the other shape `java.time` emits) also parsed to the epoch. The parser now inserts
+   the missing seconds component and strips the zone colon on both paths. Contributed
+   from the field.
+
+2. The `f:concat` and `f:text` simple plugins threw NPE on a null operand — the text
+   conversion is a pattern switch, which is null-hostile without an explicit
+   `case null` — where the pre-plugin built-ins appended `"null"`. A null operand now
+   renders as `"null"` text (`String.valueOf` semantics, matching the Rust engine's
+   existing behavior), and the binary conversion relaxes null to an empty byte array.
+   Contributed from the field.
+
+### Changed
+
+1. Registering a route pool prints **one INFO line per pool lifecycle** — "Route pool
+   {prefix} with {n} instances started as {kernel|virtual} thread" and "Route pool
+   {prefix} stopped" — instead of one line per member (500 lines for the SSE reply-lane
+   pool); per-member start/stop lines demote to DEBUG. A pool now requires at least 2
+   lanes, and direct updates to a member are tolerated silently (the per-touch warnings
+   are removed). Lock-step with the Rust engine.
+
+2. MiniGraph Playground graph view tuning (community contribution, PR #339): a freshly
+   loaded graph fills more of the panel (fit padding 0.25 → 0.1 at every fit path), the
+   zoom ceiling rises from 2.5 to 4 so dense property lists are readable, and the
+   zoom/pinch behaviors are pinned explicitly so a library upgrade cannot change them
+   silently. The packaged webapp bundle is rebuilt with the change.
+
+3. Playground webapp dev-dependency refresh (Dependabot): js-yaml 4.3.2,
+   vitest/@vitest/mocker 4.1.11 — test tooling only, not part of the shipped bundle.
+
+---
+## Version 4.12.4, 9/8/2026
+
+### Added
+
+1. The `eq` and `ne` simple plugins accept **optional `ignoreCase` / `ignoreType`
+   modifiers** in argument positions 3 and 4: `text(ignoreCase)` compares two strings
+   case-insensitively; `text(ignoreType)` compares the text forms of the two values,
+   allowing the relaxed comparison of numbers and booleans — `"123" == 123`,
+   `"123.456" == 123.456` and `"true" == true`; both together compare the text forms
+   case-insensitively. This removes the need for `:text` cast workarounds when
+   serialization type drift makes strict cross-type equality brittle. Lock-step with
+   the Rust engine, including error messages.
+
+2. **MiniGraph Playground UI overhaul (part 1 — editing).** A console hide/restore
+   toggle; an overlap-free, content-sized graph layout with measured relayout (nodes
+   never overlap regardless of content); thumbnail/expanded node detail modes with a
+   view-control toggle; and an in-place "magnified node" editor for both **Edit Node
+   and Create Node** — a side panel that renders like a node with sorted keys,
+   `[]` array-append signatures and drag-to-reorder — replacing the old pop-up
+   dialogs. The Playground now has zero modal dialogs.
+
+3. **MiniGraph Playground UI overhaul (part 2 — connections).** Neo4j-style connection
+   authoring: the node body moves the node while a halo ring around it starts a
+   connection drag (with a context-menu "Connect to…" click-to-connect alternative),
+   ending in a relation popover anchored at the drop point with one-click relation
+   chips. Connections are selectable and deletable — Delete/Backspace removes selected
+   edges, and a right-click edge menu offers **per-relation deletion**
+   (`Delete 'fetch'` / `Delete 'test'` / `Delete all (n)`), planned as
+   direction-correct compounds so removing one direction never disturbs the reverse
+   connection. Every UI edit is undoable — Ctrl/Cmd+Z and per-toast Undo buttons replay
+   compensating console commands, keeping the backend a lightweight command executor.
+   The graph auto-fits when panel toggles reshape its pane.
+
+4. **Claims-fixture gate (ADR-0023).** `docs/guides/claims-registry.json` registers
+   high-value documentation behavior claims; each claim names the engine test that pins
+   it, the `Claim*Test` pins run in the normal build, and the doc-canon check verifies
+   the normative sentence still appears on its page and the pin still exists. Born from
+   the AI-grammar coverage study's finding that doc drift lives in ungated prose.
+   Engine-neutral format shared with the Rust repo.
+
+### Changed
+
+1. **`eq` and `ne` compare exactly two values**, consistent with `gt`/`lt`. The
+   previous open-ended chained form (three or more plain values, all equal to the
+   first) is removed — a 3rd/4th argument must now be a modifier. Breaking only for
+   flows that used the chained form; none exist in the repository, and the two-value
+   form is unchanged.
+
+2. Dependency updates for the field security gate (merged 2026-09-04, deliberately
+   riding main until this regular release): vertx-core 5.1.6 and Jackson 2 BOM 2.22.2
+   clear the reported CVEs; proactive Jackson 3 BOM 3.2.2 and Tomcat 11.0.25 pins stay
+   ahead of the next scan wave.
+
+3. Documentation: the white paper and deck are finalized as **the Mercury Story**
+   (`docs/mercury-story.md` + `docs/mercury-story.html`, retitled Intent-Driven
+   Development with agent-memory attribution and a cross-engine benchmark study); the
+   Event Script syntax guide presents the simple-plugin catalog as a single 3-column
+   table matching the Rust documentation site; and the flow-schema reference gains the
+   previously missing `f:ne` row.
+
+---
+## Version 4.12.3, 9/4/2026
+
+### Added
+
+1. Per-client opt-out for both Kafka libraries: `kafka.producer.enabled` /
+   `kafka.consumer.enabled` (minimalist-kafka) and `secondary.kafka.producer.enabled` /
+   `secondary.kafka.consumer.enabled` (twin-kafka), all defaulting to `true`. The
+   producer was previously built unconditionally at startup, so the one-way leg of a
+   bridge failed to deploy where the managed cluster issues credentials per client and
+   had none for the unused one. Each cluster reads only its own keys and names its own
+   key in any resulting error. Three deliberate behaviors: `simple.kafka.notification`
+   stays registered when the producer is off and fails naming the setting (rather than
+   a "route not found"); a binding that declares `dlq-topic` while its cluster's
+   producer is off **fails startup**, since dead letters ride that producer and would
+   otherwise be dropped with a DATA LOSS log; and `kafka.health` builds its Metadata
+   probe from the producer template when the consumer is off, so both legs of a one-way
+   bridge stay health-checkable. Disabling both clients is allowed and logs a startup
+   WARN. The flag is a veto, not a trigger — the default starts nothing that is not
+   otherwise configured, and only the literal `false` disables. Java-only: the Rust port
+   carries no Kafka module.
+
+2. **The Mercury Story** — a white paper (`docs/ai-grammar-methodology.md`) and a
+   presentation deck (`docs/presentations/ai-grammar-story.html`, self-contained HTML
+   served by the docs site), featured front and center on the documentation home page.
+   The story of the framework — origin, the three-layer ascent, governed nondeterminism —
+   and the **AI grammar methodology**: documentation engineered as a machine-consumable,
+   CI-verified, token-budgeted contract, including the three-step developer journey where
+   building blocks built on Mercury compile AI grammars of their own. Grounded in 19
+   verified industry and academic references.
+
+3. `llms.txt` is now **complete and CI-enforced**: every guide page and DSL catalog is
+   listed (nine were missing, including the whole REST automation spec kit — grammar,
+   AI agent guide, and `rest-automation.json` — leaving `rest.yaml` authoring
+   undiscoverable to AI agents), and `check-doc-canon.py` gains a coverage check so a
+   new guide cannot ship unlisted.
+
+### Fixed
+
+1. [Kafka] Schema Registry credentials now reach the serdes, so client-side field level
+   encryption works against an authenticated registry. `SchemaCodec` passed its serdes a
+   config map built only from `schema.registry.serde.*`, which is empty for almost every
+   application. Confluent's serdes do not only use the `SchemaRegistryClient` they are
+   given: the CSFLE rule executor (`EncryptionExecutor.configure`) builds its **own**
+   `DekRegistryClient` from that map alone, so every DEK lookup went out unauthenticated
+   and any encrypted field failed with `Unauthorized; error code: 401` — even though the
+   codec's own client was fully authenticated against the same registry with the same
+   identity. The serdes now inherit the registry client template and apply their own
+   `schema.registry.serde.*` entries on top, so a serde-only setting (a KMS driver
+   credential, a serde-specific identity) still wins. Duplicating `bearer.auth.*` under
+   `schema.registry.serde.*` was not a usable workaround: those keys live in
+   `application.properties`, whose `${...}` references `AppConfigReader` resolves — and
+   destructively rewrites — at construction, before any `@MainApplication` credential
+   bootstrap has published its system properties. Contributed from the field.
+
+2. The Playground `export graph` overwrite guard no longer rejects a graph whose root
+   node has no `name` property (it compared "null" against the target filename). The
+   root name is validated only when declared - a declared, mismatching name still
+   rejects the overwrite; a missing or blank name is accepted and the export assigns
+   the target id as the root name, exactly like the no-root path. Found by the
+   ai-enabled-repo-demo rehearsal loop: the first export of an unnamed draft worked,
+   re-exporting the same draft failed. Lock-step with the Rust engine.
+
+---
+## Version 4.12.2, 9/2/2026
+
+The AI-grammar feedback round: a field AI agent's three-layer build (Event Script,
+Playground, companion driving) filed findings that drove most of this release - the
+companion endpoint retirement, the `graph.js` deprecation, the Playground export fix,
+and the documentation updates below. The `json` simple plugin closes a separate,
+unrelated field-feedback gap.
+
+### Added
+
+1. New `json` simple plugin for Event Script and graph data mapping —
+   `f:json(text([])) -> my_empty_list` parses JSON text (a constant or a model variable)
+   into a live map or list in one statement:
+   `f:json(text({"hello": [1, 2, {"nested": "demo"}]})) -> my_nested_dataset`. Closes
+   the field feedback gap where creating a simple dataset (e.g. an empty list) required
+   a composable function. Whole numbers parse as long, decimals as double; malformed
+   JSON aborts the task as a 400-class user error ("Unable to parse JSON: (reason)").
+
+### Removed
+
+1. Two unused `TypeConversionUtils` methods (`isBoolean`, `deepCopy(List)`) — internal
+   plugin-support utilities with no remaining callers.
+
+### Breaking
+
+1. The fire-and-forget AI companion endpoint `POST /api/companion/{id}` is RETIRED
+   (ADR-0021) - the bare URL now answers 404. Use the synchronous
+   `POST /api/companion/{id}/sync` (ADR-0008), unchanged, which returns the command
+   outcome in-band and tees output to the session console. Driven by a field AI-agent
+   exercise: the async form hid errors and forced sleep-padded drivers.
+
+### Deprecated
+
+1. The `graph.js` skill (ADR-0022) - kept for backward compatibility only; new graphs
+   and AI agents must use `graph.math` for decisions plus `graph.task` for anything the
+   safe dialect cannot express. Runtime script evaluation fails enterprise security
+   review, and a silent equality defect with quoted string literals was reported from
+   the field.
+
+### Fixed
+
+1. The Playground `export graph` command now reports an in-band ERROR when the file
+   write fails (the write result was previously unchecked); its idempotent-write
+   behavior (identical content skips the physical write, preserving the mtime) is now
+   documented.
+
+### Documentation
+
+1. From the AI-grammar feedback round above: the companion guide now documents /sync
+   as the only endpoint; "restart ends the session - export first" and "404 means the
+   session is gone" warnings; inspect's leaf-vs-subtree behavior; array element and
+   append mapping syntax (`hello[0]`, `hello[]`) in the flow schema reference; graph.js
+   deprecation banners; example gotcha notes (snake.case.serialization, example
+   groupIds).
+2. The recommended JDK/JRE is documented as Java 25 (the current LTS release; fully
+   supports the Java 21 virtual-thread technology). The build's Java 21 target is
+   documented as deliberate - wider compatibility.
+
+---
+## Version 4.12.1, 9/1/2026
+
+The lock-step companion to the first public-registry releases (the Rust engine's
+crates.io debut and the python/node wrappers' PyPI/npm debuts all carry 4.12.1):
+the route pool platform API, the agent-orchestration E0 demos, and the streaming
+reply-lane rotation.
+
+### Added
+
+1. Route pool registration API `registerRoutePool` / `releaseRoutePool` - a set of
+   private singleton routes `{prefix}.{n}` (strict FIFO lanes sharing one stateless
+   function) with registry-level identity, symmetric release, reload semantics and
+   range-checked integrity warnings for individual member updates. The HTTP edge's
+   SSE reply-lane pool now registers through it (ADR-0020; lock-step with the Rust
+   engine).
+2. `support-triage` demo graph in examples/minigraph-playground - the bounded-agency
+   AI-node pattern (agent-orchestration experiment E0): the LLM node is `llm.chat`, a
+   python wrapper-side function reached through declarative Event-over-HTTP; the graph
+   classifies a user request with a schema-constrained verdict and routes among
+   enumerated branches. Zero engine change - the engine stays LLM-free.
+3. `POST /api/llm/stream` demo endpoint in examples/minigraph-playground - the AI-token
+   streaming composition (E0 follow-up): a relay function forwards its reply lane into
+   the event-over-http mapped `llm.stream` AI node (python demo app pulling the
+   provider's REAL token stream), and the token batches re-render progressively out the
+   engine's HTTP edge as SSE. Live-proven with Gemini: 25+ timestamped token batches
+   over a ~2s generation, one distributed trace across both processes. Zero engine
+   change.
+4. Placeholder manifests for the retired Spring Boot 3 modules (system/rest-spring-3,
+   examples/rest-spring-3-example) - parentless, dependency-free poms outside the
+   reactor so the dependency scanner's per-manifest projects re-test to an empty
+   graph instead of freezing on the retired lane's last dependency tree; relocation
+   metadata points local source builds at the rest-spring-4 equivalents.
+
+### Changed
+
+1. `registerStream` is now private-only and `registerPrivateStream` is removed - a
+   stream function's use case is always a private route (it is the ObjectStreamIO
+   publishing mechanism). Minor breaking for any application that registered a
+   public stream function.
+2. The unused constant `AsyncHttpClient.ASYNC_HTTP_RESPONSE_STREAM_PREFIX` is
+   removed; `ASYNC_HTTP_RESPONSE_STREAM_POOL` (the un-dotted pool base) replaces it.
+   Lane route names on the wire and in telemetry are unchanged.
+3. Streaming reply-lane checkout now rotates through the pool (FIFO round-robin)
+   instead of re-picking the most recently released lane (LIFO): the first stream
+   takes `async.http.response.stream.0`, the next `.1`, and so on, with a released
+   lane rejoining at the tail - predictable lane selection in telemetry and maximal
+   rest before a lane is reused (lock-step with the Rust engine).
+
+---
+## Version 4.12.0, 8/30/2026
+
+The progressive-rendering milestone: token/event streaming end to end - HTTP edge,
+HTTP client, and Event-over-HTTP peers - with full OpenTelemetry lineage and
+business-correlation continuity across all four runtimes (Java, Rust, Python,
+Node.js language packs at the same version). Useful on its own, and the
+foundation for the AI SDLC (agent, MCP and tool adapters as wrapper-side
+functions with complete observability).
+
+### Added
+
+1. **HTTP response streaming** - a function can stream an HTTP response progressively
+   (token segments, progress events) by sending a sequence of events to the caller's
+   reply route until an end-of-transmission signal, using the reserved envelope header
+   `x-event-stream: data | eof | exception` (internal protocol - the wire carries only
+   standard HTTP). Server-Sent Events framing for `text/event-stream` (typed events via
+   `x-event-name`, terminal `done` event with trailing metadata, in-band `error` events,
+   configurable keep-alive pings via `event.stream.keep.alive`); chunked transfer with
+   JSON Lines for other content types. Declare a streaming endpoint with `stream: true`
+   in rest.yaml - the request checks out a dedicated ordered reply lane
+   (`async.http.response.stream.{n}`) from a pool of 500 for its lifetime: per-request
+   strict FIFO with cross-request concurrency, and HTTP-503 back-pressure when the pool
+   is exhausted. New
+   `EventStreamWriter` producer helper; idle timeouts fail streams in-band; client
+   disconnects drop late segments as no-ops; a 1 MB drain-aware buffer guards against
+   slow clients. A runnable demo ships in examples/lambda-example (`GET /api/hello/sse`
+   plus the `scripts/sse-client.mjs` progressive-rendering client). See the
+   HTTP Response Streaming guide (ADR-0018).
+
+2. **Progressive SSE consumption in the HTTP client** - `async.http.request` can
+   consume a `text/event-stream` response progressively (an LLM provider's token
+   stream, another engine's streaming endpoint, any SSE API), relaying one
+   `x-event-stream: data` envelope per upstream event to the caller's reply route,
+   then `eof` - the same streaming protocol the HTTP edge consumes, which makes an
+   SSE-to-SSE relay a pure configuration exercise. Activation is explicit: the
+   request must declare `Accept: text/event-stream`, the response must be SSE, and
+   the request must carry a reply route; anything else keeps the buffered single-shot
+   behavior. For streams, the request timeout acts as the idle allowance between
+   reads (keep-alive comments reset it); idle expiry and mid-stream disconnects fail
+   the stream in-band. (ADR-0019)
+
+3. **Event-over-HTTP peer streaming (envelope mode)** - a remote streaming function
+   reached through `/api/event` can stream its segments back to the caller's reply
+   route on the same HTTP call. The caller opts in per event: a send with a
+   `reply_to` and the `accept: text/event-stream` event header; the `x-ttl` event
+   header (ms, default 60s) is the idle allowance between stream events on both
+   hops. On the wire, the peer answers with SSE in a hybrid dialect - control
+   signals (the head, the eof/exception terminals, and any segment that cannot
+   round-trip as plain text) ride base64-encoded serialized envelopes under the
+   reserved SSE event name `envelope`, while text segments ride raw frames - so
+   segment types and terminal metadata survive the hop exactly, and token relays
+   stay near-zero overhead. Compatibility is explicit: a non-streaming target
+   answers byte-identical to the classic callback reply; a streaming function
+   invoked without the opt-in (RPC, or no accept header) receives
+   `406 Streaming function requires a caller that accepts text/event-stream`;
+   server-side lane exhaustion answers the same 503 back-pressure as a local
+   streaming endpoint (plain RPC traffic never consumes a lane). The consuming
+   client guards the dialect (a missing envelope head or a transport end without a
+   terminal fail in-band). See the HTTP Response Streaming guide. (ADR-0019)
+
+4. **Engine-to-wrapper streaming demo and interop test report.** The lambda-example
+   gains `GET /api/hello/remote` (`hello.remote.relay`): a streaming endpoint whose
+   function forwards its caller's reply lane into an event-over-http mapped remote
+   streaming function (the Python/Node.js demo apps' `hello.tokens`), rendering a
+   remote peer's tokens progressively out this application's HTTP edge with zero
+   imperative streaming code. `hello.sse` is now public, so wrapper clients can
+   consume it over `/api/event`. A permanent interop test report
+   (`docs/test-reports/progressive-rendering-interop.md`, packaged with the AI
+   contract provider) records the live ten-combination cross-runtime matrix, the
+   OpenTelemetry span-lineage and business-correlation-id verification, and a
+   captured end-to-end telemetry + application-log-context example.
+
+### Changed
+
+1. The `/info/routes` actuator endpoint renders pool-style route families compactly:
+   routes differing only by a trailing numeric suffix, with uniform instances and
+   contiguous numbering, collapse into one display entry (e.g. the 500 streaming reply
+   lanes appear as `"async.http.response.stream.0 - 499": 1`). Display-only - the
+   routing table is unchanged.
+
+---
+## Version 4.11.12, 8/27/2026
+
+### Removed
+
+1. **BREAKING**: The Spring Boot 3 integration lane is retired — `system/rest-spring-3`
+   and `examples/rest-spring-3-example` are removed. The Spring community no longer
+   issues security patches for Spring Boot 3, and dependency security scanning in
+   deployment pipelines now rejects Spring Boot 3 and requires Spring Framework 7+,
+   blocking deployment while the lane is present. Migrate to `rest-spring-4`: the
+   integration surface is the same (RestServer bootstrap, `spring.boot.main` override,
+   `@PreLoad` autowiring, configuration keys), so the change is a dependency swap plus
+   your application's own Spring Boot 3 → 4 upgrade. See the Spring Boot Integration
+   guide (ADR-0017).
+
+### Added
+
+1. Polyglot Functions documentation chapter (`guides/polyglot-functions.md`) - writing
+   composable functions in Python and Node.js with the official Event-over-HTTP wrappers
+   (docs: accenture.github.io/mercury-python and accenture.github.io/mercury-nodejs),
+   with the zero-code demo extended to the wrapper demo apps. ADR-0016 (Proposed) records
+   the peers-not-subprocesses design; the interop test report gains the polyglot wrapper
+   round (2026-08-22 acceptance drives); the home page now links the wrapper family.
+
+### Changed
+
+1. Netty upgraded from 4.2.16.Final to 4.2.17.Final across all modules (field security
+   scan remediation).
+2. Spring Boot upgraded from 4.1.0 to 4.1.1 (`spring-boot-starter-parent` across the
+   Boot-4 lane; brings Spring Framework 7.0.9, Micrometer 1.17.1, Jackson 3.1.5 — the
+   rest-spring-3 lane stays on its own Boot 3.5.x parent; explicit netty 4.2.17.Final
+   override unaffected).
+3. Project Reactor BOM upgraded from 2025.0.6 to 2025.0.7 across all declaring modules
+   (reactor-core 3.8.7, reactor-netty 1.3.7 — both Spring lanes included).
+
+### Fixed
+
+1. Fourth field Sonar round: the offline skill export in `system/ai-contract-provider`
+   rethrows with context (target path and cause) instead of log-and-rethrow
+   (java:S2139); single-invocation `assertThrows` lambda and unused-import cleanups in
+   tests (java:S5778, java:S1128).
+
+---
+## Version 4.11.11, 8/23/2026
+
+### Added
+
+1. `graph.task` accepts a task route declared as a declarative Event-over-HTTP target
+   (`yaml.event.over.http`) - a knowledge graph can invoke remote engine instances and
+   polyglot (python/node.js) function hosts as graph tasks. New
+   `PostOffice.getEventHttpTarget(route)` API exposes the declarative map lookup.
+
+---
+## Version 4.11.10, 8/21/2026
+
+### Added
+
+1. **`system/ai-contract-provider` — a standalone composable app serving Mercury's
+   version-matched operational contract for AI discovery.** Read-only REST endpoints on
+   port 8999 (`/api/discovery`, `/api/contracts`, `/api/contracts/{id}`, `/api/skill`,
+   `/api/references?path=...`, `/api/manifest`), each wired `rest.yaml` →
+   `http.flow.adapter` → Event Script flow → function — the app is itself a reference
+   implementation of the composable pattern. `--export <directory>` writes the offline
+   `mercury-platform` Agent Skill (SKILL.md, the linked guide closure, the installed
+   contract inventory, per-file SHA-256 manifest written last as the completion marker);
+   two exports of the same build are byte-identical, and the exporter never overwrites an
+   existing snapshot. The served `mercury_version` comes from the platform-core
+   dependency itself (no release-time constant), contract behavior anchors are resolved
+   with `Class.forName` in tests so the catalog cannot drift from the code, and a
+   packaged-inventory test pins `files.list` to the real `docs/guides` tree. No framework
+   module changes: the app depends on the runtime, never the reverse. (ADR-0015 proposed)
+
+2. **Event Script `f:setConfig` plugin — set or override a configuration parameter at
+   run-time.** The new built-in simple plugin stores a key-value pair as a system property,
+   which takes precedence over the base configuration on every subsequent read. Typical use:
+   a start-up flow hydrates secrets from a cloud secret manager before dependent components
+   consume them. The key must be a non-empty string; the value can be any object and is
+   converted to text. Invalid input returns false without side effect.
+
+### Fixed
+
+1. **The OpenTelemetry forwarder no longer drops a span when a pooled connection dies
+   mid-export.** The OTLP exporter's default retry covers only a whitelist of transport errors
+   (connect/socket timeouts, unknown host, `SocketException`); a keep-alive connection that the
+   collector closed at the moment of reuse surfaces as a plain
+   `IOException: unexpected end of stream`, which failed on the first attempt and silently
+   dropped the span (observed as an occasional CI failure of the flow-summary assertion — and
+   the same drop loses production spans in the field). The exporter now retries **every**
+   `IOException` under the SDK's default bounded backoff (5 attempts, 1s→5s); HTTP status
+   handling is unchanged (retry on 429/502/503/504 only). Telemetry delivery is at-least-once
+   by design: a rare duplicate span is tolerated by every backend, a dropped span is data loss.
+   The export-failure warning now includes the cause, so any future drop is self-diagnosing.
+   Pinned by a raw-socket test that kills the first connection after reading the request —
+   the fixed exporter recovers on the second connection; without the widened retry policy the
+   span is provably lost.
+
+2. **The OpenTelemetry forwarder no longer drops a span when the export executor rejects the
+   call.** The very first CI run carrying the new cause-bearing warning exposed a second failure
+   class: `InterruptedIOException: executor rejected` — the sender's managed dispatcher runs a
+   zero-queue thread pool (`core=0`, `SynchronousQueue`) whose `execute()` rejects during
+   transient full-occupancy races, and a rejected call never reaches the retry interceptor, so
+   no retry policy can save it (retrying calls sleeping through backoff also widen that race
+   window). The exporter now runs on its own small fixed pool with an **unbounded queue** —
+   saturation means "later", never "lost" — and the pool's lifecycle is tied to the exporter so
+   a closed exporter leaks no threads. Pinned by a saturation-burst test (a burst far wider than
+   the pool queues and delivers every span) and a thread-lifecycle test (provably no export
+   threads without the owned pool, none leaked after close).
+
+3. **Documentation taught a broken rest.yaml flow binding.** Two guides showed a flow-backed
+   endpoint bound with `flow:` alone (one even advised using `flow:` *instead of* `service:`),
+   but the REST automation engine skips any entry without `service:` as invalid — a flow
+   binding requires **both** `service: 'http.flow.adapter'` and `flow: '<flow-id>'`. The guides
+   are corrected, and the worked example is now a single canonical fixture
+   (`guide-fixtures/rest-bindings.yaml`) embedded into the documentation by mkdocs **and**
+   loaded through the production `RoutingEntry` parser in a platform-core test, so the
+   documented example can no longer drift from what the router accepts.
+
+---
 ## Version 4.11.9, 8/11/2026
 
 ### Changed

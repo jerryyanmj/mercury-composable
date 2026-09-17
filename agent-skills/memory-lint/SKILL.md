@@ -1,6 +1,6 @@
 ---
 name: memory-lint
-description: Deterministic integrity check for the agent-memory layer. Use after a memory review, before committing memory/ changes, or in CI to catch decay miscounts — facts archived while still referenced, an id in both continuity and the archive, tier or supersession drift. The agent judges meaning; the script does the counting.
+description: Deterministic integrity check for the agent-memory layer. Use after a memory review, before committing memory/ changes, or in CI to catch decay miscounts — facts archived while still referenced, an id in both continuity and the archive, tier or supersession drift — and leaked secrets or PII (credentials, tokens, emails, home paths) in committed memory files. The agent judges meaning; the script does the counting.
 provenance: agent-memory-builtin
 ---
 
@@ -21,7 +21,7 @@ script, so the riskiest operation is verified against observable evidence.
 
 - **After** running the memory **review** ritual (`REVIEW.md`) — verify its archival decisions.
 - **Before** committing `memory/` changes.
-- In **CI** or a **pre-commit hook** (the optional reinforcement `AGENTS.md` mentions) — a non-zero
+- In **CI** or a **pre-commit hook** (the reinforcement `memory/PROTOCOL.md` describes) — a non-zero
   exit fails the gate.
 
 ## What to do
@@ -32,14 +32,29 @@ script, so the riskiest operation is verified against observable evidence.
    python3 agent-skills/memory-lint/scripts/memory-lint.py    # Python 3 (>= 3.8)
    node    agent-skills/memory-lint/scripts/memory-lint.mjs    # Node (>= 18)
    ```
-   Flags: `--strict` (also fail on warnings), `--root PATH` (point at a specific repo).
+   Flags: `--strict` (also fail on warnings), `--root PATH` (point at a specific repo), and
+   `--scan-files FILE...` (v4.34.0 — a standalone **credential-class** `[secret-material]` scan of
+   arbitrary config files: token shapes, credential-key assignments, Authorization headers, private
+   keys — no PII classes, since config files legitimately carry contact emails and paths; exit 1 on
+   findings, values never echoed. This mode powers the `.githooks/pre-commit` secret guard and the
+   CI floor's changed-config scan. A fixture that trips it is restructured — placeholder or env var —
+   because even dummy test values are false positives in field security scanners; the callers honor a
+   committed `.agent/secret-scan-ignore` only as a last-resort escape hatch, not seeded since v4.40.1).
    *Run the test suite (the cross-runtime contract — both implementations pass the same fixtures):*
    ```bash
    python3 -m unittest agent-skills/memory-lint/scripts/test_memory_lint.py
    node --test          agent-skills/memory-lint/scripts/test_memory_lint.mjs
    ```
 2. It checks, deterministically:
-   - **no id lives in both `continuity.md` and the archive** (a fact exists in exactly one place);
+   - **no id lives in both the live layer and the archive** (a fact exists in exactly one place) —
+     the live layer is `continuity.md` **plus the one-thread-per-file `memory/open-threads/`**
+     directory (v4.39.0), whose facts and checkbox pinning count exactly like continuity's;
+   - **`[thread-file]`** — the thread-file contract: one thread block per file, filename
+     `thread-<id>.md` matching the footer id (filename = the merge-free identity);
+   - **`[duplicate-id]`** — an id must exist exactly once across the live layer; two live
+     footers is the silent-fork shape of a same-id creation collision on parallel branches;
+   - **`[duplicate-state-key]`** — a `## Project State` scalar set twice (a union-style hand
+     merge that kept both sides — absorbed from PR #27, credit: Roland Heusser);
    - **no archived-as-faded fact was referenced within `archive_window` sessions** — the decay-miscount
      guard: if it was, the count was wrong, so **reactivate it**;
    - *advisory* — continuity facts overdue for archival (`sslu > archive_window`), excluding `core`,
@@ -49,7 +64,7 @@ script, so the riskiest operation is verified against observable evidence.
      empty/malformed manifest breaks Mode B upgrade detection (this was a real bug: a truncating stamp
      one-liner emptied it). A *missing* file is the valid pre-versioning baseline and is not flagged.
    - **no leftover merge-conflict markers** (`<<<<<<<` / `>>>>>>>` / diff3 `|||||||`) in the **live
-     top-level `memory/*.md`** files (`continuity.md`, `instructions.md`, `vision.md`, `decay-policy.md`,
+     top-level `memory/*.md`** files plus `memory/open-threads/*.md` (`continuity.md`, `instructions.md`, `vision.md`, `decay-policy.md`,
      `smoke-test.md`) — an unresolved conflict there silently corrupts shared memory the agent reads as
      truth. `sessions/` and `archive/` are **excluded** (immutable/append narrative that legitimately
      *quotes* markers — e.g. a session log pasting a diff). A bare `=======` line is *not* flagged
@@ -60,10 +75,46 @@ script, so the riskiest operation is verified against observable evidence.
    - *advisory* — **`[continuity-bloat]`**: more than `continuity_max_facts` decaying facts/threads
      (the primary lean signal — a count, immune to verbosity & session velocity), or more than
      `continuity_max_lines` lines (a coarse backstop). Both say "a review is due to lean it down."
+   - *advisory* — **`[closed-thread-bloat]`** (v4.38.0): more than `closed_narrative_max_lines`
+     (default 150) non-empty lines inside completed `- [x]` thread blocks — close records should
+     wait out `archive_window` as 3–6-line stubs, not ship narratives (the full story lives in each
+     thread's origin session log; a review condenses them per `REVIEW.md` step 5). Measured field
+     cost: 64% of a hot repo's continuity was closed-thread narrative.
    - *advisory* — **`[stale-metadata]`**: a fact's stored `tier` disagrees with the tier recomputed from
      the reference log (review steps 2–3 — apply events / re-tier — were skipped), excluding `core`,
      `superseded`, never-referenced facts, and **pinned `- [ ]` open threads** (their tier label isn't
      enforced — pinned-ness protects them; v4.26.1). Clear it with the **`refresh-metadata`** skill (or a review).
+   - *advisory* — **`[thread-stale]`** (v4.40.0): an unchecked `- [ ]` open thread not referenced for
+     more than `thread_stale_window` sessions (default 40 — the invariant re-check cadence; a
+     never-referenced thread counts from `created`). Its pin still protects it from decay and
+     archival — this check never touches that. It says "a human should decide": a stalled thread is
+     a **closure signal**, and the review lists every stalled thread in one human closure gate
+     (`REVIEW.md` step 8) where the owner closes it (undelivered items recorded as *deliberately
+     dropped*) or re-affirms it by naming it under `## Memory References` — the only reset. The tool
+     never closes a thread itself, and inspecting a stalled thread is not a use. (Field report,
+     mercury-composable 2026-09-16: a pinned thread's "still open" items had all shipped, unnoticed
+     for 184 sessions — pinned had come to mean unexamined.)
+   - *advisory* — **`[secret-material]`**: credential or PII shapes in any committed memory surface —
+     `memory/*.md`, `memory/sessions/`, **and** `memory/archive/` (where pasted output lives): known
+     token formats (AWS / GitHub / GitLab / Slack / Google keys, private-key blocks, JWTs),
+     credential-key assignments with literal values (including quoted JSON/YAML keys) and
+     Authorization headers (e.g. rendered JAAS / `clientSecret` / bearer lines — anchored template
+     placeholders and `(REDACTED)` are recognized as safe), emails (public `noreply` / `git@`
+     forms excluded), SSN and payment-card shapes (Luhn-verified), and absolute home paths (write `~`).
+     The report **never echoes the matched value** (that would amplify the leak into terminals and CI
+     logs). Redact the hit to `(REDACTED)`; if it was a live credential, **rotate it** — git history
+     still holds the original. Waive a deliberately-quoted example (e.g. a log documenting a cleanup)
+     by tagging that line `lint:allow-secret-material`. (Field incident, reported 2026-08-13: a client
+     repo's DLP scanner caught a live OAuth client secret pasted into a committed session log.)
+     **Known-safe documentation examples still flag by design** — e.g. AWS's canonical doc pair
+     (`AKIA…EXAMPLE` and its secret partner): the guard keeps one simple contract (anything
+     credential-shaped gets redacted or visibly waived) rather than an invisible built-in whitelist;
+     quote such an example deliberately with the same `lint:allow-secret-material` tag (v4.34.2).
+     The one built-in exemption is the tool's **own opt-down knob** — the guard's blocking message
+     prints `AGENT_MEMORY_SECRET_GUARD=advisory`, so documenting that guidance is not a finding
+     (env-var and git-config spellings, `AGENT_MEMORY_SECRET_GUARD` / `agent-memory.secretguard`;
+     only the documented settings `advisory`/`enforcing` — any other value under those keys still
+     flags, v4.34.2).
 3. **ERROR** (exit 1) → fix per `DECAY.md` / `REVIEW.md`: reactivate an over-archived fact (move it
    back into `continuity.md`), de-duplicate, or repair a link. **WARN** is advisory — the next review
    may act on it.

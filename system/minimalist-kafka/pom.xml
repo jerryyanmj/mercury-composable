@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.platformlambda</groupId>
     <artifactId>minimalist-kafka</artifactId>
-    <version>4.11.9</version>
+    <version>4.12.11</version>
     <packaging>jar</packaging>
     <name>Minimalist Kafka (notification function + flow adapter)</name>
     <description>
@@ -18,14 +18,15 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
     </parent>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>21</java.version>
-        <netty.version>4.2.16.Final</netty.version>
-        <jackson-2-bom.version>2.22.1</jackson-2-bom.version>
+        <netty.version>4.2.17.Final</netty.version>
+        <jackson-2-bom.version>2.22.2</jackson-2-bom.version>
+        <jackson-bom.version>3.2.2</jackson-bom.version>
         <log4j2.version>2.26.1</log4j2.version>
         <!-- Security override: the Confluent registry client pulls httpclient5, whose paired
              httpcore5/httpcore5-h2 carries a Snyk HIGH (CWE-770, resource allocation without
@@ -50,7 +51,7 @@
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-bom</artifactId>
-                <version>2025.0.6</version>
+                <version>2025.0.7</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -83,7 +84,7 @@
         <dependency>
             <groupId>org.platformlambda</groupId>
             <artifactId>event-script-engine</artifactId>
-            <version>4.11.9</version>
+            <version>4.12.11</version>
         </dependency>
 
         <!-- Guava's failureaccess companion is required at runtime by Confluent's serdes (Guava
@@ -106,7 +107,30 @@
                     <groupId>at.yawk.lz4</groupId>
                     <artifactId>lz4-java</artifactId>
                 </exclusion>
+                <!-- CVE-2026-90559 (out-of-bounds write in Snappy.uncompress(ByteBuffer, ByteBuffer),
+                     CVSS 8.7): NVD records snappy-java as affected "through 1.1.10.8", which is the
+                     NEWEST release (2025-07-19) - there is no version to upgrade to, so the codec is
+                     excluded like lz4 above rather than pinned. Mercury configures no compression.type,
+                     so nothing here produces snappy-compressed records; an application that produces
+                     or consumes snappy-compressed records must declare snappy-java itself. Drop this
+                     exclusion once a fixed snappy-java is released. -->
+                <exclusion>
+                    <groupId>org.xerial.snappy</groupId>
+                    <artifactId>snappy-java</artifactId>
+                </exclusion>
             </exclusions>
+        </dependency>
+
+        <!-- CVE-2026-87823 (CWE-190 integer overflow, CVSS 8.8): kafka-clients 4.3.1 - the
+             newest release - ships zstd-jni 1.5.6-10, and no kafka-clients upgrade carries the
+             fix, so the fixed zstd-jni is pinned DIRECTLY (runtime, like the transitive it
+             replaces). Nearest-wins resolution makes this pin effective for every downstream
+             consumer of this module too. Remove when kafka-clients ships zstd-jni >= 1.5.7-14. -->
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>1.5.7-16</version>
+            <scope>runtime</scope>
         </dependency>
 
         <!-- Confluent JSON Schema serializer/deserializer (used as a library to (de)serialize the
@@ -198,6 +222,17 @@
                 <exclusion>
                     <groupId>at.yawk.lz4</groupId>
                     <artifactId>lz4-java</artifactId>
+                </exclusion>
+                <!-- CVE-2026-90559 (out-of-bounds write in Snappy.uncompress(ByteBuffer, ByteBuffer),
+                     CVSS 8.7): NVD records snappy-java as affected "through 1.1.10.8", which is the
+                     NEWEST release (2025-07-19) - there is no version to upgrade to, so the codec is
+                     excluded like lz4 above rather than pinned. Mercury configures no compression.type,
+                     so nothing here produces snappy-compressed records; an application that produces
+                     or consumes snappy-compressed records must declare snappy-java itself. Drop this
+                     exclusion once a fixed snappy-java is released. -->
+                <exclusion>
+                    <groupId>org.xerial.snappy</groupId>
+                    <artifactId>snappy-java</artifactId>
                 </exclusion>
                 <exclusion>
                     <groupId>commons-collections</groupId>

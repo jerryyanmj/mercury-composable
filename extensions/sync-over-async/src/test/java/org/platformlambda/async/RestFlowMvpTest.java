@@ -45,10 +45,10 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
  *
  * <pre>
  *   HTTP POST /api/sync-to-async -> http.flow.adapter -> flow sync-to-async
- *     sync.prepare: begin(cid) [Redis] -> simple.kafka.notification -> Kafka topic-1 -> sync.await (blocks)
+ *     sync.prepare: begin(cid) [Redis] -> simple.kafka.notification -> Kafka topic-1 -> 'sync.await' (blocks)
  *       -> Kafka Flow Adapter -> flow system-of-record (echo + notify topic-2)
- *         -> Kafka topic-2 -> Kafka Flow Adapter -> flow soa-reply -> coordinator.deliver
- *           -> Redis return route wakes sync.await -> HTTP 200 + body
+ *         -> Kafka topic-2 -> Kafka Flow Adapter -> flow soa-reply -> 'coordinator.deliver'
+ *           -> Redis return route wakes 'sync.await' -> HTTP 200 + body
  * </pre>
  *
  * Runs against embedded Redis ({@link RedisTestBase}) and an embedded KRaft Kafka broker. The Kafka
@@ -74,7 +74,7 @@ class RestFlowMvpTest extends RedisTestBase {
         // file value (ConfigReader resolves a system property before the file). sync.over.async.enabled=true
         // is in the test application.properties.
         System.setProperty("KAFKA_BOOTSTRAP_SERVERS", kafka.bootstrapServers());
-        System.setProperty("redis.port", String.valueOf(redisPort));
+        System.setProperty("soa.redis.port", String.valueOf(redisPort));
 
         // Platform start registers all functions, then the autoloaders run: SyncOverAsyncAutoStart builds the
         // Redis client + return-route coordinator from config; KafkaFlowAutoStart builds the Kafka publisher
@@ -100,7 +100,7 @@ class RestFlowMvpTest extends RedisTestBase {
             kafka.close();
         }
         System.clearProperty("KAFKA_BOOTSTRAP_SERVERS");
-        System.clearProperty("redis.port");
+        System.clearProperty("soa.redis.port");
     }
 
     @Test

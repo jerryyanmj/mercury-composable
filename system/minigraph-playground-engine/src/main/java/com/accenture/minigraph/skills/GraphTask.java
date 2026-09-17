@@ -27,7 +27,6 @@ import org.platformlambda.core.system.PostOffice;
 import org.platformlambda.core.util.MultiLevelMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import reactor.core.publisher.Mono;
 
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -71,7 +70,10 @@ public class GraphTask extends GraphLambdaFunction {
         if (route == null) {
             throw new IllegalArgumentException(NODE_NAME + nodeName + " does not have a 'task' route");
         }
-        if (!po.exists(route)) {
+        // a task route is reachable when registered locally or in the cloud (po.exists),
+        // or when declared as a declarative Event-over-HTTP target - the way python/
+        // node.js polyglot functions and remote engine instances join a graph
+        if (!po.exists(route) && po.getEventHttpTarget(route) == null) {
             throw new IllegalArgumentException(NODE_NAME + nodeName + " - task '" + route + "' does not exist");
         }
         // reset result to ensure execution is idempotent
@@ -172,21 +174,22 @@ public class GraphTask extends GraphLambdaFunction {
         // as the task call's parent (the trace context is thread-keyed and would be gone
         // inside the Mono callback)
         var invoked = po.eRequest(request, ttl, false);
-        return Mono.create(sink ->
-            invoked.thenAccept(response -> {
-                stateMachine.setElement(nodeName + "." + STATUS, response.getStatus());
-                if (!response.getHeaders().isEmpty()) {
-                    stateMachine.setElement(nodeName + "." + HEADER, response.getHeaders());
-                }
-                if (response.hasError()) {
-                    sink.success(setError(stateMachine, node, response));
-                } else {
-                    stateMachine.setElement(nodeName + "." + RESULT, response.getBody());
-                    var outputMapping = getEntries(node.getProperty(OUTPUT));
-                    performFetcherOutputMapping(nodeName, stateMachine, outputMapping);
-                    sink.success(NEXT);
-                }
-        }));
+        // guardedCompletion: a throw inside this callback (e.g. an invalid output data mapping)
+        // must surface as the node's error, never leave the Mono pending
+        return guardedCompletion(invoked, response -> {
+            stateMachine.setElement(nodeName + "." + STATUS, response.getStatus());
+            if (!response.getHeaders().isEmpty()) {
+                stateMachine.setElement(nodeName + "." + HEADER, response.getHeaders());
+            }
+            if (response.hasError()) {
+                return setError(stateMachine, node, response);
+            } else {
+                stateMachine.setElement(nodeName + "." + RESULT, response.getBody());
+                var outputMapping = getEntries(node.getProperty(OUTPUT));
+                performOutputMapping(nodeName, stateMachine, outputMapping);
+                return NEXT;
+            }
+        });
     }
 
     private void callTaskWithForkJoin(PostOffice po, GraphInstance graphInstance, SimpleNode node, String route,
@@ -223,7 +226,7 @@ public class GraphTask extends GraphLambdaFunction {
             }
         }
         var outputMapping = getEntries(node.getProperty(OUTPUT));
-        performFetcherOutputMapping(nodeName, stateMachine, outputMapping);
+        performOutputMapping(nodeName, stateMachine, outputMapping);
     }
 
     private void doForkJoin(PostOffice po, SimpleNode node, MultiLevelMap stateMachine,

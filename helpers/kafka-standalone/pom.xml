@@ -6,21 +6,22 @@
     <groupId>org.platformlambda</groupId>
     <artifactId>kafka-standalone</artifactId>
     <packaging>jar</packaging>
-    <version>4.11.9</version>
+    <version>4.12.11</version>
     <name>Standalone kafka system for dev</name>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
         <relativePath/>
     </parent>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <tomcat.version>11.0.24</tomcat.version>
-        <netty.version>4.2.16.Final</netty.version>
-        <jackson-2-bom.version>2.22.1</jackson-2-bom.version>
+        <tomcat.version>11.0.25</tomcat.version>
+        <netty.version>4.2.17.Final</netty.version>
+        <jackson-2-bom.version>2.22.2</jackson-2-bom.version>
+        <jackson-bom.version>3.2.2</jackson-bom.version>
         <log4j2.version>2.26.1</log4j2.version>
         <kafka.version>4.3.1</kafka.version>
         <gson.version>2.14.0</gson.version>
@@ -39,7 +40,7 @@
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-bom</artifactId>
-                <version>2025.0.6</version>
+                <version>2025.0.7</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -50,7 +51,7 @@
         <dependency>
             <groupId>org.platformlambda</groupId>
             <artifactId>platform-core</artifactId>
-            <version>4.11.9</version>
+            <version>4.12.11</version>
         </dependency>
 
         <dependency>
@@ -61,6 +62,17 @@
                 <exclusion>
                     <groupId>at.yawk.lz4</groupId>
                     <artifactId>lz4-java</artifactId>
+                </exclusion>
+                <!-- CVE-2026-90559 (out-of-bounds write in Snappy.uncompress(ByteBuffer, ByteBuffer),
+                     CVSS 8.7): NVD records snappy-java as affected "through 1.1.10.8", which is the
+                     NEWEST release (2025-07-19) - there is no version to upgrade to, so the codec is
+                     excluded like lz4 above rather than pinned. Mercury configures no compression.type,
+                     so nothing here produces snappy-compressed records; an application that produces
+                     or consumes snappy-compressed records must declare snappy-java itself. Drop this
+                     exclusion once a fixed snappy-java is released. -->
+                <exclusion>
+                    <groupId>org.xerial.snappy</groupId>
+                    <artifactId>snappy-java</artifactId>
                 </exclusion>
                 <exclusion>
                     <groupId>commons-collections</groupId>
@@ -85,6 +97,18 @@
             </exclusions>
         </dependency>
 
+        <!-- CVE-2026-87823 (CWE-190 integer overflow, CVSS 8.8): kafka-clients 4.3.1 - the
+             newest release - ships zstd-jni 1.5.6-10, and no kafka-clients upgrade carries the
+             fix, so the fixed zstd-jni is pinned DIRECTLY (runtime, like the transitive it
+             replaces). Nearest-wins resolution makes this pin effective for every downstream
+             consumer of this module too. Remove when kafka-clients ships zstd-jni >= 1.5.7-14. -->
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>1.5.7-16</version>
+            <scope>runtime</scope>
+        </dependency>
+
         <!-- KRaft storage Formatter (org.apache.kafka.metadata.storage.Formatter). It ships transitively
              with kafka_2.13 at runtime; declared explicitly here because it is used at compile time. -->
         <dependency>
@@ -96,13 +120,13 @@
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-core</artifactId>
-            <version>2.22.1</version>
+            <version>${jackson-2-bom.version}</version>
         </dependency>
 
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.22.1</version>
+            <version>${jackson-2-bom.version}</version>
         </dependency>
 
         <dependency>

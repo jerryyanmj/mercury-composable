@@ -2007,6 +2007,33 @@ class FlowTests extends TestBase {
         assertEquals(256.75d, result.get("double_convert"));
         // break into another function to satisfy SonarQube requirement
         checkTypeAssertion(result);
+        checkJsonPluginAssertion(result);
+        checkKeyNormalizationAssertion(result);
+    }
+
+    private void checkKeyNormalizationAssertion(Map<String, Object> result) {
+        // f:camelCase / f:snakeCase converge legacy key variants; keys normalize
+        // recursively (incl. maps inside lists) and values are never touched
+        assertEquals(Map.of("myExampleKey", "1", "customerId", "2"), result.get("camel_map"));
+        assertEquals(Map.of("my_example_key", "1", "customer_id", "2"), result.get("snake_map"));
+        assertEquals(Map.of("myExampleKey", 3,
+                "nestedList", List.of(Map.of("itemName", "Some_Value"))), result.get("camel_dotted"));
+        assertEquals(List.of(Map.of("item_name", "Some_Value")), result.get("snake_list"));
+    }
+
+    @SuppressWarnings("unchecked")
+    private void checkJsonPluginAssertion(Map<String, Object> result) {
+        // f:json(text([])) creates an empty list directly in data mapping
+        assertEquals(List.of(), result.get("empty_list"));
+        assertEquals(Map.of(), result.get("empty_map"));
+        // a nested JSON constant - commas and braces ride inside the text(...) argument;
+        // whole numbers arrive as integers after the event round trip (MsgPack downcast)
+        Object nested = result.get("nested_json");
+        assertInstanceOf(Map.class, nested);
+        Map<String, Object> nestedMap = (Map<String, Object>) nested;
+        assertEquals(List.of(1, 2, Map.of("nested", "demo")), nestedMap.get("hello"));
+        // f:json also accepts JSON text held in a model variable
+        assertEquals(List.of(10, 20, 30), result.get("parsed_from_model"));
     }
 
     private void checkTypeAssertion(Map<String, Object> result) {
@@ -2020,6 +2047,16 @@ class FlowTests extends TestBase {
         assertEquals(" World!", result.get("negative_ternary"));
         assertEquals(true, result.get("positive_eq"));
         assertEquals(false, result.get("negative_eq"));
+        // eq/ne modifiers: 'ignoreCase' for strings, 'ignoreType' for text-form comparison
+        assertEquals(false, result.get("eq_case_sensitive"));
+        assertEquals(true, result.get("eq_ignore_case"));
+        assertEquals(true, result.get("eq_int_ignore_type"));
+        assertEquals(true, result.get("eq_decimal_ignore_type"));
+        assertEquals(true, result.get("eq_bool_ignore_type"));
+        assertEquals(false, result.get("eq_bool_case_sensitive"));
+        assertEquals(true, result.get("eq_both_modifiers"));
+        assertEquals(true, result.get("ne_case_sensitive"));
+        assertEquals(false, result.get("ne_ignore_case"));
         assertEquals(true, result.get("greater_than_positive"));
         assertEquals(false, result.get("greater_than_negative"));
         assertEquals(true, result.get("less_than_positive"));
@@ -2027,6 +2064,8 @@ class FlowTests extends TestBase {
         assertEquals("World!", result.get("substring_one"));
         assertEquals("World", result.get("substring_two"));
         assertEquals("Hello World!", result.get("concat"));
+        // a null operand renders as "null" (String.valueOf semantics; Rust-engine parity)
+        assertEquals("Hellonull World!", result.get("concat_null"));
         var b64String = "SGVsbG8=";
         var bytes = Base64.getDecoder().decode(b64String);
         List<Integer> byteList = IntStream.range(0, bytes.length)
@@ -2061,6 +2100,41 @@ class FlowTests extends TestBase {
         assertInstanceOf(String.class, result.get("default_datetime"));
         var defaultDatetime = (String) result.get("default_datetime");
         assertTrue(defaultDatetime.contains("T") && defaultDatetime.contains("Z"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void shouldSetConfigParameterWithPluggableFunction() throws InterruptedException, ExecutionException {
+        final long timeout = 8000;
+        AsyncHttpRequest request = new AsyncHttpRequest();
+        request.setTargetHost(host)
+                .setMethod("GET")
+                .setHeader("accept", "application/json")
+                .setUrl("/api/pluggableFunctions/set-config");
+        EventEmitter po = EventEmitter.getInstance();
+        EventEnvelope req = EventEnvelope.of().setTo(HTTP_CLIENT).setBody(request);
+        EventEnvelope res = po.request(req, timeout).get();
+        assertNotNull(res);
+        assertInstanceOf(Map.class, res.getBody());
+        Map<String, Object> result = (Map<String, Object>) res.getBody();
+        assertNotNull(result);
+        // the plugin sets the parameter as a system property
+        assertEquals(true, result.get("updated"));
+        assertEquals("from-config-plugin", System.getProperty("unit.test.config.override"));
+        // a system property overrides base configuration at run-time, so a later task
+        // reading the parameter with the map(key) constant sees the updated value
+        assertEquals("from-config-plugin", result.get("value_from_config"));
+        assertEquals("from-config-plugin",
+                AppConfigReader.getInstance().getProperty("unit.test.config.override"));
+        // a non-string value is converted to text with String.valueOf(value)
+        assertEquals(true, result.get("numeric_value"));
+        assertEquals("8088", System.getProperty("unit.test.config.numeric"));
+        assertEquals("8088", result.get("numeric_from_config"));
+        // invalid usage returns false and sets nothing - missing 2nd argument
+        assertEquals(false, result.get("one_argument"));
+        assertNull(System.getProperty("unit.test.config.incomplete"));
+        // invalid usage returns false - empty parameter name
+        assertEquals(false, result.get("empty_key"));
     }
 
     @SuppressWarnings("unchecked")

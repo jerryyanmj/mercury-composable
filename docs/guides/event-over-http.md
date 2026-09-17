@@ -208,6 +208,14 @@ event.http:
     target: 'http://${peer.demo.host:127.0.0.1}:${peer.demo.port}/api/event'
 ```
 
+> The flat `event.http:` key and the nested `event:` / `http:` form seen elsewhere in this
+> guide are equivalent spellings (dotted keys normalize to the same structure). Note also
+> that the map is **loaded once at platform startup** — editing the file requires an
+> application restart. And the receiving side serves **local routes only**: an inbound
+> `/api/event` call to a route the instance does not host answers `404` even when the
+> instance's own map points that route at a peer — the map is caller-side knowledge, never a
+> relay instruction (deliberate hop-through is an explicit relay function).
+
 and the REST endpoint `GET/POST /api/event/http/declarative` (see `rest.yaml`) runs the flow
 `event-over-http-declarative` whose task simply names the route:
 
@@ -380,6 +388,26 @@ The mirror direction works the same way: the Rust hello-flow (port 8100) declare
 or the Rust hello-world — interchangeably. Point `peer.demo.host` / `peer.demo.port` at any
 peer that exposes the route.
 
+The swap extends beyond the two engines: the official **Python and Node.js wrappers**
+register the same `hello.declarative` route in their demo apps and default to the same
+port 8085, so the identical `curl` executes a Python or Node.js function with zero
+changes — see [Polyglot Functions](polyglot-functions.md).
+
+## Streaming across the hop
+
+A remote streaming function - one that produces a multi-shot reply with
+`EventStreamWriter` - can stream its segments back to your reply route through the
+same `/api/event` call: supply a `reply_to` on the send and opt in with the
+`accept: text/event-stream` event header. The peer answers the one POST with a
+Server-Sent Events response carrying the envelope-mode wire dialect, and the
+consuming client forwards each decoded event to your reply route with your
+correlation id - a local stream and a remote stream look identical to the consumer.
+A non-streaming target called this way answers byte-identical to the classic
+callback reply, and a streaming function invoked without the opt-in receives an
+explicit 406 refusal instead of a truncated reply. The full contract - the wire
+dialect, compatibility matrix and idle-timeout semantics - lives in
+[HTTP Response Streaming](http-streaming.md#stream-across-applications-event-over-http).
+
 ## Advantages
 
 The Event API exposes all public functions of an application instance to the network using a single REST endpoint.
@@ -410,6 +438,10 @@ Please refer to [REST Automation](rest-automation/index.md) for details.
 
 - [Interop Test Report (Java ⇄ Rust)](../test-reports/event-over-http-interop.md) — the live
   bidirectional validation of both patterns, with span-level trace evidence.
+- [Polyglot Functions](polyglot-functions.md)
+- [HTTP Response Streaming](http-streaming.md) - stream token segments to the HTTP edge
+  by sending events to the caller's reply route — write the functions themselves in Python
+  or Node.js and call them through this mechanism.
 - [Spring Boot Integration](spring-boot.md) — run Mercury in Spring Boot.
 - [Minimalist Service Mesh](service-mesh.md) — Kafka-based service discovery & routing.
 - [REST Automation](rest-automation/index.md) — declarative HTTP endpoints, no controllers.

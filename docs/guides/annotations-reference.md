@@ -81,7 +81,7 @@ Maximum concurrent worker instances. Range 1–1000. Controls how many events th
 |---|---|
 | `String` | `""` |
 
-Override `instances` from an application property or environment variable. Syntax: `"${SOME_VAR:default}"`. Takes precedence over `instances` when the property is present.
+Override `instances` from configuration: names a property **key** looked up in `application.properties` (e.g. `envInstances = "heavy.task.instances"`); a `${ENV_VAR:default}` value may appear on the *right-hand side of that property* in the config file. Falls back to `instances` when the key is absent or non-numeric. Never write a `${...}` literal as the annotation value — the config reader rejects it and the application fails at startup.
 
 #### `isPrivate`
 
@@ -159,8 +159,11 @@ public class SearchUsers implements TypedLambdaFunction<SearchRequest, List<User
 @PreLoad(route = "greeting.case.1, greeting.case.2", instances = 10)
 public class Greetings implements TypedLambdaFunction<Map<String, Object>, Map<String, Object>> { ... }
 
-// Instance count from environment variable
-@PreLoad(route = "v1.heavy.task", envInstances = "${HEAVY_TASK_INSTANCES:10}")
+// Instance count from a configuration KEY: envInstances names a property key looked up in
+// application.properties (e.g. heavy.task.instances=20); a nonexistent key or non-numeric
+// value falls back to `instances`. Never write a "${...}" literal here - the config reader
+// rejects it and the application fails at startup.
+@PreLoad(route = "v1.heavy.task", instances = 10, envInstances = "heavy.task.instances")
 public class HeavyTask implements TypedLambdaFunction<Map<String, Object>, Map<String, Object>> { ... }
 ```
 
@@ -169,12 +172,15 @@ public class HeavyTask implements TypedLambdaFunction<Map<String, Object>, Map<S
 - Route names must be lowercase letters, digits, and dots. At least one dot is required.
 - Multiple routes: each name gets a full, independent set of `instances` workers.
 - The `instance` parameter in `handleEvent` indicates which worker is executing (0-based).
-- Spring Boot (`rest-spring-3` module): field injection (`@Autowired`, `@Value`) works.
+- Spring Boot (`rest-spring-4` module): field injection (`@Autowired`, `@Value`) works.
   Constructor injection does NOT work because instances are created before the Spring context.
 - `@PreLoad` can be combined with `@KernelThreadRunner`, `@EventInterceptor`, `@ZeroTracing`,
   and `@OptionalService` on the same class.
-- Runtime instance count override (without recompiling):
-  set `worker.instances.<route>=N` in `application.properties`.
+- Runtime instance count override (without recompiling) — **only for functions whose
+  `@PreLoad` declares `envInstances`**: the annotation names a configuration key (framework
+  built-ins use the `worker.instances.<route>` convention), and setting that key in
+  `application.properties` overrides `instances`. For functions without `envInstances`,
+  use `yaml.preload.override` instead.
 - Preload override YAML: use `yaml.preload.override` to re-map routes or change instance
   counts for library functions you cannot recompile.
 
@@ -300,7 +306,7 @@ public class MainApp implements EntryPoint {
 - The static `main` method should contain only `AutoStart.main(args)`. All initialization
   logic belongs in `start()`.
 - Can be combined with `@OptionalService` for conditional activation.
-- In Spring Boot apps (`rest-spring-3`/`rest-spring-4`), execution is deferred until Spring
+- In Spring Boot apps (`rest-spring-4`), execution is deferred until Spring
   Boot itself fires `ApplicationReadyEvent` — see
   [Application Lifecycle](architecture.md#application-lifecycle) for the full sequence.
 
@@ -906,7 +912,7 @@ The `web.component.scan` property accepts a comma-separated list of package name
 scanner finds `@PreLoad`, `@MainApplication`, `@BeforeApplication`, `@WebSocketService`,
 and `@SimplePlugin` classes within those packages (and all sub-packages).
 
-**Spring Boot note**: When using `rest-spring-3` with multiple packages in
+**Spring Boot note**: When using `rest-spring-4` with multiple packages in
 `web.component.scan`, Spring's own component scanner requires the separate
 `spring.component.scan` property to scan for Spring beans.
 

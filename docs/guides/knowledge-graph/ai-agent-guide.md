@@ -28,8 +28,7 @@ related:
 | Goal | Endpoint | Notes |
 |---|---|---|
 | **Execute a deployed graph** | `POST /api/graph/{graph-id}` | Send the request body; get the response. No session. |
-| **Build/edit a graph — AI agents, preferred** | `POST /api/companion/{session-id}/sync` | **Synchronous** — returns the command outcome **in-band** `{ok, output, error, result}`; output is *also* teed to the human's WS console. |
-| **Build/edit a graph — fire-and-forget (legacy)** | `POST /api/companion/{session-id}` | Dispatches the command; outcome streams to the WS console only (HTTP returns just an ack). Kept for Java parity. |
+| **Build/edit a graph** | `POST /api/companion/{session-id}/sync` | **Synchronous** — returns the command outcome **in-band** `{ok, output, error, result}`; output is *also* teed to the human's WS console. |
 | **Read the live model** | `GET /api/graph/session/{session-id}` | Returns the current graph as JSON. |
 
 This guide is about the **companion** flow — co-authoring a graph with a human watching the
@@ -69,17 +68,61 @@ can self-correct without a human relaying the console:
 Status codes: `200` executed (read `ok`/`error` in the body); `400` missing/empty/non-text body;
 `404` no active session for that id.
 
-> **Legacy fire-and-forget** (`POST /api/companion/{session-id}`, no `/sync`): returns only
-> `{status:"accepted"}`; the outcome streams to the WS console, not the HTTP response, so the caller
-> is **blind to errors**. Prefer `/sync`.
+> **Retired:** the fire-and-forget `POST /api/companion/{session-id}` (no `/sync`) was removed in
+> 2026-09 — it returned only `{status:"accepted"}`, leaving the caller **blind to errors** and
+> forcing sleep-padded drivers. The bare URL answers 404. There is exactly one companion endpoint:
+> `/sync`.
+
+> **Never use `graph.js`.** It is **deprecated** (kept for backward compatibility only): runtime
+> script evaluation fails enterprise security review, and a silent expression defect has been
+> reported in the field. Express decisions with `graph.math` and everything richer with
+> `graph.task` — see the [skills reference](skills-reference.md#js).
 
 **Rules of engagement:** one command per POST (multi-line commands are fine — see the grammar);
-the session must already be open (you do not create it); single operator — don't POST while a
-human is typing in the same instant; never expose this beyond a trusted dev host.
-**Session topology is off-limits:** a companion is an *assistant to* the session in the URL, not a
-WebSocket session of its own — both companion endpoints reject `session subscribe` /
+the session must already be open (over the companion endpoint you do not create it — but see
+[Hosting the session yourself](#hosting)); take turns — co-editing with humans is the design
+intent, just don't POST in the same instant a human is mid-keystroke; never expose this beyond a
+trusted dev host.
+**Session topology is off-limits over HTTP:** a companion is an *assistant to* the session in the
+URL, not a WebSocket session of its own — the companion endpoint rejects `session subscribe` /
 `session unsubscribe` / `session reset` (the read-only `session` status query is allowed).
 Subscriptions are managed from WebSocket-connected sessions only.
+**Session sync is symmetric:** when sessions are joined by `session subscribe`, **every command
+except the `session` topology commands propagates to the primary and all subscribers alike** —
+AI and humans are equal co-authors of one shared model, and anyone's command (typos included) is
+seen by everyone. It is collaboration, not a one-way broadcast.
+
+## Hosting the session yourself {#hosting}
+
+The flow above borrows a human's browser session. The stronger topology is the inverse: **the
+agent hosts the session and humans subscribe to it.** If a human's tab drops (backgrounded past
+the idle timeout, laptop lid closed), they simply re-subscribe and the current work-in-progress
+graph syncs back to them — nothing lives in anyone's browser.
+
+**Use the shipped session broker — do not hand-roll a WebSocket client.** The session contract
+carries a keep-alive obligation, and a hand-rolled client that misses it appears to work, then
+dies silently at the server's idle timeout — typically mid-collaboration. The zero-dependency
+reference broker, `scripts/playground-session-broker.mjs` (Node ≥ 22), ships in the
+`starter-graph` template and in the `minigraph-playground` example. It holds the session, keeps
+it alive with the web UI's own ping cadence, auto-reconnects across app restarts, and exposes a
+localhost control API (`GET /session`, `GET /console`, `POST /start`, `POST /stop`) so the agent
+reads the session id over HTTP, hands it to the humans (`session subscribe {id}` in their
+browsers), and keeps driving commands through `/sync` as usual — the broker owns the session's
+lifecycle, never its commands. See `scripts/README.md` next to the script, and pass `--target`
+for your app's port (e.g. `--target http://127.0.0.1:8303` for the starter template's default).
+
+For reference, the WebSocket contract the broker implements (identical in the Java and Rust
+engines):
+
+1. Connect to `ws://{host}/ws/graph/playground`.
+2. On open, send `{"type":"welcome"}`.
+3. The server announces the id as a plain-text frame: `session ws-NNNNNN-N started`.
+4. Keep-alive: send `{"type":"ping","message":"keep alive","time":"..."}` on an interval
+   (the web UI uses 20 s); the server answers `{"type":"pong"}`. Filter ping/pong frames from
+   any console you render. **Skipping this step is the classic hand-rolled-client failure — the
+   session dies at the idle timeout.**
+5. A restart of the app destroys the session (and any unexported graph — export first);
+   reconnect and parse the **new** id.
 
 ## Generate deterministically {#deterministic}
 
@@ -91,6 +134,8 @@ Subscriptions are managed from WebSocket-connected sessions only.
 
 > **Pre-send checklist**
 > - [ ] The root node is named `root`; the end node is named `end`.
+> - [ ] The root node's properties include `name={graph-id}` and `created={current timestamp}` —
+>       export authorization and content-uniqueness (see the recipe's best practice).
 > - [ ] Node names are **lowercase letters, digits and hyphen** (types: descriptive labels, conventionally Capitalized).
 > - [ ] Each node has **0 or 1** skill (`skill={route}`); the skill's required properties are present
 >       (see the [skill→property matrix](command-reference.md#skill-matrix)).
@@ -120,6 +165,19 @@ A reliable order for building a graph:
    execution are needed for `extension=` targets.
 2. **Create nodes:** `create node root` (type `Root`), the active/skill nodes, and `create node end`
    (type `End`, usually with `graph.data.mapper` to shape `output.body`).
+   A mapper can also set the **HTTP response status**: map an int to `output.status`
+   (e.g. `int(400) -> output.status` in a refusal node) — a graph is not limited to
+   `200` + an error flag in the body. A non-2xx status routes through the exception path;
+   see [workflow-suspension.md](workflow-suspension.md) for that pattern.
+   **Best practice — give the root node these two properties at creation time:**
+   ```
+   name={graph-id}          # the id you will export/deploy as
+   created={ISO timestamp}  # e.g. 2026-09-03T18:55:00Z — the current time
+   ```
+   `name=` is what authorizes `export graph as {graph-id}` to overwrite an existing file —
+   without it the export is refused (or, in older engines, silently skipped); `created=` makes
+   every build's model content-unique, so a re-export is always recognized as a new graph and
+   always saved. Set both up front and export friction disappears.
 3. **Connect** them so traversal flows root → end, with no orphans.
 4. **Wire the knowledge layer:** whenever the graph has `Dictionary`/`Provider` or data-entity
    nodes, an `Island` (`skill=graph.island`) is **required** — connect
@@ -129,8 +187,19 @@ A reliable order for building a graph:
 5. **Instantiate** with mock input: `instantiate graph` + `{constant} -> input.body.{key}` lines.
 6. **Run and inspect:** `run` (or `execute {node}`), then `inspect output.body`; iterate.
    (`{node}` is a placeholder — you write e.g. `execute fetcher`, `inspect output.body`.)
-7. **Export & deploy:** `export graph as {name}`, deploy the JSON, then call
-   `POST /api/graph/{name}`.
+7. **Export & deploy:** export is file-based — it writes `/tmp/graph/{name}.json`. **Delete any
+   stale file of that name first** (`rm -f /tmp/graph/{name}.json`): an export onto an existing
+   file can report `ok: true` while writing **nothing** (overwriting requires `name={name}` on
+   the root node, and exporting as an already-deployed graph id never writes). Then
+   `export graph as {name}` and **verify the file now exists with fresh content** — never trust
+   the success line alone. (With the root-node `name=`/`created=` best practice from step 2 the
+   export overwrites cleanly; the delete-and-verify here is defense in depth.) Deploy the JSON
+   into your project's `resources/graph/`, list the id in `graphs.yaml`, rebuild, restart, then
+   call `POST /api/graph/{name}`.
+8. **Dry-running the deployed model in a fresh session:** a Playground session opened after the
+   restart starts **empty** — no root node — even though the graph is deployed. Run
+   `import graph from {name}` first (it falls back to the deployed classpath model, `ok:true`),
+   then `instantiate graph` and `run` as usual.
 
 ## Worked example {#example}
 
@@ -163,6 +232,148 @@ curl -sS -X POST "http://{host}/api/companion/${SID}/sync" -H 'Content-Type: tex
 Because each response carries `ok`/`error`/`result`, an agent verifies and corrects **itself** — no
 need to relay the WebSocket console. The same lines are still teed to the human's console, so a
 watcher (and any `session subscribe`d session) follows along live.
+
+## Scaffolding a project from the template {#scaffolding}
+
+**Start from `templates/starter-graph`.** It is the copy-out starter for Layer 3 and it already
+ships the whole `playground-enabled` surface below — the dev-mode endpoints, `app.env=dev`, the
+standard `graph-executor` flow, and the session broker script — so a fresh project can be
+co-authored with an AI agent from the first run. Copy the directory, rename the ids, replace the
+graph model, and you are done; the manifest and route list here are then a **checklist for what
+you must not delete**, not a trimming exercise.
+
+If you instead derive from a fuller app (`examples/minigraph-playground`, which additionally
+demonstrates LLM streaming and Event-over-HTTP), trim — **against this manifest, not against your
+build passing** (`mvn test` and `curl` both stay green with Playground UI routes missing; only the
+browser notices).
+
+**Boilerplate manifest** — what a derived project keeps:
+
+| File | Role | Trim? |
+|---|---|---|
+| `pom.xml` | Build; set your own artifact/group ids | keep (edit ids) |
+| `application.properties` (main + test) | App name, `rest.server.port` (use a distinct test port), `rest.automation=true`, `app.env=dev` for the Playground | keep (edit values) |
+| `rest.yaml` | REST routes | keep — trim **by profile, below** |
+| `flows.yaml` + `flows/graph-executor.yml` | Binds `POST /api/graph/{graph_id}` to the graph executor | keep |
+| `flows/flow-11.yml` and other example flows | Support-triage demo flows | drop unless used |
+| `graphs.yaml` + `graph/*.json` | Your deployed graph models — list every id you serve | replace with yours |
+| Main class annotated `@MainApplication` | App entry point | keep (rename) |
+
+> **One endpoint serves every graph.** `POST /api/graph/{graph_id}` takes the graph id from the URL
+> path, so a Layer 3 application needs exactly **one** REST entry no matter how many graphs it
+> deploys. Do not add a per-graph endpoint — list the new id in `graphs.yaml` and it is live.
+
+> **Declare the graph engine and nothing else.** `minigraph-playground-engine` brings
+> `event-script-engine` and `platform-core` transitively, so **one** dependency covers all three
+> layers. Listing them individually is not merely redundant — it creates a resource collision: the
+> Playground UI ships inside the engine as `classpath:/public/index.html` and `platform-core`
+> carries a placeholder welcome page at the *same* path, and the first jar on the classpath wins
+> (for `HttpRouter`'s static route and for `GetIndexHtml` alike). Declaring `platform-core` first is
+> enough to serve the placeholder instead of the Playground, and everything else still passes —
+> `mvn test`, `curl`, even the companion endpoint — so only a browser reveals it.
+
+**`rest.yaml` — two named profiles.** The template's route list mixes three kinds of routes;
+know which bar you are building to:
+
+- **Example-specific (always safe to drop):** `llm.stream.relay`, `mock.mdm.profile`,
+  `mock.account.details` — they belong to the support-triage demo, not the platform.
+- **Profile `headless-minimal`** — enough for CI, `curl`, and an agent-driven dry-run over
+  `/sync`; the Playground **UI will not work**.
+- **Profile `playground-enabled`** — headless-minimal **plus** the UI plumbing every template
+  ships. If a human will ever open the Playground against your app — and in the
+  [hosting topology](#hosting) they will — build to this profile.
+
+**Copy-paste boilerplate** — the full `playground-enabled` route set; deleting the routes marked
+`[playground-enabled]` leaves `headless-minimal`. Keep the template's `cors_1` and `header_1`
+blocks verbatim (every entry references them):
+
+```yaml
+rest:
+  # ── headless-minimal ──────────────────────────────────────────────────────
+  # Execute a deployed graph: POST /api/graph/{graph-id}
+  - service: 'http.flow.adapter'
+    methods: ['POST', 'GET']
+    url: '/api/graph/{graph_id}'
+    flow: 'graph-executor'
+    timeout: 30s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  # THE companion endpoint — an AI agent's build/edit channel (outcome in-band)
+  - service: 'post.companion.command.sync'
+    methods: ['POST']
+    url: '/api/companion/{id}/sync'
+    timeout: 30s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  # Read the live session's graph model as JSON
+  - service: 'get.live.graph'
+    methods: ['GET']
+    url: '/api/graph/session/{id}'
+    timeout: 30s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  # ── [playground-enabled] UI plumbing — required when a human opens the UI ─
+  # Serves the Playground web app
+  - service: 'get.index.html'
+    methods: ['GET']
+    url: '/index.html'
+    timeout: 10s
+    cors: cors_1
+    headers: header_1
+
+  - service: 'get.ws.html'
+    methods: ['GET']
+    url: '/api/ws/{id}'
+    timeout: 10s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  # The Graph tab's model fetch after `describe graph` / `export graph`
+  - service: 'show.graph.model'
+    methods: ['GET']
+    url: '/api/graph/model/{graph_id}/{sequence}'
+    timeout: 30s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  # Backs the console `upload` command: opens a UI dialog where the human
+  # operator pastes a JSON string (the JSON-Path payload editor handshake)
+  - service: 'upload.json.content'
+    methods: ['POST']
+    url: '/api/json/content/{id}'
+    timeout: 30s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  # Backs the console `upload mock data` command (mock-input upload dialog)
+  - service: 'upload.mock.content'
+    methods: ['POST']
+    url: '/api/mock/{id}'
+    timeout: 30s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+
+  # The UI's state-machine inspector
+  - service: 'inspect.state.machine'
+    methods: ['GET']
+    url: '/api/inspect/{id}/{key}'
+    timeout: 30s
+    cors: cors_1
+    headers: header_1
+    tracing: true
+```
+
+When in doubt, diff your `rest.yaml` against `templates/starter-graph/src/main/resources/rest.yaml`.
 
 ## See also {#see-also}
 

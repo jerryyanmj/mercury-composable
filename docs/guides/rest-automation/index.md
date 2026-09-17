@@ -144,6 +144,38 @@ public class SimpleAuthentication implements TypedLambdaFunction<AsyncHttpReques
 }
 ```
 
+The same `AsyncHttpRequest` input type serves any **directly-bound** user function (an
+endpoint whose `service:` names your function instead of `http.flow.adapter`). A `{param}`
+path variable is read from the request object:
+
+```java
+@PreLoad(route = "v1.get.profile.direct", instances = 10)
+public class GetProfileDirect implements TypedLambdaFunction<AsyncHttpRequest, Object> {
+
+    @Override
+    public Object handleEvent(Map<String, String> headers, AsyncHttpRequest input, int instance) {
+        String profileId = input.getPathParameter("profile_id");   // from url: /api/profile/{profile_id}
+        // input.getQueryParameter(...), input.getBody(), input.getHeader(...) similarly
+        return Map.of("profile_id", profileId);
+    }
+}
+```
+
+This input contract holds for **every** directly-bound function, whatever its declared input type:
+the endpoint always delivers the `AsyncHttpRequest` object — never the bare HTTP body. A function
+that takes the raw `EventEnvelope` (an `@EventInterceptor`, e.g. a
+[streaming producer](../http-streaming.md#produce-a-stream)) or an untyped `Map` receives the same
+object as the event body and reconstructs it:
+
+```java
+AsyncHttpRequest httpRequest = new AsyncHttpRequest(request.getBody());   // request = the EventEnvelope
+```
+
+Extracting just the HTTP body is the **flow adapter's** job: with `service: "http.flow.adapter"`,
+the flow's input data mapping selects the pieces (`input.body -> ...`, `input.header.x -> ...`) —
+which is why a flow task sees the mapped body while a directly-bound function sees the whole
+request object.
+
 Your authentication function can return a boolean value to indicate if the request should be accepted or rejected.
 
 If true, the system will send the HTTP request to the service. In this example, it is the "hello.world" function.

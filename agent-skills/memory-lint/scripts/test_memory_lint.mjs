@@ -1,9 +1,10 @@
 // test_memory_lint.mjs — node mirror of test_memory_lint.py.
 // Same fixtures, same expectations: this is the cross-runtime contract that
 // keeps memory-lint.mjs at parity with memory-lint.py. Run: node --test <file>
-import { test } from "node:test";
+import { afterEach, test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -17,6 +18,14 @@ import {
   check_continuity_health,
   sessions_since_review,
   check_stale_metadata,
+  check_secret_material,
+  closed_narrative_lines,
+  check_closed_thread_bloat,
+  load_windows,
+  check_thread_files,
+  check_duplicate_ids,
+  check_duplicate_state_keys,
+  check_thread_stale,
 } from "./memory-lint.mjs";
 
 // (8) advisory cadence/size triggers (v4.24.0). cont is a Map; cont.size is the fact count.
@@ -412,6 +421,42 @@ test("check_continuity_health: a healthy layer is OK", () => {
   );
 });
 
+test("closed-thread bloat counts only closed blocks", () => {
+  // (11) counting rule: non-empty lines inside `- [x]` blocks (checkbox through
+  // footer), a block ending at the next open thread or heading. Open threads and
+  // headings never count (the bloat class is completed ship narratives —
+  // mercury-composable field report, 64% of continuity).
+  const cont_text =
+    "## Open Threads\n\n" +
+    "- [x] **Shipped X.** line two of the record\n" +
+    "  more narrative\n" +
+    "  <!-- id: shipped-x | created: 2026-01-01 | last_used: 2026-01-01 " +
+    "| uses: 1 | tier: active -->\n" +
+    "\n" +
+    "- [ ] **Open thing.** must not count\n" +
+    "  narrative of the open thread\n";
+  assert.equal(closed_narrative_lines(cont_text), 3);
+  assert.deepEqual(check_closed_thread_bloat(cont_text, 150), []);
+  const w = check_closed_thread_bloat(cont_text, 2);
+  assert.equal(w.length, 1);
+  assert.ok(w[0].includes("[closed-thread-bloat] 3 line(s)"));
+  assert.ok(w[0].includes("condense them to 3-6-line stubs"));
+  assert.ok(w[0].includes("origin session log"));
+});
+
+test("closed_narrative_max_lines: default and policy parse", () => {
+  const root = mkdtempSync(join(tmpdir(), "lint-knob-"));
+  try {
+    assert.equal(load_windows(root).closed_narrative_max_lines, 150);
+    mkdirSync(join(root, "memory"), { recursive: true });
+    writeFileSync(join(root, "memory", "decay-policy.md"),
+      "- closed_narrative_max_lines: 99\n");
+    assert.equal(load_windows(root).closed_narrative_max_lines, 99);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 const STALE_STEMS = ["2026-06-01-000000", "2026-06-02-000000", "2026-06-03-000000"];
 
 test("check_stale_metadata flags tier drift", () => {
@@ -449,4 +494,693 @@ test("check_stale_metadata: a pinned thread's tier is not flagged (v4.26.1)", ()
   const cont = new Map([["open-fact", { tier: "working", created: "2026-01-01" }]]);
   const refs = [new Set(["open-fact"]), new Set(["open-fact"]), new Set()];
   assert.deepEqual(check_stale_metadata(cont, new Set(["open-fact"]), refs, STALE_STEMS, 3, 2, 4), []);
+});
+
+// (10) [secret-material]: committed memory surfaces must not carry credentials/PII
+// (field incident: a rendered kafka JAAS secret pasted into a session log, caught by a
+// client-side DLP scanner). Advisory; must NEVER echo the matched value into the report.
+function secretSetup(files) {
+  const root = mkdtempSync(join(tmpdir(), "memlint-"));
+  const all = { "continuity.md": "# c\nclean\n", ...files };
+  for (const [rel, body] of Object.entries(all)) {
+    const full = join(root, "memory", rel);
+    mkdirSync(join(full, ".."), { recursive: true });
+    writeFileSync(full, body);
+  }
+  return root;
+}
+
+const fixtureEnvValues = new Map();
+
+function fixtureEnv(name, value) {
+  if (!fixtureEnvValues.has(name)) fixtureEnvValues.set(name, process.env[name]);
+  process.env[name] = value;
+  return process.env[name];
+}
+
+function fixtureSecret(name, { length = 24, prefix = "", uppercase = false } = {}) {
+  const digest = createHash("sha256").update(name).digest("hex");
+  let material = [...digest].map((ch, i) => i % 2 ? ch.toUpperCase() : ch).join("");
+  if (uppercase) material = material.toUpperCase();
+  return fixtureEnv(name, prefix + material.slice(0, length));
+}
+
+afterEach(() => {
+  for (const [name, previous] of fixtureEnvValues) {
+    if (previous === undefined) delete process.env[name];
+    else process.env[name] = previous;
+  }
+  fixtureEnvValues.clear();
+});
+
+test("check_secret_material flags a credential assignment and never echoes the value", () => {
+  const secret = fixtureSecret("AGENT_MEMORY_TEST_ASSIGNMENT");
+  const root = secretSetup({
+    "sessions/2026-08-06-120000.md": `# Session\n\`\`\`\nbearer.auth.client.secret=${secret}\n\`\`\`\n`,
+  });
+  try {
+    const w = check_secret_material(root);
+    assert.equal(w.length, 1);
+    assert.ok(w[0].includes("[secret-material]"));
+    assert.ok(w[0].includes("memory/sessions/2026-08-06-120000.md:3"));
+    assert.ok(w[0].includes("credential-assignment"));
+    assert.ok(w[0].includes("key 'bearer.auth.client.secret'"));
+    assert.ok(!w[0].includes(secret)); // the report must never amplify the secret
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material: placeholders are safe but nonempty defaults flag", () => {
+  const placeholder = fixtureEnv("AGENT_MEMORY_TEST_PLACEHOLDER", "change" + "me-please");
+  const fallback = fixtureSecret("AGENT_MEMORY_TEST_TEMPLATE_FALLBACK");
+  const root = secretSetup({
+    "sessions/2026-08-06-120000.md": [
+      "# Session",
+      "clientSecret='${KAFKA_CLIENT_SECRET}'",
+      "password: (REDACTED)",
+      "api_key: <your-key-here>",
+      "client_secret: {{VAULT_REF}}",
+      "client_secret: placeholder-value",
+      "access_token: 2026-08-06-153509",
+      "max_tokens_password: 128000000",
+      `password=${placeholder}`,
+      // env-var references with default-value / dotted forms are placeholders too
+      // (field FP, mercury-composable 2026-08-13 — line quoted VERBATIM below):
+      "  (`redis.host`/`redis.port`/`redis.password=${REDIS_PASSWORD:}`/`redis.ssl`/`redis.database`/`redis.timeout.ms`)",
+      "client_secret: ${vault.paths.kafka}",
+      `password=\${REDIS_URL:-${fallback}}`,
+    ].join("\n") + "\n",
+  });
+  try {
+    const w = check_secret_material(root);
+    assert.equal(w.length, 1);
+    assert.ok(w[0].includes("credential-assignment"));
+    assert.ok(w[0].includes("(1 hit(s)"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material flags known token shapes", () => {
+  const githubToken = fixtureSecret(
+    "AGENT_MEMORY_TEST_GITHUB_TOKEN", { length: 40, prefix: "ghp_" }
+  );
+  const awsKey = fixtureSecret(
+    "AGENT_MEMORY_TEST_AWS_KEY", { length: 16, prefix: "AKIA", uppercase: true }
+  );
+  const privateKeyHeader = fixtureEnv(
+    "AGENT_MEMORY_TEST_PRIVATE_KEY_HEADER",
+    "-".repeat(5) + "BEGIN " + "RSA " + "PRIVATE " + "KEY" + "-".repeat(5)
+  );
+  const root = secretSetup({
+    "sessions/2026-08-06-120000.md": [
+      "# Session",
+      `pushed with ${githubToken}`,
+      `aws key ${awsKey}`,
+      privateKeyHeader,
+    ].join("\n") + "\n",
+  });
+  try {
+    const cats = check_secret_material(root).join("\n");
+    assert.ok(cats.includes("github-token"));
+    assert.ok(cats.includes("aws-access-key-id"));
+    assert.ok(cats.includes("private-key-block"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material flags email PII, excludes public forms", () => {
+  const privateEmail = fixtureEnv(
+    "AGENT_MEMORY_TEST_PRIVATE_EMAIL",
+    "fixture.person" + "@" + "some-client-corp" + "." + "com"
+  );
+  const root = secretSetup({
+    "sessions/2026-08-06-120000.md": [
+      "# Session",
+      `contact ${privateEmail} about rotation`,
+      "Co-Authored-By: Claude Code <noreply@anthropic.com>",
+      "tagger 12345+acn-user@users.noreply.github.com",
+      "remote git@github.com:acn-ericlaw/agent-memory.git",
+      "docs use alice@example.com",
+    ].join("\n") + "\n",
+  });
+  try {
+    const w = check_secret_material(root);
+    assert.equal(w.length, 1);
+    assert.ok(w[0].includes("email"));
+    assert.ok(w[0].includes("(1 hit(s)"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material: ssn + Luhn-valid card flagged; dates and Luhn-fails are not", () => {
+  const ssn = fixtureEnv("AGENT_MEMORY_TEST_SSN", ["123", "45", "6789"].join("-"));
+  const card = fixtureEnv(
+    "AGENT_MEMORY_TEST_CARD", ["4539", "1488", "0343", "6467"].join(" ")
+  );
+  const invalidCard = fixtureEnv(
+    "AGENT_MEMORY_TEST_INVALID_CARD", ["1234", "5678", "9012", "3456"].join(" ")
+  );
+  const root = secretSetup({
+    "sessions/2026-08-06-120000.md": [
+      "# Session",
+      `ssn ${ssn} leaked`,
+      `card ${card} on file`,
+      "dated 2026-08-06, stem 2026-08-06-153509, v4.33.0", // none of these
+      `not a card: ${invalidCard}`,
+    ].join("\n") + "\n",
+  });
+  try {
+    const all = check_secret_material(root);
+    const cats = all.join("\n");
+    assert.ok(cats.includes("ssn"));
+    assert.ok(cats.includes("payment-card"));
+    assert.ok(all.find((x) => x.includes("payment-card")).includes("(1 hit(s)"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material flags absolute home paths, excludes CI users", () => {
+  const privateHome = fixtureEnv(
+    "AGENT_MEMORY_TEST_HOME_PATH",
+    "/" + "Users" + "/" + "fixture-user" + "/projects/foo"
+  );
+  const root = secretSetup({
+    "continuity.md": `# c\n- repo: ${privateHome}\n`,
+    "sessions/2026-08-06-120000.md": "# Session\nCI ran in /home/runner/work and ~/sandbox/foo\n",
+  });
+  try {
+    const w = check_secret_material(root);
+    assert.equal(w.length, 1);
+    assert.ok(w[0].includes("home-path"));
+    assert.ok(w[0].includes("memory/continuity.md:2"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material scans archive/ and aggregates counts per file+category", () => {
+  const password = fixtureSecret("AGENT_MEMORY_TEST_ARCHIVE_PASSWORD");
+  const apiKey = fixtureSecret("AGENT_MEMORY_TEST_ARCHIVE_API_KEY");
+  const clientSecret = fixtureSecret("AGENT_MEMORY_TEST_ARCHIVE_CLIENT_SECRET");
+  const root = secretSetup({
+    "archive/2026-Q2.md":
+      `# a\npassword=${password}\napi_key=${apiKey}\nclient_secret=${clientSecret}\n`,
+  });
+  try {
+    const w = check_secret_material(root);
+    assert.equal(w.length, 1); // one report per file per category
+    assert.ok(w[0].includes("credential-assignment"));
+    assert.ok(w[0].includes("(3 hit(s), first at line 2)"));
+    assert.ok(w[0].includes("memory/archive/2026-Q2.md:2"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material: waiver line and placeholder home paths are not flagged", () => {
+  // A log DOCUMENTING a leak cleanup legitimately quotes the patterns — the explicit
+  // line waiver keeps the advisory signal, not noise; `/Users/...` is a placeholder.
+  const waivedSecret = fixtureSecret("AGENT_MEMORY_TEST_WAIVED_SECRET");
+  const root = secretSetup({
+    "sessions/2026-08-06-120000.md": [
+      "# Session",
+      `the leaked line was password=${waivedSecret} <!-- lint:allow-secret-material -->`,
+      "docs quote `/Users/...` as the placeholder form",
+    ].join("\n") + "\n",
+  });
+  try {
+    assert.deepEqual(check_secret_material(root), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material: quoted assignments, Authorization, and embedded placeholders flag", () => {
+  const quotedSecret = fixtureSecret("AGENT_MEMORY_TEST_QUOTED_SECRET");
+  const authorizationSecret = fixtureSecret("AGENT_MEMORY_TEST_AUTHORIZATION");
+  const embeddedSecret = fixtureSecret("AGENT_MEMORY_TEST_EMBEDDED_PLACEHOLDER");
+  const fallbackSecret = fixtureSecret("AGENT_MEMORY_TEST_NONEMPTY_FALLBACK");
+  const root = secretSetup({
+    "sessions/2026-08-13-120000.md": [
+      "# Session",
+      `{"client_secret": "${quotedSecret}"}`,
+      `Authorization: Bearer ${authorizationSecret}`,
+      `client_secret=dummy${embeddedSecret}`,
+      `client_secret=$${embeddedSecret}`,
+      `client_secret=\${CLIENT_SECRET:-${fallbackSecret}}`,
+    ].join("\n") + "\n",
+  });
+  try {
+    const w = check_secret_material(root);
+    assert.equal(w.length, 2);
+    const joined = w.join("\n");
+    assert.ok(joined.includes("credential-assignment"));
+    assert.ok(joined.includes("(4 hit(s)"));
+    assert.ok(joined.includes("authorization-header"));
+    assert.ok(!joined.includes(quotedSecret));
+    assert.ok(!joined.includes(authorizationSecret));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material: all-caps enum constants are key-scoped", () => {
+  // First field FP (mercury-composable, 2026-08-13): config docs quoted in a session log —
+  // a credential-keyed property set to an ALL-CAPS enum constant is a source TYPE, not a
+  // credential — including the markdown inline-code form (`key=VALUE`), where the closing
+  // backtick must not ride into the value (v4.33.2, the form the real field line used).
+  // Mixed-case values on the same key class must still flag, backticked or bare.
+  const mixedSecret = fixtureSecret("AGENT_MEMORY_TEST_MIXED_SECRET");
+  const backtickedSecret = fixtureSecret("AGENT_MEMORY_TEST_BACKTICKED_SECRET");
+  const uppercaseSecret = fixtureSecret(
+    "AGENT_MEMORY_TEST_UPPERCASE_SECRET", { length: 24, uppercase: true }
+  );
+  const root = secretSetup({
+    "sessions/2026-08-13-120000.md": [
+      "# Session",
+      "bearer.auth.credentials.source: OAUTHBEARER",
+      "sasl.password.mode=STATIC_TOKEN",
+      "markdown form: `bearer.auth.credentials.source=OAUTHBEARER` + `bearer.auth.issuer.endpoint.url` /",
+      `still real: client_secret=${mixedSecret}`,
+      `backticked real: \`api_key=${backtickedSecret}\``,
+      `uppercase real: client_secret=${uppercaseSecret}`,
+    ].join("\n") + "\n",
+  });
+  try {
+    const w = check_secret_material(root);
+    assert.equal(w.length, 1);
+    assert.ok(w[0].includes("key 'client_secret'"));
+    assert.ok(w[0].includes("(3 hit(s)"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material: placeholder exemptions tolerate trailing sentence punctuation", () => {
+  // Field note (mercury-composable, 2026-09-17): a comment SENTENCE mentioning a setting —
+  // `credentials.source=OAUTHBEARER,` — flagged while the bare setting was exempt. The
+  // assignment capture stops only at whitespace/quotes/backticks/`;`, so trailing sentence
+  // punctuation rode into the value and defeated every fullmatch exemption except the knob's
+  // (placeholder words, templates, angle placeholders alike). v4.40.1: retry once with `).,`
+  // stripped — AFTER the as-is pass, so `$(…)` keeps matching; a real value still flags.
+  const real = fixtureSecret("AGENT_MEMORY_TEST_TRAILING_PUNCT_REAL");
+  const root = secretSetup({
+    "sessions/2026-09-17-120000.md": [
+      "# Session",
+      "# with credentials.source=OAUTHBEARER, the provider validates the token",
+      "set credentials.source=OAUTHBEARER.",
+      "(credentials.source=OAUTHBEARER)",
+      "e.g. password=changeme.",
+      "e.g. client.secret=${CLIENT_SECRET}.",
+      "e.g. api.key=<your-key-here>,",
+      "still exempt as-is: client.secret=$(vault_read_secret_app)",
+      `still real, punctuation or not: client_secret=${real}.`,
+    ].join("\n") + "\n",
+  });
+  try {
+    const w = check_secret_material(root);
+    assert.equal(w.length, 1);
+    assert.ok(w[0].includes("key 'client_secret'"));
+    assert.ok(w[0].includes("(1 hit(s)"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("check_secret_material: the tool's own opt-down knob settings are not credentials", () => {
+  // Field FP (mercury-composable, 2026-08-19): the pre-commit guard's own blocking message
+  // prints "AGENT_MEMORY_SECRET_GUARD=advisory", so a session log documenting that guidance
+  // self-flagged (the key contains SECRET; "advisory" meets the value floor). The knob's
+  // documented settings are exempt — but ONLY those values: an arbitrary value under the
+  // same key must still flag (no smuggling envelope). Fixture lines quote the guard's
+  // guidance line and the field repro line VERBATIM (v4.33.2 lesson) — the guidance line's
+  // closing paren rides into the captured value, which the exemption must tolerate.
+  const opaque = fixtureSecret("AGENT_MEMORY_TEST_KNOB_OPAQUE");
+  const cleanRoot = secretSetup({
+    "sessions/2026-08-19-120000.md": [
+      "# Session",
+      "  git commit --no-verify    (or opt down: AGENT_MEMORY_SECRET_GUARD=advisory)",
+      "Opt down with AGENT_MEMORY_SECRET_GUARD=advisory if needed.",
+      "The default is AGENT_MEMORY_SECRET_GUARD=enforcing.",
+      "inline form: `AGENT_MEMORY_SECRET_GUARD=advisory`",
+      "git-config spelling: `agent-memory.secretguard=advisory`",
+    ].join("\n") + "\n",
+  });
+  try {
+    assert.deepEqual(check_secret_material(cleanRoot), []);
+  } finally {
+    rmSync(cleanRoot, { recursive: true, force: true });
+  }
+  const flaggedRoot = secretSetup({
+    "sessions/2026-08-19-130000.md": `# Session\nAGENT_MEMORY_SECRET_GUARD=${opaque}\n`,
+  });
+  try {
+    const w = check_secret_material(flaggedRoot);
+    assert.equal(w.length, 1);
+    assert.ok(w[0].includes("key 'AGENT_MEMORY_SECRET_GUARD'"));
+    assert.ok(!w[0].includes(opaque));
+  } finally {
+    rmSync(flaggedRoot, { recursive: true, force: true });
+  }
+});
+
+// (v4.34.0) `--scan-files`: credential-class scan of arbitrary config files — the
+// pre-commit hook / CI-wrapper surface behind the field incident (a Postman JSON and an
+// OpenShift YAML with live credentials, committed outside memory/).
+import { scan_secret_files } from "./memory-lint.mjs";
+
+test("scan_secret_files is credential-class only", () => {
+  const secret = fixtureSecret("AGENT_MEMORY_TEST_SCANFILES");
+  const root = mkdtempSync(join(tmpdir(), "memlint-"));
+  try {
+    mkdirSync(join(root, "src"), { recursive: true });
+    const props = join(root, "src", "app.properties");
+    writeFileSync(props, `spring.datasource.password=${secret}\n`);
+    const pj = join(root, "package.json");
+    writeFileSync(pj, '{"author": "Dev One <dev.one@some-client-corp.com>"}\n');
+    const w = scan_secret_files([props, pj]);
+    assert.equal(w.length, 1); // the email is a memory-layer check, not a config one
+    assert.ok(w[0].includes("credential-assignment"));
+    assert.ok(!w[0].includes(secret)); // never echo the value
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("scan_secret_files: config placeholder forms are not flagged", () => {
+  // The four FP classes from the 661-file field probe (2026-08-14) must stay quiet:
+  // single-brace JAAS template, template-with-placeholder-default, test-affixed fixture,
+  // dotted route reference in an authorization value — plus a GH-Actions expression.
+  const root = mkdtempSync(join(tmpdir(), "memlint-"));
+  try {
+    const cfg = join(root, "conf.yaml");
+    writeFileSync(cfg, [
+      "#sasl.jaas.config=…PlainLoginModule required username={CHANGE_THIS} password={CHANGE_THIS};",
+      "authorization: '${DEMO_PEER_TOKEN:demo}'",
+      "bearer.auth.client.secret=test-secret",
+      '- "authorization: v1.basic.auth"',
+      "api_key: ${{secrets.SR_KEY}}",
+    ].join("\n") + "\n");
+    assert.deepEqual(scan_secret_files([cfg]), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("scan_secret_files: Postman split key/value form", () => {
+  // Postman's `"key": "client_secret", "value": "…"` convention — the literal incident
+  // artifact class; a `{{variable}}` reference stays a placeholder.
+  const secret = fixtureSecret("AGENT_MEMORY_TEST_POSTMAN");
+  const root = mkdtempSync(join(tmpdir(), "memlint-"));
+  try {
+    const col = join(root, "collection.json");
+    writeFileSync(col,
+      '{"key": "client_secret", "value": "' + secret + '"},\n' +
+      '{"key": "client_secret", "value": "{{client_secret}}"}\n');
+    const w = scan_secret_files([col]);
+    assert.equal(w.length, 1);
+    assert.ok(w[0].includes("key 'client_secret'"));
+    assert.ok(w[0].includes("(1 hit(s)"));
+    assert.ok(!w[0].includes(secret));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("shipped scripts: prose identifiers stay scanner-neutral", () => {
+  // Field regression (Snyk, enterprise deployment, 2026-08-25): hardcoded-secret
+  // detectors key on identifier-contains-trigger-word + string-literal assignment,
+  // and the prose guidance constant's old name rejected downstream builds. Prose
+  // constants in the shipped scripts must stay scanner-neutral. Trigger words are
+  // assembled at runtime so this test never commits the flagged shape itself.
+  const words = ["SEC" + "RET", "TOK" + "EN", "PASS" + "WORD", "PASS" + "WD",
+                 "CREDEN" + "TIAL", "API" + "KEY", "API_" + "KEY"];
+  const assignRx = /^[ \t]*(?:const |let |var )?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\(?\s*["'`]/gm;
+  const here = new URL(".", import.meta.url);
+  const offenders = [];
+  for (const name of readdirSync(here).sort()) {
+    if (!name.endsWith(".py") && !name.endsWith(".mjs")) continue;
+    for (const m of readFileSync(new URL(name, here), "utf-8").matchAll(assignRx)) {
+      const ident = m[1].toUpperCase();
+      if (words.some((w) => ident.includes(w))) offenders.push(`${name}: ${m[1]}`);
+    }
+  }
+  assert.deepEqual(offenders, []);
+});
+
+// (12) the thread-file contract (v4.39.0): one Open Thread per file, named after its
+// footer id. Filename = identity is what makes concurrent thread work merge-free.
+const VALID_THREAD = `- [ ] **Ship it.** The plan.
+  <!-- id: ship-it | created: 2026-09-01 | last_used: 2026-09-01 | uses: 1 | tier: working -->
+`;
+
+test("thread-file: valid file passes", () => {
+  assert.deepEqual(check_thread_files([["thread-ship-it.md", VALID_THREAD]]), []);
+});
+
+test("thread-file: misnamed file flagged", () => {
+  const out = check_thread_files([["thread-wrong-name.md", VALID_THREAD]]);
+  assert.equal(out.length, 1);
+  assert.ok(out[0].includes("[thread-file]"));
+  assert.ok(out[0].includes("should be named thread-ship-it.md"));
+});
+
+test("thread-file: missing footer flagged", () => {
+  const out = check_thread_files([["thread-x.md", "- [ ] no footer here\n"]]);
+  assert.equal(out.length, 1);
+  assert.ok(out[0].includes("no fact footer"));
+});
+
+test("thread-file: two footers flagged", () => {
+  const two =
+    VALID_THREAD +
+    "- [ ] second\n  <!-- id: other | created: 2026-09-01 | last_used: 2026-09-01 | uses: 1 | tier: working -->\n";
+  const out = check_thread_files([["thread-ship-it.md", two]]);
+  assert.equal(out.length, 1);
+  assert.ok(out[0].includes("holds 2 footers"));
+});
+
+test("thread-file: non-bullet start flagged", () => {
+  const out = check_thread_files([["thread-ship-it.md", "# A heading instead of the block\n" + VALID_THREAD]]);
+  assert.equal(out.length, 1);
+  assert.ok(out[0].includes("does not start with"));
+});
+
+// (13) an id exists exactly once across the live layer — the backstop for a same-id
+// creation collision on parallel branches (the silent-fork shape).
+test("duplicate-id: unique ids pass", () => {
+  const cont = "- fact\n  <!-- id: a-fact | tier: active -->\n";
+  const threads = [["thread-b-thread.md", "- [ ] t\n  <!-- id: b-thread | tier: working -->\n"]];
+  assert.deepEqual(check_duplicate_ids(cont, threads), []);
+});
+
+test("duplicate-id: continuity + thread file flagged", () => {
+  const cont = "- fact\n  <!-- id: same-id | tier: active -->\n";
+  const threads = [["thread-same-id.md", "- [ ] t\n  <!-- id: same-id | tier: working -->\n"]];
+  const out = check_duplicate_ids(cont, threads);
+  assert.equal(out.length, 1);
+  assert.ok(out[0].includes("[duplicate-id] same-id has 2 footers"));
+  assert.ok(out[0].includes("memory/open-threads/thread-same-id.md"));
+});
+
+test("duplicate-id: two thread files flagged", () => {
+  const threads = [
+    ["thread-same-id.md", "- [ ] t\n  <!-- id: same-id | tier: working -->\n"],
+    ["thread-other.md", "- [ ] t2\n  <!-- id: same-id | tier: working -->\n"],
+  ];
+  const out = check_duplicate_ids("# Continuity\n", threads);
+  assert.equal(out.length, 1);
+  assert.ok(out[0].includes("same-id"));
+});
+
+// (14) Project State fields are scalars — absorbed from PR #27 (Roland Heusser):
+// the backstop for a union-style hand merge that kept both sides of a bumped scalar.
+function stateRoot(cont_text) {
+  const root = mkdtempSync(join(tmpdir(), "memlint-state-"));
+  mkdirSync(join(root, "memory"), { recursive: true });
+  writeFileSync(join(root, "memory", "continuity.md"), cont_text);
+  return root;
+}
+
+test("duplicate-state-key: duplicate scalar flagged with both lines", () => {
+  const root = stateRoot(
+    "# C\n\n## Project State\n\n- **project:** x\n- **last_review:** 2026-08-01\n" +
+      "- **last_review:** 2026-08-20\n\n## Key Decisions\n"
+  );
+  try {
+    const out = check_duplicate_state_keys(root);
+    assert.equal(out.length, 1);
+    assert.ok(out[0].includes("[duplicate-state-key]"));
+    assert.ok(out[0].includes("'last_review' is set twice"));
+    assert.ok(out[0].includes("also line 6"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("duplicate-state-key: repeated key outside Project State ok", () => {
+  const root = stateRoot(
+    "# C\n\n## Project State\n\n- **project:** x\n\n## Key Decisions\n\n" +
+      "- **project:** mention one\n- **project:** mention two\n"
+  );
+  try {
+    assert.deepEqual(check_duplicate_state_keys(root), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("duplicate-state-key: unique scalars ok", () => {
+  const root = stateRoot("# C\n\n## Project State\n\n- **project:** x\n- **status:** y\n");
+  try {
+    assert.deepEqual(check_duplicate_state_keys(root), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// Thread files are live continuity-domain facts: load_repo merges their footers and
+// checkbox pinning; conflict markers and closed-thread bloat see them too.
+function threadLayer() {
+  const root = mkdtempSync(join(tmpdir(), "memlint-threads-"));
+  mkdirSync(join(root, "memory", "sessions"), { recursive: true });
+  mkdirSync(join(root, "memory", "open-threads"), { recursive: true });
+  writeFileSync(join(root, "memory", "continuity.md"), "# Continuity\n\n## Project State\n\n- **project:** t\n");
+  return root;
+}
+
+test("thread layer: load_repo merges thread facts and pins", () => {
+  const root = threadLayer();
+  try {
+    writeFileSync(
+      join(root, "memory", "open-threads", "thread-live-gap.md"),
+      "- [ ] **Gap.** open work\n  <!-- id: live-gap | created: 2026-09-01 | last_used: 2026-09-01 | uses: 1 | tier: working -->\n"
+    );
+    writeFileSync(
+      join(root, "memory", "open-threads", "thread-done-gap.md"),
+      "- [x] **Done.** closed work\n  <!-- id: done-gap | created: 2026-09-01 | last_used: 2026-09-01 | uses: 1 | tier: working -->\n"
+    );
+    const { cont, pinned, threads } = load_repo(root);
+    assert.ok(cont.has("live-gap"));
+    assert.ok(cont.has("done-gap"));
+    assert.ok(pinned.has("live-gap"));    // unchecked -> pinned, never decays
+    assert.ok(!pinned.has("done-gap"));   // checked -> decay-eligible for the sweep
+    assert.equal(threads.length, 2);
+    assert.deepEqual(check_thread_files(threads), []);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("thread layer: conflict marker in a thread file is an error", () => {
+  const root = threadLayer();
+  try {
+    writeFileSync(
+      join(root, "memory", "open-threads", "thread-t.md"),
+      "- [ ] t\n<<<<<<< HEAD\n  <!-- id: t | tier: working -->\n"
+    );
+    const out = check_conflict_markers(root);
+    assert.equal(out.length, 1);
+    assert.ok(out[0].includes("memory/open-threads/thread-t.md:2"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("thread layer: closed bloat counts thread files", () => {
+  // 4 closed-record lines in continuity + 4 in a thread file > cap 6 -> flagged once.
+  const cont_text = "- [x] closed A\n  line\n  line\n  <!-- id: a | tier: working -->\n";
+  const threads = [["thread-b.md", "- [x] closed B\n  line\n  line\n  <!-- id: b | tier: working -->\n"]];
+  const out = check_closed_thread_bloat(cont_text, 6, threads);
+  assert.equal(out.length, 1);
+  assert.ok(out[0].includes("8 line(s)"));
+  assert.deepEqual(check_closed_thread_bloat(cont_text, 8, threads), []);
+});
+
+// (15) [thread-stale] (v4.40.0): an unchecked thread unreferenced past thread_stale_window is
+// STALLED — a closure signal for a human gate (REVIEW.md step 8). Advisory only; the pin is
+// untouched and the tool never closes a thread. Field origin: mercury-composable — a pinned
+// thread's "still open" items had all shipped, unnoticed for 184 sessions.
+const STALL_STEMS = ["2026-06-01-000000", "2026-06-02-000000", "2026-06-03-000000", "2026-06-04-000000"];
+
+test("thread_stale_window: default and policy parse", () => {
+  const root = mkdtempSync(join(tmpdir(), "lint-stall-"));
+  try {
+    assert.equal(load_windows(root).thread_stale_window, 40);
+    mkdirSync(join(root, "memory"), { recursive: true });
+    writeFileSync(join(root, "memory", "decay-policy.md"), "- thread_stale_window: 7\n");
+    assert.equal(load_windows(root).thread_stale_window, 7);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("thread-stale: pinned thread past the window flagged", () => {
+  const cont = new Map([["gap", { tier: "working", created: "2026-01-01" }]]);
+  const refs = [new Set(["gap"]), new Set(), new Set(), new Set()]; // last referenced 3 sessions ago
+  const w = check_thread_stale(cont, new Set(["gap"]), refs, STALL_STEMS, 2);
+  assert.equal(w.length, 1);
+  assert.ok(w[0].includes("[thread-stale] gap sslu 3 > thread_stale_window 2"));
+  assert.ok(w[0].includes("closure gate"));
+  assert.ok(w[0].includes("REVIEW.md step 8"));
+  assert.ok(w[0].includes("re-affirms it under Memory References"));
+});
+
+test("thread-stale: within the window ok (strict >)", () => {
+  const cont = new Map([["gap", { tier: "working", created: "2026-01-01" }]]);
+  const refs = [new Set(["gap"]), new Set(), new Set(), new Set()];
+  assert.deepEqual(check_thread_stale(cont, new Set(["gap"]), refs, STALL_STEMS, 3), []);
+});
+
+test("thread-stale: unpinned facts ignored", () => {
+  // a checked thread / ordinary fact past the window is [overdue]'s business, not this check's
+  const cont = new Map([["done", { tier: "working", created: "2026-01-01" }]]);
+  const refs = [new Set(["done"]), new Set(), new Set(), new Set()];
+  assert.deepEqual(check_thread_stale(cont, new Set(), refs, STALL_STEMS, 2), []);
+});
+
+test("thread-stale: never referenced counts from created", () => {
+  // a thread no session ever named still stalls — measured from `created` (its seeded first
+  // use); without a created date it cannot be measured and is left alone
+  let cont = new Map([["legacy-gap", { tier: "working", created: "2026-01-01" }]]);
+  const refs = [new Set(), new Set(), new Set(), new Set()];
+  const w = check_thread_stale(cont, new Set(["legacy-gap"]), refs, STALL_STEMS, 2);
+  assert.equal(w.length, 1);
+  assert.ok(w[0].includes("sslu 4 (never referenced; counted from created) > thread_stale_window 2"));
+  cont = new Map([["undated-gap", { tier: "working" }]]);
+  assert.deepEqual(check_thread_stale(cont, new Set(["undated-gap"]), refs, STALL_STEMS, 2), []);
+});
+
+test("thread-stale: thread layer end to end", () => {
+  // through the real surfaces: a thread file + session logs + a tuned policy knob
+  const root = mkdtempSync(join(tmpdir(), "lint-stall-e2e-"));
+  try {
+    mkdirSync(join(root, "memory", "sessions"), { recursive: true });
+    mkdirSync(join(root, "memory", "open-threads"), { recursive: true });
+    writeFileSync(join(root, "memory", "continuity.md"), "# Continuity\n\n## Project State\n\n- **project:** t\n");
+    writeFileSync(join(root, "memory", "decay-policy.md"), "- thread_stale_window: 2\n");
+    writeFileSync(join(root, "memory", "open-threads", "thread-stalled-gap.md"),
+      "- [ ] **Gap.** filed and left behind\n  <!-- id: stalled-gap | created: 2026-06-01 | last_used: 2026-06-01 | uses: 1 | tier: working -->\n");
+    writeFileSync(join(root, "memory", "open-threads", "thread-live-gap.md"),
+      "- [ ] **Live.** worked on\n  <!-- id: live-gap | created: 2026-06-01 | last_used: 2026-06-04 | uses: 2 | tier: working -->\n");
+    const logs = {
+      "2026-06-01-000000.md": "# S\n\n## Memory References\n\n- stalled-gap (created)\n- live-gap (created)\n",
+      "2026-06-02-000000.md": "# S\n\n## Memory References\n\n(none)\n",
+      "2026-06-03-000000.md": "# S\n\n## Memory References\n\n(none)\n",
+      "2026-06-04-000000.md": "# S\n\n## Memory References\n\n- live-gap\n",
+    };
+    for (const [name, text] of Object.entries(logs)) writeFileSync(join(root, "memory", "sessions", name), text);
+    const { cont, pinned, sessions, refs } = load_repo(root);
+    const stems = sessions.map((s) => s.replace(/\.md$/, ""));
+    const w = check_thread_stale(cont, pinned, refs, stems, load_windows(root).thread_stale_window);
+    assert.equal(w.length, 1);
+    assert.ok(w[0].includes("[thread-stale] stalled-gap sslu 3 > thread_stale_window 2"));
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

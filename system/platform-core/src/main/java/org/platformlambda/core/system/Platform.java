@@ -25,6 +25,7 @@ import io.vertx.core.Vertx;
 import io.vertx.core.eventbus.EventBus;
 import org.platformlambda.core.annotations.CloudConnector;
 import org.platformlambda.core.annotations.CloudService;
+import org.platformlambda.core.annotations.KernelThreadRunner;
 import org.platformlambda.core.models.*;
 import org.platformlambda.core.util.*;
 import org.slf4j.Logger;
@@ -57,9 +58,16 @@ public class Platform {
     private static final String NOT_FOUND = " not found";
     private static final String INVALID_ROUTE = "Invalid route ";
     private static final String RELOADING = "Reloading";
+    private static final int POOL_SIGNATURE = crypto.nextInt(10_000, 1_000_000) * -1;
     private static final AtomicBoolean LOADED = new AtomicBoolean(false);
     private static final ReentrantLock SAFETY1 = new ReentrantLock();
     private static final ReentrantLock SAFETY2 = new ReentrantLock();
+    // route pools (prefix -> lane count): lifecycle metadata only, never consulted for routing
+    private static final ConcurrentMap<String, Integer> poolRegistry = new ConcurrentHashMap<>();
+    private static final ReentrantLock POOL_LOCK = new ReentrantLock();
+    // platform-owned shutdown lifecycle: one JVM hook runs every registered callback (see onShutdown)
+    private static final List<Runnable> SHUTDOWN_HOOKS = new CopyOnWriteArrayList<>();
+    private static final AtomicBoolean SHUTDOWN_HOOK_INSTALLED = new AtomicBoolean(false);
     private static String originId;
     private static String appId;
     private static Vertx vertx;
@@ -562,7 +570,11 @@ public class Platform {
             log.warn("{} LambdaFunction {}", RELOADING, path);
             release(path);
         }
-        ServiceDef service = new ServiceDef(path, lambda).setConcurrency(instances).setPrivate(isPrivate);
+        var concurrency = instances > 0? instances : 1;
+        ServiceDef service = new ServiceDef(path, lambda).setConcurrency(concurrency).setPrivate(isPrivate);
+        if (isPrivate && instances == POOL_SIGNATURE) {
+            service.setPool(true);
+        }
         ServiceQueue manager = new ServiceQueue(service);
         service.setManager(manager);
         // save into local registry
@@ -573,28 +585,17 @@ public class Platform {
     }
 
     /**
-     * Register a public stream function
+     * Register a private stream function - this is used exclusively by the ObjectStreamIO module
+     * to publish a stream of objects (String, bytes or Map). Each object is stored in a queue
+     * that a consumer will reactively pull the next available object.<p>
+     *
+     * See StreamPublisher and StreamConsumer in ObjectStreamIO for the reactive mechanism.
      *
      * @param route name of the service
      * @param lambda function
      * @throws IllegalArgumentException if the route name is invalid
      */
     public void registerStream(String route, StreamFunction lambda) {
-        registerStream(route, lambda, false);
-    }
-
-    /**
-     * Register a private stream function
-     *
-     * @param route name of the service
-     * @param lambda function
-     * @throws IllegalArgumentException if the route name is invalid
-     */
-    public void registerPrivateStream(String route, StreamFunction lambda) {
-        registerStream(route, lambda, true);
-    }
-
-    private void registerStream(String route, StreamFunction lambda, boolean isPrivate) {
         if (lambda == null) {
             throw new IllegalArgumentException("Missing StreamFunction instance");
         }
@@ -603,12 +604,132 @@ public class Platform {
             log.warn("{} StreamFunction {}", RELOADING, path);
             release(path);
         }
-        ServiceDef service = new ServiceDef(path, lambda).setConcurrency(1).setPrivate(isPrivate);
+        ServiceDef service = new ServiceDef(path, lambda).setConcurrency(1).setPrivate(true);
         ServiceQueue manager = new ServiceQueue(service);
         service.setManager(manager);
         registry.put(path, service);
-        if (!isPrivate) {
-            advertiseRoute(route);
+    }
+
+    /**
+     * Register a route pool - a set of private singleton routes "{prefix}.{n}" for n = 0 to count-1.
+     * Each member runs with instances=1 so it is a strict FIFO lane; a caller may check out a lane
+     * for exclusive use to preserve event order while other lanes serve concurrent traffic.
+     * One lambda instance is shared across all members - the function must be stateless,
+     * the same contract as a multi-instance function.
+     * <p>
+     * Registering an existing pool RELOADS it: the previous member set is released first,
+     * with a warning in the application log. This API covers registration only -
+     * lane checkout and return are the caller's concern. Route pools are always private.
+     *
+     * @param prefix route name base in canonical form, e.g. "async.http.response.stream"
+     * @param lambda function shared by all members of the pool
+     * @param count number of lanes, at least 2
+     * @return the generated member routes in order
+     * @throws IllegalArgumentException for missing lambda, count less than 2 or an invalid prefix
+     */
+    public List<String> registerRoutePool(String prefix, TypedLambdaFunction<?, ?> lambda, int count) {
+        if (lambda == null) {
+            throw new IllegalArgumentException("Missing LambdaFunction instance");
+        }
+        if (count < 2) {
+            throw new IllegalArgumentException("Route pool count must be at least 2");
+        }
+        // the prefix must be canonical so the generated names are exactly "{prefix}.{n}" -
+        // silent name filtering would break the returned member-list contract
+        String probe = prefix + ".0";
+        if (!probe.equals(getValidatedRoute(probe))) {
+            throw new IllegalArgumentException(INVALID_ROUTE + prefix + " - route pool prefix must be canonical");
+        }
+        POOL_LOCK.lock();
+        try {
+            Integer previous = poolRegistry.remove(prefix);
+            if (previous != null) {
+                log.warn("{} route pool {} ({} -> {} lanes)", RELOADING, prefix, previous, count);
+                releasePoolMembers(prefix, previous);
+            }
+            List<String> members = new ArrayList<>(count);
+            for (int n = 0; n < count; n++) {
+                String member = prefix + "." + n;
+                register(member, lambda, true, POOL_SIGNATURE);
+                members.add(member);
+            }
+            poolRegistry.put(prefix, count);
+            var type = lambda.getClass().getAnnotation(KernelThreadRunner.class) != null? "kernel" : "virtual";
+            log.info("Route pool {} with {} instances started as {} thread", prefix, count, type);
+            return members;
+        } finally {
+            POOL_LOCK.unlock();
+        }
+    }
+
+    /**
+     * Release a route pool - removes all its members and the pool itself
+     *
+     * @param prefix route name base of the pool
+     * @return true if the pool existed and was released
+     */
+    public boolean releaseRoutePool(String prefix) {
+        POOL_LOCK.lock();
+        try {
+            // remove the pool entry first so the member release calls below are not
+            // reported as individual updates to an active pool
+            Integer count = poolRegistry.remove(prefix);
+            if (count == null) {
+                return false;
+            }
+            releasePoolMembers(prefix, count);
+            log.info("Route pool {} stopped", prefix);
+            return true;
+        } finally {
+            POOL_LOCK.unlock();
+        }
+    }
+
+    private void releasePoolMembers(String prefix, int count) {
+        for (int n = 0; n < count; n++) {
+            release(prefix + "." + n);
+        }
+    }
+
+    /**
+     * Register a callback to run when the JVM shuts down - the platform's lightweight shutdown lifecycle.
+     * The platform owns a single JVM shutdown hook (installed on the first registration); every registered
+     * callback runs on shutdown in reverse registration order (last registered runs first, so a resource
+     * opened later is released first), and each is isolated so one failing callback cannot block the rest.
+     * <p>
+     * Prefer this to a hand-rolled {@code Runtime.getRuntime().addShutdownHook(new Thread(...))}: one hook,
+     * ordered and error-isolated, instead of many uncoordinated threads. A module that opens a resource
+     * lazily should register from where it opens the resource, so the cleanup is registered only when there
+     * is something to release.
+     *
+     * @param callback the cleanup to run on shutdown (must not be null)
+     */
+    public void onShutdown(Runnable callback) {
+        if (callback == null) {
+            throw new IllegalArgumentException("Shutdown callback cannot be null");
+        }
+        SHUTDOWN_HOOKS.add(callback);
+        if (SHUTDOWN_HOOK_INSTALLED.compareAndSet(false, true)) {
+            Runtime.getRuntime().addShutdownHook(
+                    new Thread(() -> runShutdownHooks(SHUTDOWN_HOOKS), "platform-shutdown"));
+        }
+    }
+
+    /**
+     * Run each shutdown callback in reverse registration order, isolating failures so one cannot block the
+     * rest. Package-private and parameterized so it can be unit-tested without triggering a real JVM shutdown.
+     */
+    static void runShutdownHooks(List<Runnable> callbacks) {
+        // reverse view (Java 21 SequencedCollection.reversed()): last registered runs first, with no in-place
+        // reverse or defensive copy - the source is a CopyOnWriteArrayList (snapshot-safe iteration).
+        for (Runnable callback : callbacks.reversed()) {
+            try {
+                callback.run();
+            } catch (RuntimeException e) {
+                // Runnable.run() throws no checked exceptions, so RuntimeException is the precise catch
+                // (S2221): isolate a hook's runtime failure and log it, but let an Error propagate.
+                log.warn("Shutdown hook failed - {}", e.getMessage());
+            }
         }
     }
 

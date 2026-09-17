@@ -17,6 +17,10 @@ readers to it (docs/README references were removed 2026-07-20).
 **Build:** Maven 3.9.7+ — `pom.xml` source of truth for the version
 **Upstream:** github.com/Accenture/mercury-composable · docs: accenture.github.io/mercury-composable
 
+> **"The field"** (in memory and session logs) = client production installations that
+> consume Mercury releases through their own governed pipelines (Snyk/Sonar security and
+> quality gates). Client specifics are deliberately kept out of this repository.
+
 > High-level only. The precise dependency list and current versions live in
 > `memory/continuity.md` → `## Stack & Tools` (the live source of truth).
 
@@ -29,20 +33,31 @@ system/
   platform-core            ← core engine: event bus, function registry,
                              PostOffice RPC, virtual-thread integration (no Spring)
   event-script-engine      ← compiles & executes YAML event flows
-  rest-spring-3 / -4       ← Spring Boot integration (REST adapter, autoconfig)
+  rest-spring-4            ← Spring Boot integration (REST adapter, autoconfig; Boot 3 lane retired 2026-08-27)
   mini-scheduler           ← scheduled task support
   minigraph-playground-engine
-extensions/reactive-postgres   ← optional add-ons (R2DBC, graph engine, playground)
+  minimalist-kafka         ← opt-in Kafka library: flow adapter (inbound) + notification (outbound)
+  twin-kafka               ← a SECOND Kafka cluster on top of minimalist-kafka (dual-cluster bridge)
+  ai-contract-provider     ← serves the version-matched AI documentation contract
+extensions/                ← optional add-ons: reactive-postgres (R2DBC), opentelemetry-forwarder,
+                             sync-over-async, minigraph-state-redis (graph suspend/resume store)
 connectors/                ← Kafka pub/sub adapters + presence/service monitoring
   core/{cloud-connector, service-monitor}
   adapters/kafka/{kafka-connector, kafka-presence}
 helpers/                   ← standalone dev servers, no Docker (kafka-standalone, redis-standalone)
 examples/                  ← reference apps; composable-example is the primary demo
-  (lambda, rest-spring-3/-4, composable, kotlin, scheduler, minigraph, kafka-demo)
+  (lambda, rest-spring-4, composable, kotlin, scheduler, minigraph, kafka-demo)
+templates/                 ← copy-out starter projects for the three layers, Maven or Gradle
+  (starter-function, starter-flow, starter-graph — reactor-built, standalone poms)
 benchmark/benchmark-reporter ← self-contained perf harness (benchmark-client retired 4.6.2)
 docs/ (guides/, arch-decisions/)  ← docs (mkdocs `docs_dir: docs`);
                                   arch-decisions/ADR.md = the ADR ledger (holds durable design rationale)
+draft-design-specs/        ← committed working design specs (public since 2026-08)
 ```
+
+> `system/rest-spring-3/` and `examples/rest-spring-3-example/` hold retired placeholder
+> poms only (Snyk project continuity after the Boot 3 retirement — ADR-0017, PR #305);
+> they are intentionally absent from the reactor.
 
 ## Core Abstractions
 
@@ -95,9 +110,13 @@ mvn test -Dtest=FlowTest#endToEndFlowTest -f examples/composable-example/pom.xml
 mvn clean install -DskipTests                       # skip tests
 # Run the example app (use the built artifact's actual version):
 cd examples/composable-example && java -jar target/composable-example-<version>.jar
+# Run the MiniGraph playground (port 8085; graphs deploy at POST /api/graph/{graph-id}):
+cd examples/minigraph-playground && java -jar target/minigraph-playground-<version>.jar
 ```
 
-**Requirements:** Java 21+, Maven 3.9.7+ (`.java-version` pins the JDK).
+**Requirements:** Java 21+ (the build targets 21 *deliberately, for wider compatibility* —
+Eric, 2026-09-02; **recommended JDK/JRE: Java 25, current LTS**, which fully supports the
+Java 21 virtual-thread technology), Maven 3.9.7+ (`.java-version` pins the local JDK).
 
 ## Core Rules
 
@@ -109,6 +128,34 @@ cd examples/composable-example && java -jar target/composable-example-<version>.
    not ad-hoc controllers.
 4. Respect the serialization gotchas above when choosing types.
 5. Record significant decisions in the session log and `continuity.md`.
+
+## Session Working Conventions
+
+*(Adopted 2026-08-21 from the fresh-agent onboarding assessment — ratified by Eric.)*
+
+- **Terse close records.** When marking a continuity Open Thread `[x]`, keep the record to
+  3–6 lines: outcome, PR/commit refs, one durable lesson, and the `origin:` log pointer.
+  The full ship narrative belongs in the origin session log — never duplicate it into
+  `continuity.md` (that duplication is what bloated continuity to 972 lines / 64%
+  closed-thread narrative).
+- **Ready-to-work checkpoint.** When starting substantive implementation work (not trivial
+  Q&A), emit a compact readiness summary before changing code so the human can confirm the
+  task was understood:
+
+  ```text
+  Task: <module> — <intended change>
+  Governing invariant/ADR: <id or none>
+  Validation: <smallest targeted test command>
+  Human decision needed: none | <description>
+  ```
+
+- **Guide-first lookup rule.** For "how do I configure X" or "how does Y work" questions,
+  start with the AI contract provider guide (`minimalist-kafka.md`, `event-script/ai-agent-guide.md`,
+  etc.) reachable from `llms.txt` or the `mercury-platform` skill. Fall back to source code only when
+  the guide is silent on the specific behavior or you need to verify a subtle invariant (exact constant
+  name, thread-safety contract, test-proven edge case). Guide-first saves 3–5× the tokens vs. discovery
+  + source reads. When source *was* needed to fill a genuine gap, note it in the session log under
+  `## Doc Gaps` (format: question, guide page, missing detail) so it can be closed in a follow-up PR.
 
 ## Testing
 

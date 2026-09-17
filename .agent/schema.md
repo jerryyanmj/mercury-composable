@@ -5,6 +5,16 @@ or when an agent needs to understand expected structure.
 
 ---
 
+## memory/PROTOCOL.md
+
+Canonical session protocol. Root `AGENTS.md` is only a one-line universal discovery shim
+to this file. The protocol owns activation order, VBDI and skill routing, during-session
+memory discipline, tracked-diff logging tiers, continuity updates, review cadence, safety,
+and attribution. An enabled repository carries only this target-scoped contract;
+operator routing never belongs in its copy.
+
+---
+
 ## memory/instructions.md
 
 Stable project context and agent rules. Edit rarely.
@@ -40,11 +50,10 @@ Live project state. Update every session.
 
 ## Project State
 - project:        string
-- status:         string
+- status:         string — a short current-state line: never a version history, never a commitment (a scalar is overwritten wholesale; a commitment needs its own thread — DECAY.md §6)
 - last_enabled:   YYYY-MM-DD
-- last_session:   YYYY-MM-DD | agent: string          (or "none yet")
 - last_review:    YYYY-MM-DD | through <session-file>  (or "none yet")
-- last_invariant_check: YYYY-MM-DD | through <session-file>  (or "none yet") — see REVIEW.md step 6
+- last_invariant_check: YYYY-MM-DD | through <session-file>  (or "none yet") — see REVIEW.md step 7
 - last_harvest:   YYYY-MM-DD | through <session-file>  (optional; omit until first run) — when the `harvest-knowledge` skill last folded docs into memory; it reads this to scope the next harvest and stamps it on completion
 - repo:           ~-relative path (e.g. ~/projects/foo) — NEVER absolute /Users/<name>/…; memory is committed & shared
 
@@ -52,10 +61,16 @@ Live project state. Update every session.
 ## Stack & Tools             canonical live home for language/deps/tool versions (key: value)
 ## Key Decisions             bullet list, present tense
 ## Conventions               bullet list
-## Open Threads              - [ ] incomplete  /  - [x] complete (leave [x] for the review to sweep)
+## Open Threads              pointer note only — threads live one-per-file in memory/open-threads/ (v4.39.0)
 ## User Preferences          bullet list — record ONLY what the user explicitly states; never infer
 ## Team / Members            name: preferred agent
 ```
+
+There is deliberately **no `last_session` field** (dropped in v4.39.0): it is fully
+derivable — the newest `memory/sessions/` filename is the last session, and that log's
+`**Agent:**` header names the agent — and as a scalar that changed every session it was
+the most frequent merge conflict in the file. A pre-4.39.0 repo may still carry the
+line; treat it as legacy-informational (latest wins on conflict; safe to delete).
 
 `## Stack & Tools` is the single canonical home for the current stack — language
 version, dependencies, tool versions. `instructions.md` gives only an enduring
@@ -72,23 +87,26 @@ lives in the project's own `CHANGELOG`/release notes and the **session logs** (e
 ### Concurrency & merge-friendliness (continuity.md is a shared file)
 
 `continuity.md` is committed and edited by every teammate, on any vendor — so author it to
-**merge cleanly**. Session logs avoid conflicts by construction (timestamped filenames);
-`continuity.md` cannot, so follow these conventions:
+**merge cleanly**. Session logs and Open Thread files avoid conflicts by construction
+(one file per event / per thread); the rest of `continuity.md` cannot, so follow these
+conventions:
 
 - **One fact per line.** No monster lines. A short line that two people change is a trivial
   conflict; a 20 KB line is an unresolvable one.
-- **Append-only sections are independent facts.** `## Open Threads`, `## Key Decisions`,
-  `## Conventions` accrete bullets that don't depend on each other.
+- **Append-only sections are independent facts.** `## Key Decisions` and `## Conventions`
+  accrete bullets that don't depend on each other. (Open Threads no longer accrete here —
+  each is its own file under `memory/open-threads/`, so concurrent thread work can't
+  conflict at all.)
 - **Conflict resolution = keep both, by default.** When two branches both added to an
   append-only section, the merge is a **union** — keep every side's bullets (they're
   independent facts); never drop one to "resolve" faster.
-- **Scalar bumps take the later value.** `last_session` / `last_review` /
-  `last_invariant_check` / the `status` version token: on conflict, keep the **later date /
-  higher version**. (`.agent/version.md` is the canonical version; `status`'s token is just a
-  human cue.) `last_session` is also derivable from the newest `sessions/` filename, so it's
-  informational — never block on it.
+- **Scalar bumps take the later value.** `last_review` / `last_invariant_check` / the
+  `status` version token: on conflict, keep the **later date / higher version**.
+  (`.agent/version.md` is the canonical version; `status`'s token is just a human cue.)
 - **Same-thread edits need a human.** Only a genuine semantic clash — both sides editing the
-  *same* Open Thread, or a `[ ]`→`[x]` race — warrants judgment; everything else is mechanical.
+  *same* Open Thread file, or a `[ ]`→`[x]` race — warrants judgment; everything else is
+  mechanical. Overlapping same-thread edits surface as a per-file conflict; separated edits
+  merge cleanly keeping both sides — run the contradiction check on the merged thread.
 - A left-behind conflict marker (`<<<<<<<`, `=======`, `>>>>>>>`) corrupts memory; `memory-lint`
   flags it as an ERROR.
 
@@ -118,13 +136,59 @@ ordinary fact, `core` for an Architectural Invariant — and seeds `last_used: <
 recomputed by the review from session-log `## Memory References` (see `DECAY.md` §1).
 
 `## Architectural Invariants` facts and unchecked Open Threads (`- [ ]`) never decay.
-Completed threads (`- [x]`) stay in place until the review sweeps them (see below /
-`REVIEW.md`) — don't archive them by hand.
+Never decaying is not never checked: an unchecked thread not referenced for more than
+`thread_stale_window` sessions is **stalled** and the review lists it in a human closure gate
+(`REVIEW.md` step 8; `DECAY.md` §6) — closed or re-affirmed by a human, never by the tool. A
+commitment that can complete independently gets its **own** thread: a sub-list inside a thread
+or a Project-State scalar has no lifecycle of its own (v4.40.0).
+Completed threads (`- [x]`) stay in their thread file until the review sweeps them (see
+`memory/open-threads/` below / `REVIEW.md`) — don't archive them by hand. A completed
+thread's record is a **3–6-line close stub** — outcome, PR/commit/release refs, one durable
+lesson, `origin:` pointer — never a full ship narrative: that belongs in the origin session
+log, and reviews condense oversized records (`[closed-thread-bloat]`, v4.38.0).
 
 When a fact becomes **false** (a decision reversed, a dependency dropped), don't just
 delete it: set its footer to `tier: superseded` + `superseded-by: <new-id>` (omit the
 link for pure invalidation), record `Superseded: <old> → <new>` in the session log,
 and let the review archive it flagged "superseded." See `DECAY.md` §9.
+
+---
+
+## memory/open-threads/thread-<id>.md
+
+**One Open Thread per file** (v4.39.0). `<id>` is the thread's kebab fact id — the
+filename is the identity and **never changes** for the thread's lifetime; updates edit the
+file in place. This is what makes concurrent thread work merge-free: parallel branches
+touching *different* threads touch different files (no conflict possible). Within the
+*same* thread file, ordinary git merge semantics apply (v4.39.1 precision): edits to
+adjacent/overlapping lines conflict — a genuine Tier 2 semantic clash correctly reaching
+a human (`MERGE.md`) — while edits separated by unchanged lines merge cleanly with
+**both sides kept** (nothing is lost; whether the two statements are *consistent* is the
+write-time contradiction check's job, `DECAY.md` §10 — exactly as it was when threads
+lived in continuity).
+
+File content is **exactly the thread's bullet block**, nothing else — the same shape that
+previously sat under continuity's `## Open Threads`:
+
+```
+- [ ] **<title>.** <body — what the thread is, why it's open, next action>
+  → serves: <vision-id or blueprint-id>   (VBDI trace, where applicable)
+  <!-- id: <same-as-filename> | created: YYYY-MM-DD | last_used: YYYY-MM-DD | uses: N | tier: working -->
+```
+
+- **No index file.** The directory is the index, like `sessions/`: list
+  `memory/open-threads/` to discover threads; the checkbox in each file is its state
+  (`grep -l '^- \[ \]' memory/open-threads/` lists the open ones). An index would
+  recreate the add/add merge conflict one line at a time.
+- **Lifecycle is unchanged, only the location moved.** An unchecked thread is pinned
+  (never decays — but stalls after `thread_stale_window` unreferenced sessions, into the
+  review's human closure gate, `REVIEW.md` step 8); a completed one flips to `- [x]`, condenses to a 3–6-line stub, and
+  waits out `archive_window`; the review sweep moves the block to the quarter archive +
+  `INDEX.md` and deletes the file (`archive-fact` handles thread files). Contradiction /
+  Drift / new threads are created as new files.
+- `memory-lint` pins the contract: `[thread-file]` (filename must match the footer id;
+  exactly one thread block per file) and `[duplicate-id]` (an id must exist once across
+  continuity + thread files — the backstop for creation collisions on parallel branches).
 
 ---
 
@@ -142,6 +206,12 @@ context is date-only and produces a non-conforming `YYYY-MM-DD.md` name if used
 directly. Colons omitted for cross-platform filename compatibility. Filenames sort lexicographically = chronologically, so the
 most recent log is always the last file — unambiguous even with multiple
 contributors on the same day.
+
+**Never write secrets or PII into a session log** — logs are committed and shared. Redact
+pasted output (credentials, tokens, emails, home paths — write `~`) to `(REDACTED)` before
+persisting; if a secret was committed anyway, rotate it — git history keeps the original.
+Redaction is the one sanctioned edit to an otherwise-immutable log; `memory-lint` flags
+detectable shapes (`[secret-material]`, waivable per-line with `lint:allow-secret-material`).
 
 ```
 # Session (YYYY-MM-DDThh:mm:ss.mmmZ)
@@ -196,8 +266,8 @@ story — lexical + indexed, by design (see `DECAY.md` §11).
 ## memory/decay-policy.md
 
 Tunable integer windows + triggers for the evolving-memory layer (`working_window`,
-`active_window`, `archive_window`, `review_every`, `continuity_max_facts`, `continuity_max_lines`,
-`verify_invariants_every`, and auto-core). All windows are in **sessions**. The rules these feed live in `DECAY.md`
+`active_window`, `archive_window`, `thread_stale_window`, `review_every`, `continuity_max_facts`,
+`continuity_max_lines`, `closed_narrative_max_lines`, `verify_invariants_every`, and auto-core). All windows are in **sessions**. The rules these feed live in `DECAY.md`
 and `REVIEW.md` at the repo root.
 
 ---
@@ -221,8 +291,8 @@ invariant-verification cadence (a vision can go stale). Created at enable/upgrad
 ⚠️ DRAFT stub — Current-state context inferred, target left for the human — **never
 fabricated**. See `DECAY.md` §12 and `docs/DESIGN-vbdi-lifecycle.md`.
 
-The **Blueprint** (the Vision↔Current-State gap) is *not* a separate file — it is a set
-of typed Open Threads in `continuity.md`:
+The **Blueprint** (the Vision↔Current-State gap) is *not* a separate file — it is the set
+of typed Open Threads (one file each under `memory/open-threads/`):
 `- [ ] (blueprint) <gap> → serves: <vision-id>`. Designs (Key Decisions) and
 Implementations (commits/sessions) trace up the altitude chain by `id`; a missing or
 broken link is drift, and it's grep-detectable.
@@ -276,9 +346,16 @@ deleted; reactivation moves a fact back into `continuity.md` (see `REVIEW.md`).
 
 ```
 archive/
-  YYYY-QN.md   facts (with their metadata footers) moved out of continuity.md, grouped by quarter
+  YYYY-QN.md   facts (with their metadata footers) moved out of the live layer, grouped by quarter
   INDEX.md     one line per archived fact: `id — one-line summary — <quarter file>`  (greppable)
 ```
+
+Archive files are append-mostly, so `.gitattributes` marks them `merge=union`
+(v4.39.0): concurrent review sweeps appending at end-of-file merge without conflict.
+The one case union gets wrong — a reactivation's removed lines resurrected by the other
+branch — is deterministically caught by `memory-lint`'s `[both]` / `[over-archived]`
+ERRORs. Live files (`continuity.md`, thread files) never get union: there a conflict is
+signal.
 
 ---
 
@@ -295,7 +372,7 @@ agent-skills/
 ```
 
 `agent-skills/` is **committed** — it travels with the repo and reaches every contributor, on
-any vendor. The `AGENTS.md` "Skills" section is the **universal runtime**: when a task
+any vendor. The `memory/PROTOCOL.md` "Use skills correctly" section is the **universal runtime**: when a task
 matches a skill's `description`, the agent reads and follows that `SKILL.md` — no
 per-vendor engine needed (the agent is the runtime).
 
@@ -356,13 +433,13 @@ ladder — see the tool's `UPGRADE.md` (reached only via `ENABLE.md` Mode B).
 
 ## Bootstrap Files
 
-**Minimal, parallel pointers to `AGENTS.md`** — one per vendor. Each says only: a project
-one-liner, "read `AGENTS.md` first" (the hub — it carries the protocol *and* the read
-order), and "identify as `<vendor>`". They differ only by vendor name, comment syntax
-(`.md` vs the plain `.cursorrules` / `.windsurfrules`), and the `AGENTS.md` path
-(`.github/copilot-instructions.md` uses `../AGENTS.md`).
+**Minimal activation pointers to `memory/PROTOCOL.md`** — one per vendor. Root
+`AGENTS.md` is byte-identical across tool and target: exactly one Markdown line plus a
+terminal newline. Vendor files add a project one-liner and identity; import-capable
+Claude/Gemini bootstraps structurally import the shim, protocol, and core memory in that
+order. Cursor, Windsurf, and Copilot name the protocol directly.
 
 `CLAUDE.md` and `GEMINI.md` carry the inline `{{PROJECT_NAME}}` + `{{PROJECT_ONELINE}}`
 header (eager-load runtimes get immediate context); the dotfile rules stay plain. **The
-read order lives only in `AGENTS.md`** — a pointer never duplicates it, so a change to
-what agents read (e.g. adding `memory/vision.md`) touches one file, not ten.
+read order lives only in `memory/PROTOCOL.md`** — bootstraps activate but do not duplicate
+the lifecycle, so protocol changes have one canonical target home.

@@ -49,7 +49,7 @@ File names of individual flow configuration YAML files to load.
 |---|---|
 | string | No |
 
-Base directory for resolving file names. Default: resources folder root. Example: `classpath:/flows/`.
+Base directory for resolving file names. Default: `classpath:/flows/`.
 
 Multiple flow list files can be specified as a comma-separated list:
 
@@ -246,6 +246,11 @@ Deadline override for a subflow task (`process: 'flow://...'`) — rejected on r
   exception: 'v1.payment.retry'  # catches the 408; may route back for a retry
   # ... name / input / output / description / next as usual
 ```
+
+The timeout surfaces on the parent's handler as status `408` with the message
+`Flow timeout for {ms} ms`. Note that a TTL abort **bypasses the child's own
+`flow.exception`** — the child cannot swallow its timeout — and the built-in
+`resilience.handler` treats a missing `model.attempt` (first-ever failure) as `0`.
 
 ### `pipeline`
 
@@ -533,6 +538,26 @@ input:
 
 > `'* -> *'` passes the entire model as input. `'* -> *'` in output copies function result
 > directly to the output body.
+
+### Array elements and append mode
+
+The dot-bracket form addresses list elements on either side of `->`:
+
+```yaml
+- 'text(world) -> model.hello[0]'   # set the first element (creates the list)
+- 'text(next) -> model.hello[]'     # APPEND: [] on the destination adds after the last element
+- 'input.body.items[1] -> model.second'  # read the second element of a source list
+```
+
+Append mode (`[]` on the destination) is how a list is built up rule by rule — e.g. three
+`text(...) -> model.list[]` rules produce a three-element list. To create a list — or any
+JSON dataset — in a single statement, parse it with the
+[`f:json` plugin](#plugin-functions-f-prefix):
+
+```yaml
+- 'f:json(text([])) -> model.my_empty_list'                              # empty list
+- 'f:json(text({"hello": [1, 2, {"nested": "demo"}]})) -> model.data'   # nested dataset
+```
 
 ### Three-part mapping
 
@@ -922,7 +947,12 @@ their arguments and place it at the destination.
 
 Syntax: `f:<name>(arg1, arg2, ...) -> destination`
 
-Arguments can be model variables, constant types, or nested plugin calls.
+Arguments can be model variables or constant types. Nested plugin calls are **not**
+supported — the engine deliberately ignores an `f:` expression inside another plugin's
+argument list (loop prevention); compute the inner value into a model variable first.
+The argument tokenizer splits on **top-level commas only**, so commas inside a nested
+constant are safe — e.g. `f:json(text({"a": 1, "b": 2}))` passes the whole JSON as one
+argument.
 
 ### Arithmetic
 
@@ -932,7 +962,7 @@ Arguments can be model variables, constant types, or nested plugin calls.
 | `f:subtract(a, b, ...)` | `a` minus remaining args | `f:subtract(model.total, model.fee) -> net` |
 | `f:multiply(a, b)` | Product | `f:multiply(model.price, model.qty) -> total` |
 | `f:div(a, b)` | Division (`a / b`) | `f:div(model.total, model.n) -> avg` |
-| `f:modulus(a, b)` | Remainder (`a % b`) | `f:modulus(model.n, int(2)) -> rem` |
+| `f:mod(a, b)` | Remainder (`a % b`) | `f:mod(model.n, int(2)) -> rem` |
 | `f:increment(a)` | `a + 1` | `f:increment(model.count) -> next_count` |
 | `f:decrement(a)` | `a - 1` | `f:decrement(model.count) -> prev_count` |
 
@@ -940,7 +970,8 @@ Arguments can be model variables, constant types, or nested plugin calls.
 
 | Function | Description | Example |
 |----------|-------------|---------|
-| `f:eq(a, b)` | `a == b` → boolean | `f:eq(model.status, text(ok)) -> is_ok` |
+| `f:eq(a, b, ...)` | `a == b` → boolean; optional `text(ignoreCase)` and/or `text(ignoreType)` modifiers compare case-insensitively / by text form (`"123" == 123`, `"true" == true`) | `f:eq(model.status, text(ok), text(ignoreCase)) -> is_ok` |
+| `f:ne(a, b, ...)` | `a != b` → boolean; same optional modifiers as `f:eq` | `f:ne(model.status, text(deleted)) -> is_live` |
 | `f:gt(a, b)` | `a > b` → boolean | `f:gt(model.n, int(10)) -> over_limit` |
 | `f:lt(a, b)` | `a < b` → boolean | `f:lt(model.n, int(0)) -> negative` |
 | `f:and(a, b, ...)` | Logical AND | `f:and(model.ready, model.valid) -> ok` |
@@ -962,6 +993,7 @@ Arguments can be model variables, constant types, or nested plugin calls.
 | `f:boolean(a)` | Convert to boolean | `f:boolean(model.str) -> flag` |
 | `f:binary(a)` | Convert to byte[] | `f:binary(model.text) -> bytes` |
 | `f:b64(a)` | Base64 encode/decode | `f:b64(model.bytes) -> encoded` |
+| `f:json(a)` | Parse JSON text — object `{...}` → map, array `[...]` → list | `f:json(text([])) -> empty_list` |
 
 ### String operations
 
@@ -988,16 +1020,55 @@ Arguments can be model variables, constant types, or nested plugin calls.
 | `f:updateListOfMap(list, extra)` | Merge additional fields into each map in the list | `f:updateListOfMap(model.rows, model.extra) -> augmented` |
 | `f:removeKey(map, key)` | Remove a key from a map or each map in a list | `f:removeKey(model.obj, text(secret)) -> clean` |
 
+### Key normalization
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `f:camelCase(mapOrList)` | Normalize every key of a map (recursively, incl. maps inside lists) to camelCase | `f:camelCase(input.body) -> normalized` |
+| `f:snakeCase(mapOrList)` | Normalize every key of a map (recursively, incl. maps inside lists) to snake_case | `f:snakeCase(input.body.list) -> normalized` |
+
+Legacy systems — often XML-to-JSON transformations — deliver key formats that vary per
+source: `MyExampleKey`, `My_Example_key` and `my_example_Key` are the same logical key.
+Both plugins segmentize each key and re-case the segments: underscore, hyphen and dot are
+separators; a lower-case-or-digit to upper-case transition starts a new segment; and an
+upper-case run followed by a lower-case letter splits before its last upper-case letter
+(the acronym rule — `myXMLKey` becomes `myXmlKey` / `my_xml_key`). Digits ride with their
+segment (`address1Line`). Values are never touched — only keys, at every nesting depth.
+Two distinct source keys can normalize to the same target (`MyKey` and `my_key` both
+become `myKey`); the later entry in map order wins. Normalization is idempotent, and a
+key with no letter or digit segments at all (e.g. `"___"`) is kept as-is. Both engines
+ship the identical algorithm and error messages (portable-flow contract).
+
+Beyond legacy cleanup, the plugins also do **impedance matching** between systems with
+different key conventions: an incoming camelCase request payload can be transformed to
+snake_case for processing and forwarding to a downstream system that expects it — one
+mapping statement at either boundary, no per-field mapping.
+
 ### Generators
 
 | Function | Description | Example |
 |----------|-------------|---------|
 | `f:uuid()` | Generate a random UUID string | `f:uuid() -> id` |
-| `f:dateTime()` | Current date-time (ISO-8601) | `f:dateTime() -> now` |
-| `f:date(format)` | Formatted date string | `f:date(text(yyyy-MM-dd)) -> today` |
+| `f:now()` | Current UTC time — ISO-8601 by default, `text(ms)` for epoch milliseconds, `text(local)` for local date-time | `f:now(text(ms)) -> ts` |
+| `f:dateTime(format?)` | Current date-time with local timezone, optionally formatted | `f:dateTime(text(yyyy-MM-dd)) -> today` |
 
-> Plugins are validated at compile time. They may only use classes from `java.lang`,
-> `java.util`, `java.math`, `java.time`, and Mercury framework packages.
+### Configuration
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `f:setConfig(key, value)` | Set or override a configuration parameter (stored as a system property; key = non-empty string, value = any object converted to text) | `f:setConfig(text(my.parameter), model.secret) -> updated` |
+
+> `f:setConfig` changes run-time state for the whole application instance, not just the calling
+> flow. The typical use case is hydrating secrets from a secret manager at start-up; components
+> that already consumed a parameter will not see a later override.
+
+> Plugins are validated at application startup by the loader's allowlist gate, which scans
+> the full class — method bodies included — before registration. A plugin may only reference
+> `java.lang`, `java.util`, `java.math`, `java.time`, and the framework's plugin surface
+> (`SimplePlugin`, `PluginFunction`, `MultiLevelMap`, `SimplePluginUtils`,
+> `TypeConversionUtils`, `KeyNormalizationUtils`). Anything else — `java.io`, `java.net`,
+> threads — causes the plugin to be skipped with a warning. This enforces the design goal
+> that every simple plugin executes in sub-millisecond time with no side effects.
 
 ---
 

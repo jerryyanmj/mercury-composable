@@ -57,7 +57,9 @@ the application, and any application instance can pick it up when the reply arri
 The reply — the batch completion, the manager's approval, the user's email — may take
 minutes, hours or days. Parking a live graph instance for that long would
 pin memory, defeat timeouts, and not survive a restart. Suspension inverts the problem:
-the run **ends** — the caller gets a `{"type": "suspended", "cid": ...}` reply — and the
+the run **ends** — the caller gets a `{"type": "suspended", "cid": ...}` reply (HTTP `200`:
+the run completed normally by suspending; only a staged `4xx`/`5xx` would route through the
+wrapping flow's exception handler) — and the
 workflow's durable memory (the `model` namespace) waits in the state store under the
 business correlation ID with a time-to-live you choose. The resumed run is an ordinary
 graph execution that happens to start with restored state. Because the record key is the
@@ -364,7 +366,8 @@ curl -s -X POST http://127.0.0.1:8085/api/graph/tutorial-14 \
   correlation ID and is fully resumable on its own; the parent orchestrates —
   see [the orchestrator pattern](#orchestrator-pattern).
 - Reserved model keys (`model.cid`, `model.instance`, `model.flow`, `model.ttl`,
-  `model.trace`, `model.run`) are never persisted — the resumed run's own identity is
+  `model.trace`, `model.parent`, `model.root`, `model.none`, `model.run`) are never
+  persisted — the resumed run's own identity is
   authoritative. `model.run` is part of the read-only flow metadata family: `graph.resume`
   is its only writer, and the flow compiler rejects any data mapping that targets it
   (like the other reserved keys).
@@ -466,7 +469,17 @@ suspends. Configuration uses the same
 `redis.*` keys as the sync-over-async extension (`redis.host`, `redis.port`,
 `redis.password`, `redis.ssl`, `redis.database`, `redis.timeout.ms`), and the worker
 counts are ops-tunable via `worker.instances.v1.redis.persist.model` /
-`worker.instances.v1.redis.retrieve.model`. See the module README for details.
+`worker.instances.v1.redis.retrieve.model`. Dependency:
+
+```xml
+<dependency>
+    <groupId>org.platformlambda</groupId>
+    <artifactId>minigraph-state-redis</artifactId>
+    <version>x.y.z</version>  <!-- the current Mercury version in the root pom.xml -->
+</dependency>
+```
+
+See the module README for details.
 
 ## See also
 

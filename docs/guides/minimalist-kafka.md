@@ -48,7 +48,15 @@ which is a different concern; this library is an application-level building bloc
 
 ## Enabling the library {#enable}
 
-1. Depend on `system/minimalist-kafka` (it depends on `event-script-engine`).
+1. Depend on `system/minimalist-kafka` (it depends on `event-script-engine`):
+
+    ```xml
+    <dependency>
+        <groupId>org.platformlambda</groupId>
+        <artifactId>minimalist-kafka</artifactId>
+        <version>x.y.z</version>  <!-- the current Mercury version in the root pom.xml -->
+    </dependency>
+    ```
 2. Point `yaml.kafka.flow.adapter` at your adapter config (inbound). Without it, no consumer starts.
 3. Provide the Kafka client templates (see [client config](#client-config)) — the classpath defaults work
    for local dev.
@@ -58,7 +66,38 @@ yaml.kafka.flow.adapter=classpath:/kafka-flow-adapter.yaml
 ```
 
 The library autoloads at startup (`@MainApplication`): it builds the shared producer and, if
-`yaml.kafka.flow.adapter` is set, starts one consumer thread per topic binding.
+`yaml.kafka.flow.adapter` is set, starts one consumer thread per topic binding. Either client can be
+[switched off](#opt-out) when the cluster has no credentials for it.
+
+### Switching off a client you do not use {#opt-out}
+
+Both clients start by default. When the cluster grants credentials for only **one** of them — the
+usual case for one leg of a [bridge](twin-kafka.md#bridge), where a Confluent console issues an API
+key for producing *or* consuming — switch the unused one off:
+
+```properties
+# a consume-only leg: this cluster issues no producer credentials
+kafka.producer.enabled=false
+```
+
+| Setting | Effect when `false` |
+|---|---|
+| `kafka.producer.enabled` | No producer is built. `simple.kafka.notification` stays registered but fails with a message naming this key, so a flow that publishes anyway points at the config rather than at a missing route. |
+| `kafka.consumer.enabled` | No adapter consumer starts, even with `yaml.kafka.flow.adapter` set, and [`kafka.health`](#health) probes through the producer template instead. |
+
+Two rules worth knowing:
+
+- **The flag is a veto, not a trigger.** Leaving it at the default starts nothing that is not otherwise
+  configured — an inbound adapter still needs `yaml.kafka.flow.adapter`. Only the literal `false`
+  switches a client off; any other value leaves it on.
+- **A dead-letter topic needs a producer.** Dead letters are published through this cluster's own
+  producer, so a binding that declares `dlq-topic` while `kafka.producer.enabled=false` **fails the
+  deployment at startup**, naming both settings. It is the contradiction that matters: without the
+  guard an exhausted message would be dropped with a `DATA LOSS` log and its offset committed. Enable
+  the producer, or drop the `dlq-topic`.
+
+Disabling both is allowed — the module goes inert and says so with a startup `WARN` — which makes a
+"Kafka off in this profile" switch possible without removing the dependency.
 
 ## Inbound: the adapter YAML {#adapter-yaml}
 
@@ -121,7 +160,7 @@ Every message hands the flow a `Map` with three top-level objects — `input.bod
 |-------|------|--------------|
 | `body` | `byte[]` or `Map` | The message payload; a `Map` when [`schema.enabled`](#schema) decodes a Confluent-framed value or [`serializer: 'json'`](#routing-payload) parses a JSON object, raw `byte[]` otherwise. |
 | `header` | `Map<String,String>` | The record's Kafka headers, including `traceparent` (consumed for [trace continuity](#tracing)) and `cid` (correlation id) when the producer set them. |
-| `metadata` | `Map<String,Object>` | The record's own envelope facts — `topic`, `partition`, `offset`, `timestamp`, and `key` (omitted when the record carries no key). |
+| `metadata` | `Map<String,Object>` | The record's own envelope facts — `topic`, `partition`, `offset`, `timestamp` (epoch milliseconds, a `long`), and `key` (omitted when the record carries no key). |
 
 `metadata.topic` and `metadata.partition` are the record's **actual** topic and partition — not the
 binding's configured `topic`/`topic-pattern`. For a literal `topic` binding this is redundant (the flow
@@ -302,7 +341,10 @@ library **pins** only the parameters its contract depends on and lets the templa
 | Partitioning (producer) | `partitioner.class` **defaulted** (not pinned) to `SimpleRandomPartitioner` | any `partitioner.class` set here wins |
 | Connection / security | — | `bootstrap.servers`, `security.protocol`, `sasl.*`, `ssl.*`, `acks` |
 
-`bootstrap.servers` is template-only via `${KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:9092}`. The byte[] wire
+`bootstrap.servers` is template-only via `${KAFKA_BOOTSTRAP_SERVERS:127.0.0.1:9092}`, and the
+shipped consumer template sets `auto.offset.reset=${KAFKA_AUTO_OFFSET_RESET:earliest}` — a
+brand-new consumer group starts from the beginning of the topic; committed offsets govern
+thereafter. The byte[] wire
 contract keeps the building blocks serializer-free; richer encodings layer on top via the
 [Schema Registry integration](#schema) (JSON Schema / Avro), opt-in per binding.
 
@@ -336,7 +378,7 @@ auto-commit only changes *when* Kafka considers the offset committed, not whethe
 dead-lettered. Choose this per binding for high-volume topics (e.g. clickstream/telemetry) that can tolerate
 occasional loss on crash in exchange for throughput; leave strict topics on the default.
 
-A flow **succeeds** when it replies with status `200`. Any other status — or a thrown exception, including a
+A flow **succeeds** when it replies with a status below `400` (any 2xx/3xx). A `4xx`/`5xx` status — or a thrown exception, including a
 **timeout** when the flow does not reply within its own `ttl` — is a **failure**. (Kafka is asynchronous, so
 unlike an HTTP entry the adapter has no inherent request timeout: the flow's `ttl` *is* the processing
 deadline. There is no separate flow-timeout knob.)
@@ -462,10 +504,26 @@ convenience applies to **non-schema-registry topics only**; `null` stays `null` 
 Publishing is **drop-n-forget** (Kafka's commit log is the durable buffer), but async delivery failures are
 logged rather than silently masked.
 
+Two contract details worth knowing: any **other body type** (a String, a PoJo) is rejected
+loudly with an `IllegalArgumentException` — convert to `byte[]` or a `Map`/`List` first. And
+the **correlation-id header is auto-stamped as a fallback**: when the flow maps no value under
+the configured header (default `cid`), the publisher stamps the flow's own business
+correlation id (`model.cid`); an explicitly mapped value always wins. With a customized
+`kafka.correlation.id.header`, map to the configured name — a `header.cid` mapping under a
+custom name is forwarded as a literal `cid` record header, never renamed.
+
 One header opts a publish into the Confluent wire format instead of raw `byte[]`: `subject` (with an optional
 `version`; see [Schema Registry](#schema)). It is an encoding directive — consumed by the function, not
-forwarded as a Kafka header. On this schema path the body contract stays a `byte[]` JSON document —
-the Map/List auto-serialization above does not apply.
+forwarded as a Kafka header. On this schema path **the body must be `byte[]` (a pre-serialized JSON
+document) — passing a `Map` or `List` is rejected with `IllegalArgumentException`**; the Map/List
+JSON convenience applies to non-schema topics only.
+
+> **Keep the worker pool small.** When the Schema Registry is in use, `simple.kafka.notification` runs
+> on **kernel threads** (`@KernelThreadRunner`) because Confluent's serializers are not thread-safe.
+> Each worker instance owns its own encoder and is single-flight, so a small pool (the default is 5)
+> sustains high throughput — Kafka publishing is fast and mostly waits on the broker acknowledgement.
+> Raise `instances` only if profiling shows the publishing path is the genuine bottleneck. This
+> constraint does not apply to raw `byte[]` publishing (no Schema Registry).
 
 ### Partitioning strategies {#partitioning}
 
@@ -544,8 +602,9 @@ no admin privileges. The Metadata request itself requires **no ACL**: brokers fi
 topics the principal may Describe rather than rejecting the request, so under a fully locked-down
 principal the probe still succeeds (with a visible topic count of 0) - the successful round trip proves
 connectivity, TLS/SASL authentication, and a served API request. A reachable cluster reports a status map
-(including the visible topic count, which may be 0 under restrictive ACLs); an unreachable one fails
-`/health` with HTTP 503.
+(including the visible topic count, which may be 0 under restrictive ACLs); an unreachable one fails the
+check with a **503** status and a key-value message (`text` for the DevOps reader, `code` for the status code),
+so `/health` marks the dependency down and the endpoint answers non-2xx while the application is DOWN.
 
 During application start-up the check returns a **placeholder healthy** status while the Kafka client
 warms up in the background - `/health` neither fails nor blocks before the client and the rest of the
@@ -553,6 +612,46 @@ start-up sequence complete. After the first successful probe, or once the grace 
 check is live. Two keys tune the behavior: `kafka.health.timeout` (default `5s`) and
 `kafka.health.startup.grace` (default `30s`) - see the
 [Configuration Reference](configuration-reference.md#observability).
+
+The probe's client configuration is resolved **lazily** - when the probe client is built, and again
+whenever a failed probe forces a rebuild - never at construction time. `kafka.health` is registered
+before your `@MainApplication` runs, so a bootstrap that fetches secrets and publishes them as system
+properties (the vault pattern) has not executed yet - a config template frozen at construction would
+interpolate such a credential as *missing* and fail every probe from then on. With lazy resolution
+the first probe after the credential lands simply succeeds; nothing needs a restart. While the
+template is still incomplete - the client cannot even be built from it - `type=health` reports a
+**passing** `Waiting for Kafka connection` status rather than a failure: failing `/health` would
+invite the container orchestrator to restart the pod, and a restart cannot produce the credential.
+A real connectivity failure (client built, cluster unreachable) fails the check with status 503.
+The same applies to `secondary.kafka.health`.
+
+> **Waiting is only for a value that has not landed yet — a broken template fails.** The leniency above
+> exists for exactly one situation: a credential a later bootstrap will publish. A template referring to
+> a class that is not on the classpath will never become usable by waiting, so `type=health` fails with
+> 503 and says `Kafka client configuration is unusable - <reason>` rather than reporting healthy. The
+> distinction matters because the passing-while-broken case is genuinely hard to spot: a field
+> deployment logged an unresolvable deserializer class every five seconds for hours while `/health`
+> reported healthy throughout. The message deliberately names the *configuration* rather than the
+> network, so the reader looks at the classpath instead of the cluster.
+>
+> **Class-valued settings are supplied as class objects, not names.** Kafka resolves a class *name*
+> through the thread context classloader, falling back to its own loader only when that is `null` — so
+> a non-null but wrong context loader turns a present class into `Class ... could not be found`. That is
+> what bit the field: `kafka.health` is a `@KernelThreadRunner` and builds its client on a pooled kernel
+> thread, while the flow adapter's consumers — same config, same jar, ordinary threads — were fine. The
+> module now puts `Class` objects into the client properties and the probe additionally pins the thread
+> context loader for the duration of construction, so no client's construction depends on which thread
+> happens to run it. Nothing to configure; a template that names its own partitioner, assignor or
+> interceptors still wins as before.
+
+> **On a produce-only leg the probe uses the producer template.** With
+> [`kafka.consumer.enabled=false`](#opt-out) there are no consumer credentials to build a probe from,
+> yet a bridge is healthy only when both clusters are reachable. So the probe follows whichever client
+> the deployment configured, reading connection and security settings (`bootstrap.servers`,
+> `security.protocol`, `sasl.*`, `ssl.*` - named identically in both client surfaces) from
+> `kafka-producer.properties`. Producer-only settings such as `acks` are filtered out rather than
+> logged as unknown config. Nothing else about the probe changes; it still joins no group and needs
+> no ACL.
 
 Dual-cluster applications get a twin for the second cluster: [twin-kafka](twin-kafka.md#health)
 ships `secondary.kafka.health`, so a bridge lists both dependencies.
@@ -626,7 +725,7 @@ unauthenticated registry (like the local mock) keeps working with zero configura
 input:
   - 'text(orders) -> header.topic'
   - 'text(orders-value) -> header.subject'    # version omitted → latest
-  - 'model.payload -> *'        # the body: a Map / JSON document
+  - 'model.payload -> *'        # the body: must be byte[] (a JSON document) on the schema path
 process: 'simple.kafka.notification'
 ```
 
@@ -676,6 +775,12 @@ schema's `Metadata`) and **never** from this library's serde config, so differen
 KEKs/vendors without any code or config change here. Whoever registers/governs the schema — CI, an admin
 tool — owns this binding. A schema with no `ENCRYPT` rule serializes exactly as before (plaintext); CSFLE is
 per-subject, never a single global on/off switch.
+
+> **Registry authentication is inherited by the serdes.** The serializer/deserializer's own
+> registry and DEK-registry clients receive the same `schema-registry.properties`
+> authentication this library uses for its schema lookups (with any
+> `schema.registry.serde.*` overrides applied on top) — a governed registry that returns
+> 401 to anonymous clients works without duplicating credentials.
 
 **3. What *does* go in `application.properties` — the `schema.registry.serde.*` pass-through.** This is
 reserved for genuinely **global, app-level** settings the KMS *driver* itself needs (not per-subject key
@@ -751,6 +856,8 @@ The essentials:
 | Key | Default | Description |
 |-----|---------|-------------|
 | `yaml.kafka.flow.adapter` | — | Adapter config location; unset = inbound adapter off. |
+| `kafka.producer.enabled` | `true` | Set `false` on a consume-only leg to build no producer — see [switching off a client](#opt-out). A binding with `dlq-topic` then fails startup. |
+| `kafka.consumer.enabled` | `true` | Set `false` on a produce-only leg to start no adapter consumer; [`kafka.health`](#health) then probes through the producer template. |
 | `kafka.producer.properties` | `classpath:/kafka-producer.properties` | Producer template location. Set to an external file path (or explicit fallback list) to externalize. |
 | `kafka.consumer.properties` | `classpath:/kafka-consumer.properties` | Consumer template location. Set to an external file path (or explicit fallback list) to externalize. |
 | `kafka.dlq.timeout.ms` | `10000` | Confirm-write timeout for the dead-letter publish. (Flow processing has no timeout knob — the flow's own `ttl` is the deadline.) |

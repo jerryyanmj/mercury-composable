@@ -1,0 +1,5 @@
+flows:
+  - 'l2-profile.yml'
+  - 'graph-executor.yml'
+
+location: 'classpath:/flows/'

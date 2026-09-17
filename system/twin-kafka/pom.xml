@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.platformlambda</groupId>
     <artifactId>twin-kafka</artifactId>
-    <version>4.11.9</version>
+    <version>4.12.11</version>
     <packaging>jar</packaging>
     <name>Twin Kafka (secondary cluster for dual-cluster bridging)</name>
     <description>
@@ -21,14 +21,15 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
     </parent>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>21</java.version>
-        <netty.version>4.2.16.Final</netty.version>
-        <jackson-2-bom.version>2.22.1</jackson-2-bom.version>
+        <netty.version>4.2.17.Final</netty.version>
+        <jackson-2-bom.version>2.22.2</jackson-2-bom.version>
+        <jackson-bom.version>3.2.2</jackson-bom.version>
         <log4j2.version>2.26.1</log4j2.version>
         <!-- Security override for the transitive httpcore5/httpcore5-h2 (Snyk HIGH, CWE-770) pulled
              in via minimalist-kafka's Confluent registry client. Spring Boot's dependencyManagement
@@ -59,7 +60,7 @@
         <dependency>
             <groupId>org.platformlambda</groupId>
             <artifactId>minimalist-kafka</artifactId>
-            <version>4.11.9</version>
+            <version>4.12.11</version>
         </dependency>
 
         <!-- Embedded Kafka (real KRaft broker) for integration tests - two brokers in one JVM with
@@ -73,6 +74,17 @@
                 <exclusion>
                     <groupId>at.yawk.lz4</groupId>
                     <artifactId>lz4-java</artifactId>
+                </exclusion>
+                <!-- CVE-2026-90559 (out-of-bounds write in Snappy.uncompress(ByteBuffer, ByteBuffer),
+                     CVSS 8.7): NVD records snappy-java as affected "through 1.1.10.8", which is the
+                     NEWEST release (2025-07-19) - there is no version to upgrade to, so the codec is
+                     excluded like lz4 above rather than pinned. Mercury configures no compression.type,
+                     so nothing here produces snappy-compressed records; an application that produces
+                     or consumes snappy-compressed records must declare snappy-java itself. Drop this
+                     exclusion once a fixed snappy-java is released. -->
+                <exclusion>
+                    <groupId>org.xerial.snappy</groupId>
+                    <artifactId>snappy-java</artifactId>
                 </exclusion>
                 <exclusion>
                     <groupId>commons-collections</groupId>

@@ -85,9 +85,12 @@ Exception handling — per-task or per-flow — is also managed by the event man
 The **in-memory event system** is the transport backbone, built on Eclipse Vertx's event bus with
 Java 21 virtual thread management. All inter-function communication within a single JVM travels through
 this bus. Point-to-point delivery routes an event to exactly one worker instance of the target function.
-Broadcast delivery sends an event to all registered instances. The event system uses `/tmp` as an
-overflow buffer when a consumer is slower than the producer, removing the need for explicit back-pressure
-handling in user code.
+Broadcast delivery sends an event to all registered instances. When a consumer is slower than its
+producer, each route's **elastic queue** holds the first events in memory and spills the overflow to
+per-route append-only segment files under the temp directory, removing the need for explicit
+back-pressure handling in user code. The spill tier is transient — nothing survives a restart — and is a
+dependency-free segmented FIFO, so its blocking I/O parks a virtual thread rather than pinning a carrier;
+that is what lets every route dispatch off the event loop on its own virtual thread.
 
 **Composable functions** are the innermost stage and the only place where application business logic
 lives. A function knows nothing about HTTP, the flow configuration, or other user functions. It receives
@@ -394,7 +397,7 @@ integration too. From `AutoStart.main()` — the universal entry point — the s
    - **No Spring Boot**: `AppStarter` runs `@MainApplication` classes immediately, in the same pass as
      steps 1–3.
    - **Spring Boot** (detected via the `spring.boot.main` config property, e.g. `RestServer` in
-     `rest-spring-3`/`rest-spring-4`): `AppStarter` completes steps 1–3, then hands off to Spring Boot's
+     `rest-spring-4`): `AppStarter` completes steps 1–3, then hands off to Spring Boot's
      own `main()`, which runs its full bootstrap (bean creation, its own embedded server if used)
      independently. Only once Spring Boot fires `ApplicationReadyEvent` does the framework's `AppLoader`
      component autowire Spring dependencies into the already-registered composable functions and *then*

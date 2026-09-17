@@ -51,6 +51,7 @@ cluster's schema-id cache is isolated (Confluent global ids are only unique with
 | Producer template | `kafka-producer.properties` | `secondary-kafka-producer.properties` |
 | Consumer template | `kafka-consumer.properties` | `secondary-kafka-consumer.properties` |
 | Schema Registry (optional) | `schema.registry.url` + `schema-registry.properties` | `secondary.schema.registry.url` + `secondary-schema-registry.properties` |
+| Client opt-out (default `true`) | `kafka.producer.enabled` / `kafka.consumer.enabled` | `secondary.kafka.producer.enabled` / `secondary.kafka.consumer.enabled` |
 | Outbound header names | `kafka.correlation.id.header` / `kafka.trace.id.header` / `kafka.traceparent.header` | `secondary.kafka.correlation.id.header` / `secondary.kafka.trace.id.header` / `secondary.kafka.traceparent.header` (fall back to the globals) |
 
 All secondary templates follow the same mechanics as the primary ones: loaded from the bundled
@@ -100,6 +101,39 @@ flow, the bridge is observable (continuous trace across both clusters), governab
 retry + dead-letter on the *originating* cluster), and extensible (enrich/filter/transform tasks can
 sit between consume and republish).
 
+### A one-way bridge: switch off the clients you do not use {#one-way}
+
+A bridge that only flows on-prem → cloud consumes on the primary and produces on the secondary — so
+two of the four clients are dead weight. That matters beyond tidiness: a managed cluster issues
+credentials **per client**, and a Confluent console that was never asked for a primary *producer* API
+key has none to give. Building the unused client then fails the deployment. Declare the direction
+instead:
+
+```properties
+# on-prem -> cloud, one way. Two clusters, one client each.
+kafka.consumer.enabled=true
+kafka.producer.enabled=false
+secondary.kafka.consumer.enabled=false
+secondary.kafka.producer.enabled=true
+
+yaml.kafka.flow.adapter=classpath:/kafka-flow-adapter.yaml
+# no yaml.secondary.kafka.flow.adapter - nothing consumes on the cloud side
+```
+
+Each cluster reads only its own keys, and each diagnoses itself: publishing through
+`simple.kafka.notification` here fails naming `kafka.producer.enabled`, and the secondary
+counterpart names `secondary.kafka.producer.enabled`. Two consequences to plan for:
+
+- **Dead letters need the producer of the cluster they came from.** The primary binding above consumes
+  from on-prem, so its `dlq-topic` would be written to on-prem — through the producer this
+  configuration just disabled. That contradiction **fails startup** rather than dropping poison
+  messages silently. Either keep `kafka.producer.enabled=true` (a DLQ-only producer credential) or
+  handle failures without a DLQ.
+- **Health checks still cover both legs.** `kafka.health` probes through the consumer template as
+  usual; `secondary.kafka.health` finds its consumer disabled and probes through the secondary
+  *producer* template instead, so `mandatory.health.dependencies=kafka.health, secondary.kafka.health`
+  keeps working unchanged. See [health check](#health).
+
 ## Asymmetric Schema Registry {#asymmetric-registry}
 
 The Schema Registry is **optional and per-cluster**. A common real-world topology pairs an on-prem
@@ -140,6 +174,8 @@ topology in one process - set `dual.servers=true` (in its `application.propertie
 `-Ddual.servers=true`) and it starts broker 1 on `127.0.0.1:9092` and broker 2 on `127.0.0.1:8092`
 with separate log directories:
 
+> **Note**: `x.y.z` denotes the current Mercury version shown in the root `pom.xml`.
+
 ```shell
 cd helpers/kafka-standalone && java -Ddual.servers=true -jar target/kafka-standalone-x.y.z-exec.jar
 ```
@@ -156,6 +192,8 @@ crossing the two emulated clusters with trace/correlation continuity — see the
 | Key | Default | Description |
 |-----|---------|-------------|
 | `yaml.secondary.kafka.flow.adapter` | - | Secondary adapter config location; unset = secondary inbound adapter off. |
+| `secondary.kafka.producer.enabled` | `true` | Set `false` when the secondary cluster issues no producer credentials — see [one-way bridge](#one-way). A secondary binding with `dlq-topic` then fails startup. |
+| `secondary.kafka.consumer.enabled` | `true` | Set `false` when the secondary cluster issues no consumer credentials; `secondary.kafka.health` then probes through the secondary producer template. |
 | `secondary.kafka.producer.properties` | `classpath:/secondary-kafka-producer.properties` | Secondary producer template location. Set to an external file path (or explicit fallback list) to externalize. |
 | `secondary.kafka.consumer.properties` | `classpath:/secondary-kafka-consumer.properties` | Secondary consumer template location. Set to an external file path (or explicit fallback list) to externalize. |
 | `secondary.schema.registry.url` | - | Secondary cluster's Schema Registry URL; unset = schema features off on that cluster. |
@@ -194,6 +232,12 @@ mandatory.health.dependencies=kafka.health, secondary.kafka.health
 The `/health` dependency list distinguishes the two by service name (`kafka` vs `secondary.kafka`,
 each with its cluster's `bootstrap.servers` as `href`). An application that treats the secondary
 cluster as best-effort can move `secondary.kafka.health` to `optional.health.dependencies` instead.
+
+On a [one-way bridge](#one-way) the probe follows whichever client that cluster configured: with
+`secondary.kafka.consumer.enabled=false` there is no consumer credential to probe with, so
+`secondary.kafka.health` builds its probe from `secondary-kafka-producer.properties` instead —
+same Metadata request, same no-ACL requirement, same 503 semantics. Both legs of a one-way bridge
+therefore stay health-checkable with the dependency list unchanged.
 
 ## See also {#see-also}
 

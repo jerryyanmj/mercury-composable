@@ -18,15 +18,17 @@
 
 package org.platformlambda.twin.kafka;
 
+import org.platformlambda.core.annotations.KernelThreadRunner;
 import org.platformlambda.core.annotations.PreLoad;
 import org.platformlambda.core.util.AppConfigReader;
 import org.platformlambda.mini.kafka.KafkaClientConfig;
 import org.platformlambda.mini.kafka.KafkaHealthCheck;
 
 import java.util.Properties;
+import java.util.function.Supplier;
 
 /**
- * Health-check function for the SECONDARY Kafka cluster - the twin of minimalist-kafka's
+ * Health check for the SECONDARY Kafka cluster - the twin of minimalist-kafka's
  * {@code kafka.health}, probing the cluster configured by the secondary consumer template.
  *
  * <p>A dual-cluster bridge application lists both clusters as health dependencies:
@@ -35,27 +37,48 @@ import java.util.Properties;
  * </pre>
  *
  * <p>Behavior is identical to {@code kafka.health} (single no-ACL Metadata probe, start-up
- * grace with a placeholder healthy status, HTTP 503 when unreachable). Tunables follow the
- * twin-kafka fallback convention: {@code secondary.kafka.health.timeout} and
+ * grace with a placeholder healthy status, HTTP 503 when unreachable) - including the
+ * produce-only fallback: with {@code secondary.kafka.consumer.enabled=false} the probe is built
+ * from the secondary PRODUCER template instead, so a one-way bridge leg stays health-checkable.
+ * Tuning keys follow the twin-kafka fallback convention: {@code secondary.kafka.health.timeout} and
  * {@code secondary.kafka.health.startup.grace} fall back to the {@code kafka.health.*}
  * globals, then to the built-in defaults (5s / 30s).
+ *
+ * <p>Multiple workers serve concurrent {@code /health} callers - the same lock-guarded consumer as
+ * {@code kafka.health}. Runs on kernel threads like its twin - see the {@code @KernelThreadRunner}
+ * note on {@link KafkaHealthCheck} (the consumer's calling-thread I/O would pin a virtual-thread
+ * carrier).
  */
-// multiple workers for concurrent /health callers - same lock-guarded consumer as kafka.health
+@KernelThreadRunner
 @PreLoad(route = "secondary.kafka.health", instances = 5)
 public class SecondaryKafkaHealthCheck extends KafkaHealthCheck {
 
     private static final String SERVICE_NAME = "secondary.kafka";
     private static final String CONSUMER_LOCATION = "secondary.kafka.consumer.properties";
     private static final String DEFAULT_CONSUMER = "classpath:/secondary-kafka-consumer.properties";
+    private static final String PRODUCER_LOCATION = "secondary.kafka.producer.properties";
+    private static final String DEFAULT_PRODUCER = "classpath:/secondary-kafka-producer.properties";
     private static final String TIMEOUT_KEY = "secondary.kafka.health.timeout";
     private static final String GRACE_KEY = "secondary.kafka.health.startup.grace";
     private static final String PRIMARY_TIMEOUT_KEY = "kafka.health.timeout";
     private static final String PRIMARY_GRACE_KEY = "kafka.health.startup.grace";
 
+    /** Instantiated reflectively when the platform's {@code @PreLoad} scanner registers the route. */
     public SecondaryKafkaHealthCheck() {
-        this(KafkaClientConfig.consumerProperties(AppConfigReader.getInstance(),
-                        CONSUMER_LOCATION, DEFAULT_CONSUMER),
+        this(() -> KafkaClientConfig.healthProbeProperties(AppConfigReader.getInstance(),
+                        SecondaryKafkaAutoStart.CONSUMER_ENABLED, CONSUMER_LOCATION, DEFAULT_CONSUMER,
+                        SecondaryKafkaAutoStart.PRODUCER_ENABLED, PRODUCER_LOCATION, DEFAULT_PRODUCER),
              resolveDurationMs(GRACE_KEY, PRIMARY_GRACE_KEY, DEFAULT_GRACE));
+    }
+
+    /**
+     * A supplier rather than a resolved snapshot: the secondary cluster's templates can interpolate a
+     * credential that a {@code @MainApplication} bootstrap publishes long after this {@code @PreLoad}
+     * function is constructed - see the note on lazy resolution in {@link KafkaHealthCheck}.
+     */
+    private SecondaryKafkaHealthCheck(Supplier<Properties> probeConfig, long graceMs) {
+        super(SERVICE_NAME, probeConfig,
+              resolveDurationMs(TIMEOUT_KEY, PRIMARY_TIMEOUT_KEY, DEFAULT_TIMEOUT), graceMs);
     }
 
     /**
@@ -67,5 +90,21 @@ public class SecondaryKafkaHealthCheck extends KafkaHealthCheck {
     SecondaryKafkaHealthCheck(Properties consumerProperties, long graceMs) {
         super(SERVICE_NAME, consumerProperties,
               resolveDurationMs(TIMEOUT_KEY, PRIMARY_TIMEOUT_KEY, DEFAULT_TIMEOUT), graceMs);
+    }
+
+    /**
+     * Resolve a duration configuration key to milliseconds, consulting the primary cluster's key
+     * before the built-in default - the twin-kafka convention where secondary.* keys fall back to
+     * the kafka.health.* globals. Lives here (not in the base class) because this fallback
+     * convention is the twin's own concern - and this class is its only user.
+     *
+     * @param key          the configuration key (e.g. "secondary.kafka.health.timeout")
+     * @param fallbackKey  the primary cluster's fallback key (e.g. "kafka.health.timeout")
+     * @param defaultValue the built-in default duration (e.g. "5s")
+     * @return the resolved duration in milliseconds
+     */
+    private static long resolveDurationMs(String key, String fallbackKey, String defaultValue) {
+        var config = AppConfigReader.getInstance();
+        return resolveDurationMs(key, config.getProperty(fallbackKey, defaultValue));
     }
 }

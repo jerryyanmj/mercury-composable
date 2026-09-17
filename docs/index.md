@@ -4,6 +4,8 @@ summary: A Java framework for building composable, event-driven backend applicat
   increasingly, Active Knowledge Graphs you evolve by editing a model rather than rewriting code.
 audience: [developer, architect, business, ai-agent]
 keywords: [composable, event-driven, active knowledge graph, semantic application, event script, ai collaboration]
+hide:
+  - navigation
 ---
 
 # Mercury Composable for Java
@@ -16,7 +18,14 @@ virtual threads, so straightforward synchronous code performs on par with reacti
 event-driven core descends from the **Scala/Akka actor model**, realized on the **Eclipse Vert.x**
 event bus.
 
-> **New here?** Start with **[Getting Started](guides/getting-started.md)** — it opens with a 5-minute quickstart.
+[Get started](guides/getting-started.md){ .md-button .md-button--primary }
+[Read the white paper](https://accenture.github.io/mercury-composable/mercury-story/){ .md-button }
+[View the deck](https://accenture.github.io/mercury-composable/presentations/mercury-story.html){ .md-button }
+[The Mercury Family](https://accenture.github.io/mercury-composable/mercury-family/){ .md-button }
+
+*The white paper — **Intent-Driven Development and the Architecture of Human-AI Collaboration** —
+presents the collaboration model the AI era needs and the Mercury story that proved it: shared
+memory, AI grammar, and governed execution; the deck tells the same story in slides.*
 
 ## A layered ascent
 
@@ -25,9 +34,9 @@ application — drop down a layer exactly where you need more control, and no fu
 
 | Layer | You express behavior as… | What you write |
 |:------|:--------------------------|:---------------|
-| **Event-driven**<br>[Platform Core](guides/event-driven/index.md) | decoupled functions reacting<br>to events | Java functions,<br>addressed by route name |
-| **Composable**<br>[Event Script](guides/event-script/index.md) | YAML flows that choreograph<br>functions | ~50% config,<br>50% code |
-| **Semantic**<br>[Active Knowledge Graph](guides/knowledge-graph/index.md) | a graph whose nodes *execute*<br>during traversal | a model —<br>little or no code |
+| **Event-driven** — [Platform Core](guides/event-driven/index.md) | decoupled functions reacting to events | Java functions, addressed by route name |
+| **Composable** — [Event Script](guides/event-script/index.md) | YAML flows that choreograph functions | ~50% config, 50% code |
+| **Semantic** — [Active Knowledge Graph](guides/knowledge-graph/index.md) | a graph whose nodes *execute* during traversal | a model — little or no code |
 
 ## Knowledge Graph as application
 
@@ -54,7 +63,7 @@ A machine-readable map of the whole site lives at [`llms.txt`](llms.txt).
 - **Get started** — [Getting Started](guides/getting-started.md)
 - **Guides** — [REST Automation](guides/rest-automation/index.md) · [Build, Test & Deploy](guides/build-test-deploy.md) ·
   [Spring Boot Integration](guides/spring-boot.md) · [Event over HTTP](guides/event-over-http.md) ·
-  [Service Mesh](guides/service-mesh.md)
+  [Polyglot Functions](guides/polyglot-functions.md) · [Service Mesh](guides/service-mesh.md)
 - **Knowledge Graph** — [Knowledge Graph as Application](guides/knowledge-graph/index.md) ·
   [Build your first graph](guides/knowledge-graph/build-your-first-graph.md) ·
   [Minimalist Property Graph](guides/knowledge-graph/property-graph.md)
@@ -75,3 +84,7 @@ A machine-readable map of the whole site lives at [`llms.txt`](llms.txt).
   layers, same flow YAML, behavior-synced with this engine:
   [github.com/Accenture/mercury](https://github.com/Accenture/mercury)
   · [documentation](https://accenture.github.io/mercury/)
+- **Polyglot functions:** write functions in **Python** or **Node.js** and call them from
+  flows and graphs — see [Polyglot Functions](guides/polyglot-functions.md):
+  [Composable for Python](https://accenture.github.io/mercury-python/)
+  · [Composable for Node.js](https://accenture.github.io/mercury-nodejs/)

@@ -18,7 +18,8 @@ related:
 >   then deploy it and call it over REST. No application code, only a graph model.
 > - **You'll use** — the MiniGraph Playground (the interactive workbench) and one skill,
 >   `graph.data.mapper`.
-> - **Prerequisites** — the app running with `app.env=dev` and the Playground open in a browser;
+> - **Prerequisites** — the app running with `app.env=dev` and the Playground open in a browser
+>   (the app's base URL, e.g. `http://127.0.0.1:8085/` — the Playground UI is the app's web root);
 >   about 10 minutes. New to the idea? Read [Knowledge Graph as Application](index.md) first.
 > - **Conventions** — lines you type into the Playground inbox are shown in code blocks; the
 >   console's reply follows under `>`.
@@ -127,8 +128,8 @@ export graph as my-first-graph
 
 ```
 > export graph as my-first-graph
-Added name=my-first-graph to Root node
 Graph exported to /tmp/graph/my-first-graph.json
+Described in /api/graph/model/my-first-graph/{token}
 ```
 
 ## Step 4 — deploy it {#deploy}
@@ -143,7 +144,11 @@ graph.model.automation=classpath:/graphs.yaml
 ```
 
 Copy the model into the deployed-graph folder **and list its ID in the manifest**
-(`graphs.yaml`), then restart the app:
+(`graphs.yaml`), then restart the app.
+
+> **Export before you restart.** Restarting ends every Playground session, and the working graph
+> lives in the session — anything not exported with `export graph as {name}` is lost. The export
+> in the previous step is what makes this restart safe.
 
 ```
 cp /tmp/graph/my-first-graph.json src/main/resources/graph/

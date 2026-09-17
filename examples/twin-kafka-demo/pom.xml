@@ -6,21 +6,22 @@
     <groupId>org.platformlambda</groupId>
     <artifactId>twin-kafka-demo</artifactId>
     <packaging>jar</packaging>
-    <version>4.11.9</version>
-    <name>Worked example: profile management bridged across two Kafka clusters</name>
+    <version>4.12.11</version>
+    <name>Worked example: bridge across two Kafka clusters</name>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
         <relativePath/>
     </parent>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <tomcat.version>11.0.24</tomcat.version>
-        <netty.version>4.2.16.Final</netty.version>
-        <jackson-2-bom.version>2.22.1</jackson-2-bom.version>
+        <tomcat.version>11.0.25</tomcat.version>
+        <netty.version>4.2.17.Final</netty.version>
+        <jackson-2-bom.version>2.22.2</jackson-2-bom.version>
+        <jackson-bom.version>3.2.2</jackson-bom.version>
         <log4j2.version>2.26.1</log4j2.version>
         <!-- Security override for the transitive httpcore5/httpcore5-h2 (Snyk HIGH, CWE-770) pulled
              in via minimalist-kafka's Confluent registry client. Spring Boot's dependencyManagement
@@ -44,7 +45,7 @@
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-bom</artifactId>
-                <version>2025.0.6</version>
+                <version>2025.0.7</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -67,7 +68,7 @@
         <dependency>
             <groupId>org.platformlambda</groupId>
             <artifactId>twin-kafka</artifactId>
-            <version>4.11.9</version>
+            <version>4.12.11</version>
         </dependency>
 
         <dependency>

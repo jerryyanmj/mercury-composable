@@ -31,6 +31,7 @@ related:
 | **Node name** | lowercase letters, digits and hyphen | `person-name`, `mdm-profile`, `fetcher-1` |
 | **Node type** | a descriptive label; shipped examples **capitalize** structural types | `Root`, `End`, `Provider`, `Dictionary`, `Fetcher`, `Island` |
 | **Reserved names** | the root node **must** be named `root`; the end node **must** be `end` | — |
+| **Root `purpose`** | required by the **CompileGraph deployment gate** — a session dry-run does not enforce it, so include it at creation to avoid a deploy-time rejection | — |
 | **Property** | `key=value`; keys may be composite (dot-bracket) | `url=http://...`, `mapping[]=a -> b` |
 | **List property** | a `key[]=entry` line *appends* one entry to the list `key` | repeat `mapping[]=...` per entry |
 | **Multi-line value** | wrap the value in triple single quotes | `statement[]='''` … `'''` |
@@ -122,7 +123,7 @@ Beyond constants, two further **non-constant source forms** are valid in mapping
 skills share Event Script's mapping engine):
 
 `f:plugin(args…)`
-:   a [simple-plugin](../event-script/syntax.md#simple-plugins) invocation — the modern replacement for the deprecated `:type` suffixes. **Arguments accept any mapping source**: constants and any state-machine path — `model.*`, `input.*`, `output.*`, and node namespaces such as `{node}.result.{key}` (engine-verified). Examples: `f:concat(model.a, text(!))`, generators `f:uuid()` and `f:now(text(local))` (current date-time at execution: `iso`/`local`/`ms`), arithmetic `f:add(...)`, logic `f:ternary(...)`, and **list/map reshapers** `f:removeKey(list, text(key))` (strip fields from every map in a list), `f:listOfMap(...)` (maps-of-lists → list-of-maps, order-preserving) and `f:length(...)` (length by type: list → element count, string → **character** count, bytes → byte count, null → 0). **Full catalog** in the [Event Script syntax page](../event-script/syntax.md#simple-plugins)
+:   a [simple-plugin](../event-script/syntax.md#simple-plugins) invocation — the modern replacement for the deprecated `:type` suffixes. **Arguments accept any mapping source**: constants and any state-machine path — `model.*`, `input.*`, `output.*`, and node namespaces such as `{node}.result.{key}` (engine-verified). Examples: `f:concat(model.a, text(!))`, generators `f:uuid()` and `f:now(text(local))` (current date-time at execution: `iso`/`local`/`ms`), JSON dataset creation `f:json(text([]))` → empty list / `f:json(text({"a": [1, 2]}))` → nested map (parses JSON text from a constant or model variable), arithmetic `f:add(...)`, logic `f:ternary(...)`, and **list/map reshapers** `f:removeKey(list, text(key))` (strip fields from every map in a list), `f:listOfMap(...)` (maps-of-lists → list-of-maps, order-preserving) and `f:length(...)` (length by type: list → element count, string → **character** count, bytes → byte count, null → 0). **Full catalog** in the [Event Script syntax page](../event-script/syntax.md#simple-plugins)
 
 `$.…`
 :   a JSONPath expression over the state machine (prefer plain dot-bracket keys; JSONPath only when the query needs it)
@@ -211,7 +212,7 @@ cleared run marks — which is the standard idiom for a second dry-run with diff
 ```
 run                        # traverse from root to end
 execute {node}             # run a single node (after instantiate)
-inspect {namespace.key}    # read a value from the state machine
+inspect {namespace.key}    # read a value from the state machine (a leaf value or a whole subtree)
 ```
 
 ```
@@ -222,6 +223,11 @@ inspect error                # the exception context after a failed node routed 
 
 > **Placeholder convention:** `{…}` in the syntax lines above (e.g. `{node}`,
 > `{namespace.key}`) marks a value you substitute — **do not type the braces**.
+> **`inspect` returns subtrees too**: `inspect output` prints the whole populated namespace
+> map; ask for a composite key like `inspect output.body.rmdAmount` when you want one value.
+> (An AI driver on the `/sync` companion endpoint rarely needs `inspect` at all: a run's
+> structured outcome comes back in the response's `result` field.)
+
 > Write `inspect output.body.name`, not `inspect {output.body.name}` (a literal
 > `{output.body}` is treated as the key `{output` → `body}` and resolves to nothing).
 
@@ -264,8 +270,20 @@ import graph from {name}
 import node {node} from {name}
 ```
 
-- `export` writes JSON to `location.graph.temp`; it adds `name={name}` to the root node and
-  **fails if any node is an orphan** (every node must connect to ≥1 other).
+- `export` is **idempotent**: when the file already holds byte-identical content the physical
+  write is skipped, so **the file's mtime is not a write indicator** — verify by content, or by
+  the `Described in ...` link in the reply. A genuine I/O failure reports `ERROR: unable to
+  write ...`. In a rehearsal loop this means a "successful" export that changed nothing is
+  telling you **the saved file already matches your graph** — you re-exported the version
+  already saved, not a modified working copy.
+- **Overwriting an existing file** validates the root `name` only when one is declared: a
+  declared name that differs from the export target rejects the overwrite
+  (`Expect root node name=...`) — protecting `graph123.json` from another graph's content —
+  while a **missing or blank root name is accepted**, and the export assigns the target id
+  as the root name (the same self-naming a brand-new export performs).
+- `export` writes JSON to `location.graph.temp` and adds `name={name}` to the root node.
+  (Orphan nodes are not rejected at export — the CompileGraph deployment gate re-validates
+  the whole model.)
 - The export reply includes `Described in /api/graph/model/{name}/{token}` — a read-only HTTP
   view of the exported model.
 

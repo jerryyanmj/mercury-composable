@@ -22,10 +22,12 @@ Mercury Composable applications are configured through `application.properties` 
 equivalent `application.yml`). This page is the exhaustive reference for every configuration
 key supported by the framework and its optional modules.
 
-Properties are set in `src/main/resources/application.properties` and can be overridden via
-environment variables or JVM system properties (`-Dkey=value`) using Spring Boot's standard
-property resolution order. When both `application.properties` and `application.yml` are
-present, `.properties` takes precedence.
+Properties are set in `src/main/resources/application.properties` and can be overridden with
+JVM system properties (`-Dkey=value`), which the config reader checks first. Environment
+variables enter through `${ENV_VAR:default}` substitution inside values (and additionally
+through Spring Boot's own resolution order in `rest-spring-4` apps). When both
+`application.properties` and `application.yml` are present, they are merged and **`.yml`
+values win** for overlapping keys (`application.yml` is merged last).
 
 > **Tip**: In `application.yml`, dots in property names become nested YAML keys.
 > For example, `rest.server.port=8100` becomes:
@@ -241,7 +243,9 @@ Location of static web content (HTML, CSS, JS, images).
 |------|---------|
 | `String` (comma-sep paths) | `classpath:/rest.yaml` |
 
-Location(s) of REST endpoint configuration file(s). Multiple files are merged.
+Location(s) of REST endpoint configuration file(s). Multiple files are merged. A missing or
+empty file degrades gracefully — a warning is logged, no endpoints are rendered, and startup
+continues.
 
 ---
 
@@ -273,7 +277,10 @@ Location(s) of the event-over-HTTP target mapping configuration.
 |------|---------|
 | `String` (comma-sep paths) | `classpath:/flows.yaml` |
 
-Location(s) of Event Script flow definition files.
+Location(s) of Event Script flow definition files. A missing file degrades gracefully
+(warning logged; no flows deployed), and a flow with structural violations is skipped with an
+error log — startup continues in both cases. (A task-level data-mapping violation only omits
+that task: the flow still deploys and fails at runtime when the missing task is reached.)
 
 ### `yaml.journal`
 
@@ -293,6 +300,54 @@ Location(s) of the multicast route configuration. Multicast is a **local-JVM fan
 
 ---
 
+## Knowledge Graph (MiniGraph)
+
+### `graph.model.automation`
+
+| Type | Default |
+|------|---------|
+| `String` (location) | — |
+
+Location of the graph deployment manifest (e.g. `classpath:/graphs.yaml`) listing the graph
+model ids the CompileGraph gate compiles at startup; the manifest's own optional `location`
+key (default `classpath:/graph`) says where the model JSON files live. When this property is
+absent, a warning is logged and **no graphs are executable** — every `/api/graph/{graph-id}`
+call answers 404 ("compiled or 404", ADR-0011).
+
+### `location.graph.temp`
+
+| Type | Default |
+|------|---------|
+| `String` (local path) | `/tmp/graph` |
+
+Where the Playground's `export graph` command writes model JSON. Must be a local filesystem
+path (read/write requirement).
+
+### `graph.traversal.log`
+
+| Type | Default |
+|------|---------|
+| `boolean` | `true` |
+
+Stepwise traversal logging for deployed graph execution (`graph.executor`) — the same trail
+the Playground dry-run prints to its console, emitted as INFO **structured records**
+(`log.info("{}", map)`). Each record carries three keys: `text` — the traveler-style
+message (`Walk to {node}`, `Executed {node} with skill {skill} in {time} ms`,
+`Graph traversal completed in {time} ms`, or `Graph traversal aborted: {reason}`),
+`graph` — the graph id, and `id` — the run's **trace id** (fallback: the flow instance id
+when tracing is off), so an OpenTelemetry dashboard can join these app-log lines with the
+exported spans and metrics. With `log.format=json` or `compact` the record renders as a
+nested structure that log-analytics platforms (Dynatrace, Splunk, ...) index as
+key-values; in plain `text` format the map prints as its string form. Note that the
+executor deliberately runs as a `@ZeroTracing` interceptor (the trace is captured once
+from the initiating event, not re-spanned per node), so its worker thread holds no trace
+bracket and the app-context-log `context` block does **not** accompany these lines in any
+format — the record's `id` key is the correlation surface. On by default; set it to
+`false` (for example with the runtime override `-Dgraph.traversal.log=false`) to reduce
+log volume on busy installations.
+
+---
+
 ## Component Scanning & Startup
 
 ### `modules.autostart`
@@ -309,7 +364,7 @@ Route names or `flow://<flow-id>` identifiers to activate at startup without an 
 |------|---------|
 | `String` | — |
 
-Package for Spring Boot component scanning; used alongside `web.component.scan` when running with `rest-spring-3`.
+Package for Spring Boot component scanning; used alongside `web.component.scan` when running with `rest-spring-4`.
 
 ### `web.component.scan`
 
@@ -331,17 +386,30 @@ YAML file(s) that override `@PreLoad` annotation settings (route name, instance 
 
 ## Threading & Performance
 
-By default all functions run on Java 21 virtual threads. Use `@KernelThreadRunner` to pin a
+By default all functions run on Java 21 virtual threads — this is the platform's
+**sync-over-async contract**: blocking-style code (a `PostOffice` request, a
+`future.get()`) suspends only its virtual thread and releases the carrier, so
+sequential code performs like reactive with none of the ceremony. Use `@KernelThreadRunner` to pin a
 function to the kernel thread pool for blocking-I/O operations that are incompatible with
 virtual threads.
 
-### `deferred.commit.log`
+### `elastic.queue.segment.size.bytes`
 
 | Type | Default |
 |------|---------|
-| `boolean` | `false` |
+| `long` | `16777216` (16 MB) |
 
-Defer write commits in the ElasticQueue overflow buffer. For unit-test use only — do not set in production.
+Size of each spill segment file in the ElasticQueue overflow buffer. The buffer holds the first 20 events per route in memory and spills the overflow to a per-route sequence of append-only segment files under the temp directory; a segment is deleted as soon as it is fully read. Larger segments mean fewer file rolls and fewer deletes; smaller segments reclaim disk sooner under a long backlog. Rarely needs changing.
+
+> **Tip: put the spill directory on tmpfs.** Spill I/O is transient — nothing in the buffer survives a restart — so durability buys nothing here. The one latency blemish measured for the file store is a rare OS dirty-page-flush outlier, which a memory-backed filesystem removes entirely. On Linux, point the JVM temp directory at a tmpfs mount (`-Djava.io.tmpdir=/dev/shm/mercury`) and size it for your worst-case backlog.
+
+### `elastic.queue.dispatch.mailbox.size`
+
+| Type | Default |
+|------|---------|
+| `int` | `1024` |
+
+Capacity of the per-route dispatch mailbox. The Vert.x event loop enqueues to this bounded queue and a per-route virtual thread drains it, running the state machine and the blocking spill I/O off the loop. When the mailbox fills, the enqueueing loop **blocks** rather than dropping — back-pressure, not loss — and a warning is logged once per route. Floored at the 20-event memory buffer size.
 
 ### `kernel.thread.pool`
 
@@ -577,15 +645,15 @@ Timeout for the `kafka.health` probe - a single Kafka Metadata request (`KafkaCo
 |------|---------|
 | `String` (duration) | `30s` |
 
-Start-up grace period for `kafka.health`: within it the check reports a placeholder healthy status while the Kafka client warms up in the background, so `/health` never fails or blocks during application start-up. After the first successful probe (or once the grace expires) every check is live and an unreachable cluster fails `/health` with 503.
+Start-up grace period for `kafka.health`: within it the check reports a placeholder healthy status while the Kafka client warms up in the background, so `/health` never fails or blocks during application start-up. After the first successful probe (or once the grace expires) every check is live and an unreachable cluster fails the check with a 503 status and a key-value message (`text` + `code`).
 
-### `otel.trace.forwarder.enabled`
+### `otel.forwarding`
 
 | Type | Default |
 |------|---------|
-| `boolean` | `true` |
+| `boolean` | `false` |
 
-Used by the `opentelemetry-forwarder` extension. `false` makes the forwarder a no-op (jar present, no export).
+**Master switch for OpenTelemetry trace forwarding.** The `opentelemetry-forwarder` extension lives under `org.platformlambda`, a base scan package, so the jar alone would auto-register its route — the forwarder is therefore annotated `@OptionalService("otel.forwarding")` and **nothing is registered unless this is `true`**. That lets an application carry the dependency while DevOps decides, per environment, whether traces leave the process. Set it in `application.properties`, or at runtime without rebuilding: `java -Dotel.forwarding=true -jar your-app.jar`.
 
 ### `otel.exporter.otlp.endpoint`
 
@@ -669,7 +737,7 @@ When `true`, the `/info`, `/routes`, `/lib`, and `/env` endpoints require an `X-
 
 ## Spring Boot Integration
 
-These properties are relevant only when using the `rest-spring-3` module.
+These properties are relevant only when using the `rest-spring-4` module.
 
 ### `spring.boot.main`
 
@@ -993,6 +1061,22 @@ Kafka. See the [Kafka Flow Adapter guide](minimalist-kafka.md). The inbound adap
 
 Location of the `kafka-flow-adapter.yaml` binding file (`topic -> flow`). Unset = inbound adapter disabled.
 
+### `kafka.producer.enabled`
+
+| Type | Default |
+|------|---------|
+| `boolean` | `true` |
+
+Whether this cluster's producer is built. Set `false` on a consume-only leg of a [bridge](twin-kafka.md#one-way), where the cluster issues no producer credentials and building the client would fail the deployment. `simple.kafka.notification` stays registered and fails naming this key. A binding that declares `dlq-topic` while the producer is disabled **fails startup** — dead letters are published through that same producer, so the contradiction is rejected rather than silently dropping poison messages. The flag is a veto, not a trigger: only the literal `false` disables, and leaving the default starts nothing not otherwise configured.
+
+### `kafka.consumer.enabled`
+
+| Type | Default |
+|------|---------|
+| `boolean` | `true` |
+
+Whether this cluster's consumer is used. Set `false` on a produce-only leg: no adapter consumer starts even when `yaml.kafka.flow.adapter` is set, and `kafka.health` builds its Metadata probe from the **producer** template instead (filtered to the consumer config surface, so producer-only keys such as `acks` are dropped) — keeping a one-way bridge health-checkable on both legs. Disabling both clients is allowed and logs a startup `WARN`.
+
 ### `kafka.producer.properties`
 
 | Type | Default |
@@ -1057,6 +1141,18 @@ Registry client template location; externalize the same way as the producer temp
 
 Time-to-live for an entry in the in-memory (platform `ManagedCache`) cache of schemas fetched by id. Positive results only — a not-found id is never cached, so a newly-registered schema is visible immediately. The TTL bounds how long a cached schema is reused before re-fetching; `30m` lets schema changes be picked up without a pod restart (lengthen it in production where schemas change rarely). Cleared at startup (rebuildable).
 
+### `schema.registry.serde.*`
+
+| Type | Default |
+|------|---------|
+| `String` (prefix family) | — |
+
+Pass-through prefix for Confluent serde configuration: every `schema.registry.serde.<key>`
+property is handed to the serializer/deserializer as `<key>` verbatim — e.g.
+`schema.registry.serde.access.key.id=${AWS_ACCESS_KEY_ID}` supplies global KMS driver
+credentials for [CSFLE](minimalist-kafka.md#csfle). Omit entirely to use the cloud default
+credential chain.
+
 ### `yaml.secondary.kafka.flow.adapter`
 
 | Type | Default |
@@ -1064,6 +1160,14 @@ Time-to-live for an entry in the in-memory (platform `ManagedCache`) cache of sc
 | `String` (location) | — |
 
 [twin-kafka](twin-kafka.md): secondary-cluster adapter config location; unset = secondary inbound adapter off.
+
+### `secondary.kafka.producer.enabled` / `secondary.kafka.consumer.enabled`
+
+| Type | Default |
+|------|---------|
+| `boolean` | `true` |
+
+[twin-kafka](twin-kafka.md#one-way): the secondary cluster's twins of `kafka.producer.enabled` / `kafka.consumer.enabled`, with identical semantics. Each cluster reads only its own keys and names its own key in any resulting error, so a [one-way bridge](twin-kafka.md#one-way) declares its direction as four settings — the shape a managed cluster's per-client credentials actually force.
 
 ### `secondary.kafka.producer.properties` / `secondary.kafka.consumer.properties`
 
@@ -1131,8 +1235,11 @@ validation rules.
 ## Sync-over-Async (`sync-over-async` extension) {#sync-over-async}
 
 The opt-in `sync-over-async` extension exposes a synchronous REST request/response over an asynchronous,
-cross-pod Kafka backend using a Redis return route. See the [Sync-over-Async guide](sync-over-async.md). It is
+cross-pod backend using a Redis return route - and generalizes the same rendezvous to a streaming return
+route for cross-pod progressive rendering. See the [Sync-over-Async guide](sync-over-async.md). It is
 off by default and starts (eagerly connecting to Redis) only when `sync.over.async.enabled=true`.
+
+> **Every `soa.redis.*` key below falls back to the un-prefixed `redis.*` form when absent.** That is backward compatibility for deployments predating the namespace, and for applications running sync-over-async alone. When the [distributed cache](#distributed-cache) also runs, configure the two separately and set the **whole** `soa.redis.*` connection set — a partial override inherits the other module's credentials through the fallback. See [Separate Redis clients, by design](distributed-cache.md#separation).
 
 ### `sync.over.async.enabled`
 
@@ -1142,7 +1249,7 @@ off by default and starts (eagerly connecting to Redis) only when `sync.over.asy
 
 Master switch. `true` starts the Redis return-route coordinator at boot.
 
-### `redis.host`
+### `soa.redis.host`
 
 | Type | Default |
 |------|---------|
@@ -1150,7 +1257,7 @@ Master switch. `true` starts the Redis return-route coordinator at boot.
 
 Redis host.
 
-### `redis.port`
+### `soa.redis.port`
 
 | Type | Default |
 |------|---------|
@@ -1158,7 +1265,15 @@ Redis host.
 
 Redis port.
 
-### `redis.password`
+### `soa.redis.username`
+
+| Type | Default |
+|------|---------|
+| `String` | — (blank) |
+
+ACL/RBAC username; blank = the default user (password-only or no auth). Set it for a named user such as an AWS ElastiCache RBAC user. Source from the environment (`${REDIS_USERNAME}`). Authentication is identical for standalone and cluster - AWS applies one credential set to the whole replication group.
+
+### `soa.redis.password`
 
 | Type | Default |
 |------|---------|
@@ -1166,7 +1281,7 @@ Redis port.
 
 Auth password; blank = no auth. Source from the environment (`${REDIS_PASSWORD}`).
 
-### `redis.ssl`
+### `soa.redis.ssl`
 
 | Type | Default |
 |------|---------|
@@ -1174,21 +1289,61 @@ Auth password; blank = no auth. Source from the environment (`${REDIS_PASSWORD}`
 
 Use TLS (`rediss://`).
 
-### `redis.database`
+### `soa.redis.database`
 
 | Type | Default |
 |------|---------|
 | `int` | `0` |
 
-Logical Redis database index.
+Logical Redis database index (standalone only; a Redis Cluster is database 0).
 
-### `redis.timeout.ms`
+### `soa.redis.timeout.ms`
 
 | Type | Default |
 |------|---------|
 | `long` (ms) | `5000` |
 
 Default Redis command timeout.
+
+### `soa.redis.cluster.detect`
+
+| Type | Default |
+|------|---------|
+| `String` (`auto` \| _other_) | `auto` |
+
+Cluster auto-detection switch. `auto` probes the seed at start-up (`INFO` -> `cluster_enabled:1` = cluster, otherwise standalone). Any other value (e.g. `off`) skips the probe and defers to `soa.redis.cluster.mode`. Falls back to the un-prefixed `redis.cluster.detect` when absent. See the [Sync-over-Async guide](sync-over-async.md#cluster).
+
+### `soa.redis.cluster.mode`
+
+| Type | Default |
+|------|---------|
+| `boolean` | `false` |
+
+Cluster on/off used when `soa.redis.cluster.detect` is not `auto`, and the fallback when an `auto` probe is inconclusive (e.g. `INFO` restricted): `true` = cluster client, `false` = standalone. The boolean form matches a common cache-config convention, so it can be shared with a co-resident `redis.cluster.mode` through the fallback. The return route is cluster-safe (every operation single-key; the one two-key delete is split so no command spans two hash slots).
+
+### `soa.redis.cluster.nodes`
+
+| Type | Default |
+|------|---------|
+| `String` | — (blank) |
+
+Cluster seed nodes as `host:port,host:port`. Blank = the single `soa.redis.host:soa.redis.port` seed - enough on its own, since the client discovers the shard topology from any seed (point it at an AWS ElastiCache configuration endpoint). Used only when the resolved selection is cluster.
+
+### `soa.redis.health.timeout`
+
+| Type | Default |
+|------|---------|
+| `duration` | `5s` |
+
+Timeout for the `soa.redis.health` probe - a single Redis PING on a dedicated connection built from the `soa.redis.*` parameters (one successful call proves connectivity, TLS, and authentication). Add `soa.redis.health` to `mandatory.health.dependencies` (or the optional list) to include the server in `/health`. (The plain `redis.health` route name is the health check of the [distributed cache](distributed-cache.md) module - see [Distributed Cache](#distributed-cache).)
+
+### `soa.redis.health.startup.grace`
+
+| Type | Default |
+|------|---------|
+| `duration` | `30s` |
+
+Start-up grace period for `soa.redis.health`: within it the check reports a placeholder healthy status while the Redis client warms up in the background, so `/health` never fails or blocks during application start-up. The probe's configuration is resolved lazily and re-resolved on every rebuild, and an unusable configuration (unbuildable values, or credentials the server rejects - the signature of a vault-published password that has not landed yet) is a passing `Waiting for Redis connection` status; only a genuine connectivity failure fails the check, with a 503 status and a key-value message (`text` + `code`).
 
 ### `sync.return.channel.prefix`
 
@@ -1204,7 +1359,7 @@ Prefix for the per-pod Pub/Sub return channel.
 |------|---------|
 | `long` (s) | `90` |
 
-TTL for the return-route key; should cover the REST timeout plus a buffer.
+TTL for a one-shot return-route key; should cover the REST timeout plus a buffer.
 
 ### `sync.response.ttl.seconds`
 
@@ -1212,7 +1367,7 @@ TTL for the return-route key; should cover the REST timeout plus a buffer.
 |------|---------|
 | `long` (s) | `30` |
 
-TTL for the response key (short rendezvous window).
+TTL for a one-shot rendezvous queue (short rendezvous window).
 
 ### `sync.max.pending.requests`
 
@@ -1222,7 +1377,83 @@ TTL for the response key (short rendezvous window).
 
 Per-pod ceiling on in-flight synchronous requests (backpressure).
 
-All `redis.*` and `sync.*` values support `${ENV_VAR:default}` substitution.
+### `sync.stream.ttl.seconds`
+
+| Type | Default |
+|------|---------|
+| `long` (s) | `1800` |
+
+TTL for a streaming rendezvous's route key and segment queue, refreshed on every post. Session-scale
+by design - an SSE notification channel legitimately idles for long stretches - and only the crash
+safety net: completed or closed streams delete their keys eagerly.
+
+### `sync.max.pending.streams`
+
+| Type | Default |
+|------|---------|
+| `int` | `1000` |
+
+Per-pod ceiling on concurrently open streaming rendezvous (backpressure).
+
+All `soa.redis.*` and `sync.*` values support `${ENV_VAR:default}` substitution.
+
+---
+
+## Distributed Cache {#distributed-cache}
+
+The [distributed cache](distributed-cache.md) (`v1.cache.redis`) uses the plain `redis.*` connection namespace — the same keys as `soa.redis.*` above without the `soa.` prefix (`redis.host`, `redis.port`, `redis.username`, `redis.password`, `redis.ssl`, `redis.database`, `redis.timeout.ms`, `redis.cluster.detect`, `redis.cluster.mode`, `redis.cluster.nodes`) — plus the cache tunables below.
+
+> **Running the cache alongside sync-over-async?** Give each module its own Redis client: `redis.*` here, the **complete** `soa.redis.*` set there. See [Separate Redis clients, by design](distributed-cache.md#separation). The `soa.redis.*` → `redis.*` fallback exists for backward compatibility (sync-over-async deployed alone), so leaving `soa.redis.*` unset points **both** modules at this server — workable, but you then own the eviction risk and share one memory budget. Two clients also mean two probes: `mandatory.health.dependencies=redis.health, soa.redis.health`.
+
+### `redis.cache.enabled`
+
+| Type | Default |
+|------|---------|
+| `boolean` | `false` |
+
+Master switch. `true` registers the cache action function `v1.cache.redis` and the `redis.health` check; `false` (default) loads neither.
+
+### `redis.cache.instances`
+
+| Type | Default |
+|------|---------|
+| `int` | `20` |
+
+Number of virtual-thread worker instances for `v1.cache.redis` (function concurrency) - **not** a connection count. Every instance shares the module's one multiplexed Lettuce connection.
+
+### `redis.cache.default.ttl`
+
+| Type | Default |
+|------|---------|
+| `duration` | `1h` |
+
+Default TTL applied to a write (`PUT` / `MPUT` / `LIST_PUSH`) that omits a `ttl` header. Every stored key carries a TTL from creation.
+
+### `redis.cache.key.prefix`
+
+| Type | Default |
+|------|---------|
+| `String` | — (blank) |
+
+Optional namespace prepended to every cache key (and stripped again from `MGET` results), so multiple applications can share one Redis without colliding.
+
+### `redis.health.timeout`
+
+| Type | Default |
+|------|---------|
+| `duration` | `5s` |
+
+Timeout for the `redis.health` probe (a single Redis PING on a dedicated `redis.*` connection). Add `redis.health` to `mandatory.health.dependencies` (or the optional list) to include the cache's Redis in `/health`. Same semantics as `soa.redis.health.timeout`.
+
+### `redis.health.startup.grace`
+
+| Type | Default |
+|------|---------|
+| `duration` | `30s` |
+
+Start-up grace period for `redis.health` - a placeholder healthy status while the client warms up, with the same lazy-config / waiting-on-credential semantics as `soa.redis.health.startup.grace`.
+
+All `redis.cache.*` and `redis.*` values support `${ENV_VAR:default}` substitution.
 
 ---
 
@@ -1248,9 +1479,10 @@ Map of file extension to MIME type. Example: `mime.types.svg: image/svg+xml`.
 
 | Type | Default |
 |------|---------|
-| `boolean` | `false` |
+| `boolean` | `true` |
 
-When `true`, JSON output uses `snake_case` field names instead of `camelCase`.
+JSON field names use `snake_case` by default — the cross-language wire convention shared with
+the Rust engine, whose serialization is snake_case at compile time. Set `false` for `camelCase`.
 
 ---
 
@@ -1329,7 +1561,7 @@ kafka.correlation.id.header=cid
 protect.info.endpoints=false
 
 # --- Serialization ---
-snake.case.serialization=false
+snake.case.serialization=true
 
 # --- Logging ---
 log.format=text

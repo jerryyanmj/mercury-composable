@@ -21,11 +21,12 @@ package org.platformlambda.mini.kafka;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.platformlambda.core.exception.AppException;
+import org.platformlambda.core.models.EventEnvelope;
 import org.platformlambda.core.util.Utility;
 
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -100,6 +101,24 @@ class KafkaHealthCheckTest {
         assertEquals("Kafka cluster is reachable", result.get("status"));
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    void reportsWaitingUntilTheLateCredentialLandsThenGoesLive() {
+        // simulate a @MainApplication credential bootstrap that has not run yet: the template is
+        // unusable at first (the client cannot be built), then completes while the app is running
+        AtomicReference<Properties> template = new AtomicReference<>(new Properties());
+        var health = new KafkaHealthCheck("kafka", template::get, 5000, 0);
+        Map<String, Object> waiting = (Map<String, Object>) health.handleEvent(HEALTH, null, 1);
+        assertEquals("Waiting for Kafka connection", waiting.get("status"));
+        // the bootstrap publishes the missing values - the next probe re-resolves and goes live,
+        // with no restart and no failed /health in between
+        template.set(consumerProps(kafka.bootstrapServers()));
+        Map<String, Object> live = (Map<String, Object>) health.handleEvent(HEALTH, null, 1);
+        assertEquals("Kafka cluster is reachable", live.get("status"));
+        assertEquals(kafka.bootstrapServers(), live.get("href"));
+    }
+
+    @SuppressWarnings("unchecked")
     @Test
     void unreachableClusterFailsTheHealthCheck() {
         // closed port + short client timeouts = fast failure
@@ -107,10 +126,15 @@ class KafkaHealthCheckTest {
         bad.setProperty("request.timeout.ms", "1000");
         bad.setProperty("default.api.timeout.ms", "2000");
         var health = new KafkaHealthCheck(bad, 0);
-        AppException offline = assertThrows(AppException.class,
-                () -> health.handleEvent(HEALTH, null, 1));
+        Object result = health.handleEvent(HEALTH, null, 1);
+        // an outage is a 503 response carrying a key-value map - the status code for the health
+        // aggregation to detect, text + code for the DevOps reader
+        assertInstanceOf(EventEnvelope.class, result);
+        EventEnvelope offline = (EventEnvelope) result;
         assertEquals(503, offline.getStatus());
-        assertTrue(offline.getMessage().contains("not reachable"));
+        Map<String, Object> body = (Map<String, Object>) offline.getBody();
+        assertEquals(503, body.get("code"));
+        assertTrue(body.get("text").toString().contains("not reachable"));
     }
 
     @Test

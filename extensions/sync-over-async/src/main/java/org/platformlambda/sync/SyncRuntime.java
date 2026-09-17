@@ -18,23 +18,33 @@
 
 package org.platformlambda.sync;
 
-import io.lettuce.core.RedisClient;
+import org.platformlambda.redis.RedisBackend;
 
 /**
- * Process-wide holder for the running {@link ReturnRouteCoordinator} and its {@link RedisClient}, populated
+ * Process-wide holder for the running {@link ReturnRouteCoordinator} and its {@link RedisBackend}, populated
  * once at startup by {@link SyncOverAsyncAutoStart}. Composable functions (the synchronous facade entry and
  * the reply task) obtain the coordinator from here - the analogue of the minimalist-kafka {@code KafkaRuntime}.
  */
 public final class SyncRuntime {
 
+    /**
+     * The module's self-contained correlation-id key ({@code "cid"}) - the flow-level contract shared by
+     * the facade tasks ({@code sync.prepare}, {@code sync.await}, {@code soa.reply}) and the flow data
+     * mappings ({@code model.cid -> header.cid}). Deliberately NOT the transport's wire header name: the
+     * Kafka header that carries the id between pods belongs to the Kafka library and is configurable there
+     * ({@code kafka.correlation.id.header}, default also {@code cid}); inbound flow adapters seed
+     * {@code model.cid} from the effective wire header, whatever it is named.
+     */
+    public static final String CID = "cid";
+
     private static ReturnRouteCoordinator coordinator;
-    private static RedisClient client;
+    private static RedisBackend<String> backend;
 
     private SyncRuntime() {}
 
-    static void set(ReturnRouteCoordinator coordinatorInstance, RedisClient clientInstance) {
+    static void set(ReturnRouteCoordinator coordinatorInstance, RedisBackend<String> backendInstance) {
         coordinator = coordinatorInstance;
-        client = clientInstance;
+        backend = backendInstance;
     }
 
     /** @return the running coordinator, or {@code null} if sync-over-async was not enabled at startup. */
@@ -42,15 +52,24 @@ public final class SyncRuntime {
         return coordinator;
     }
 
-    /** Close the coordinator and shut down the Redis client (idempotent). */
+    /**
+     * Diagnostic: the number of open streaming rendezvous on this pod ({@code 0} when sync-over-async is
+     * not enabled). A field-read delegate so observers need not obtain the {@link AutoCloseable}
+     * coordinator, whose lifecycle this holder owns.
+     */
+    public static int activeStreams() {
+        return coordinator == null ? 0 : coordinator.activeStreams();
+    }
+
+    /** Close the coordinator and shut down the Redis backend, in that order (idempotent). */
     public static void shutdown() {
         if (coordinator != null) {
             coordinator.close();
             coordinator = null;
         }
-        if (client != null) {
-            client.shutdown();
-            client = null;
+        if (backend != null) {
+            backend.close();
+            backend = null;
         }
     }
 }

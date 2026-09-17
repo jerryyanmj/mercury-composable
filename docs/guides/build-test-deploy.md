@@ -60,6 +60,16 @@ java -jar target/lambda-example-x.y.z.jar
 The lambda-example is a sample application that you can use as a template to write your own code. Please review
 the pom.xml and the source directory structure.
 
+> **Building the whole repository**: from the repo root, use `mvn clean install` — not `mvn test`.
+> Some modules resolve a dependency's version from its *packaged jar*; the AI contract provider, for
+> example, reads `/META-INF/maven/org.platformlambda/platform-core/pom.properties`, which Maven writes
+> only when the module is packaged. A reactor-wide `mvn test` never packages upstream modules — they
+> resolve as bare `target/classes` directories — so that module aborts at start-up with
+> *"the Mercury dependency assembly is incomplete"*, no matter what change you are verifying.
+> `mvn clean install` packages and installs each module in dependency order, which is also what CI runs.
+> (Testing a single module with `mvn test -f <module>/pom.xml` is fine: its dependencies then resolve
+> from your local Maven repository as jars.)
+
 In the lambda-example project root, you will find the following directories:
 
 ```shell
@@ -234,6 +244,31 @@ than JSON-Path of `map.getElement("$.body.complex[*]")`. Example-4 is for
 illustration purpose only. You should use JSON-Path syntax for more sophisticated
 search only when the basic retrieval method does not address your need.
 
+### Pausing in a unit test
+
+An asynchronous expectation sometimes needs a short poll-and-wait loop. When a completion signal
+exists, await it directly — `CountDownLatch.await`, `Future.get` or `BlockingQueue.poll` with a
+timeout. For a condition with no signal to await (e.g. an external state that another thread will
+eventually change), poll it with `Utility.getInstance().sleep(milliseconds)` between checks instead
+of `Thread.sleep()`:
+
+```java
+// poll until the collector has received its first frame
+for (int i = 0; i < 500; i++) {
+    if (!collector.frames.isEmpty()) {
+        return;
+    }
+    Utility.getInstance().sleep(10);
+}
+fail("expected a first frame, got none in time");
+```
+
+Static analysis discourages `Thread.sleep()` in test code (for example, SonarQube rule `java:S2925`),
+and the platform helper keeps the quality gate green without a rule waiver: it waits on a timed queue
+poll rather than calling `Thread.sleep()` directly. It also handles `InterruptedException` for you
+(restoring the thread's interrupt flag), so the enclosing test method does not need a
+`throws InterruptedException` clause for the pause.
+
 ## Event Flow mocking framework
 
 We recommend using Event Script to write Composable application for highest level of decoupling.
@@ -391,8 +426,8 @@ A sample Dockerfile for an executable JAR may look like this:
 FROM mcr.microsoft.com/openjdk/jdk:21-ubuntu
 EXPOSE 8083
 WORKDIR /app
-COPY target/rest-spring-3-example-x.y.z.jar .
-ENTRYPOINT ["java","-jar","rest-spring-3-example-x.y.z.jar"]
+COPY target/rest-spring-4-example-x.y.z.jar .
+ENTRYPOINT ["java","-jar","rest-spring-4-example-x.y.z.jar"]
 ```
 
 ## Distributed tracing
@@ -436,13 +471,24 @@ Add the dependency and it auto-registers (no code):
 </dependency>
 ```
 
-Configure the collector endpoint and service name in `application.properties`:
+Then turn it on and configure the collector endpoint and service name in `application.properties`:
 
 ```properties
+# master switch - the jar alone exports nothing; the default is false
+otel.forwarding=true
 otel.exporter.otlp.endpoint=http://localhost:4318/v1/traces
 otel.service.name=my-application
-# otel.trace.forwarder.enabled=false   # disable export without removing the jar
 ```
+
+The endpoint must include the **signal path** (`/v1/traces`), not just the collector's base URL — a
+vendor base URL answers 404, and the forwarder says so in the failure it logs.
+
+`otel.forwarding` is what lets an application carry the dependency while DevOps decides, per
+environment, whether traces leave the process: leave it unset (or `false`) to deploy the same
+artifact with export off, and turn it on at launch with `-Dotel.forwarding=true` — no rebuild. See
+[Exporting telemetry](observability.md#otel-forwarder) for backend credentials, and the
+[Dynatrace certification report](../test-reports/otel-dynatrace-certification.md) for a worked
+end-to-end run.
 
 See `extensions/opentelemetry-forwarder/README.md` for the full metric-to-span mapping.
 

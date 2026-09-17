@@ -15,9 +15,10 @@ Three triggers:
 1. **Cadence** — when `sessions_since_last_review ≥ review_every` (from
    `memory/decay-policy.md`). Checked during the post-session update.
 2. **On command** — the user says *"review memory"* / *"compact memory"*.
-3. **Size** — when `memory/continuity.md` holds more than `continuity_max_facts`
-   decaying facts/threads (the primary signal — a count, immune to verbosity and session
-   velocity), **or** exceeds `continuity_max_lines` (a coarse backstop).
+3. **Size** — when the live layer (`memory/continuity.md` + the `memory/open-threads/`
+   files) holds more than `continuity_max_facts` decaying facts/threads (the primary
+   signal — a count, immune to verbosity and session velocity), **or** `continuity.md`
+   exceeds `continuity_max_lines` (a coarse backstop).
 
 > **The triggers don't rely on the agent remembering.** `memory-lint` surfaces all three as
 > advisories — `[review-overdue]` (cadence) and `[continuity-bloat]` (facts/lines) — so a lapsed
@@ -27,8 +28,14 @@ Three triggers:
 
 Within a review, one more cadence is checked — **invariant verification**: when
 `sessions_since_last_invariant_check ≥ verify_invariants_every`, the review prompts a
-human to re-confirm the never-decay facts (routine step 6). It rides on the review, so
+human to re-confirm the never-decay facts (routine step 7). It rides on the review, so
 it never fires more often than reviews do.
+
+Also within a review — **stalled-thread gating** (v4.40.0): every unchecked Open Thread not
+referenced for more than `thread_stale_window` sessions is listed in **one human closure gate**
+(routine step 8) — a stalled thread is a signal for closure, and the decision is the owner's.
+Like invariant verification it rides on the review; between reviews `memory-lint` surfaces each
+stalled thread as `[thread-stale]`, so the condition cannot hide.
 
 `last_review` and `last_invariant_check` are tracked in `continuity.md` Project State
 (each a `YYYY-MM-DD` plus the session file it last ran through).
@@ -36,9 +43,16 @@ it never fires more often than reviews do.
 ## Inputs
 
 - `memory/continuity.md` — facts + metadata
+- `memory/open-threads/` — Open Threads, one file per thread (v4.39.0)
 - `memory/decay-policy.md` — windows + triggers
 - `memory/sessions/` — the event log; read each `## Memory References`
 - `memory/archive/` — cold storage + `INDEX.md`
+
+> **Run reviews serialized.** Start from an **up-to-date default branch** and commit the
+> result promptly, before other memory work: the metadata refresh rewrites many footers at
+> once, and running it on a stale branch tangles mechanical churn with teammates' in-flight
+> substantive edits — the worst conflict shape. (Reviews are cadence-gated and effectively
+> single-actor; this just makes that explicit.)
 
 ---
 
@@ -50,12 +64,14 @@ it never fires more often than reviews do.
    - `Referenced` / `Created`: increment `uses`; set `last_used` to the latest
      session date that names the id.
    - `Reactivated`: if the id currently lives in the archive, move it back into
-     `continuity.md` as `active`, then apply the Referenced bump.
+     the live layer as `active` (a fact into `continuity.md`; a thread back to its
+     own `memory/open-threads/thread-<id>.md`), then apply the Referenced bump.
    - `Superseded: <old> → <new>` (or `<old> (invalidated)`): confirm the old fact is
      marked `tier: superseded` + `superseded-by: <new>` (the agent marks it at write
      time — `DECAY.md` §9; set it here if missing) and the successor carries
      `supersedes: <old>`.
-3. **Re-tier every fact.** For each fact in `continuity.md`, compute
+3. **Re-tier every fact.** For each fact in `continuity.md` and each thread file in
+   `memory/open-threads/`, compute
    `sessions_since_last_used` (count files — `DECAY.md` §4) and apply the
    `DECAY.md` §5 rules in order. Record each tier change.
    > **Preferred — steps 2–3 are pure arithmetic; run the `refresh-metadata` skill**
@@ -81,7 +97,15 @@ it never fires more often than reviews do.
    false, not merely stale — and carry their `superseded-by` link into the archive.
 5. **Sweep completed threads.** `- [x]` Open Threads whose completion is older than
    `archive_window` sessions move to the archive the same way (usually the biggest
-   lean-up). Keep recently-completed threads for context.
+   lean-up) — for a thread file the sweep moves its block to the quarter file +
+   `INDEX.md` and **deletes the file** (`archive-fact` handles thread files; the move
+   preserves everything). Keep recently-completed threads for context — **but condense
+   them to stubs** (v4.38.0): while a completed thread waits out `archive_window`, its
+   record is 3–6 lines — outcome, PR/commit/release refs, one durable lesson, and its
+   `origin:` pointer. Trim prose only; never edit the id or footer metadata. Nothing
+   is lost — the full narrative lives in the thread's origin session log (immutable),
+   and `[closed-thread-bloat]` is the advisory that measures this. A condensed thread
+   later archives as its stub; retrieval follows `origin:` to the full record.
 6. **Verify archival (required — guards against a miscounted `sessions_since_last_used`).**
    Archival is the costliest error, and "sessions since last used" is the easiest count to get wrong.
    A *"use"* is an id under a session's `## Memory References` (§2 / `DECAY.md` §2) — **not** a passing
@@ -115,8 +139,25 @@ it never fires more often than reviews do.
    confirms (checks the thread off) or supersedes the false ones (§9). Then set
    `last_invariant_check` to today + the latest session file. (Never-decay ≠
    never-checked.) If not due, skip this step.
-8. **Stamp.** Set `last_review` to today + the latest session file name.
-9. **Summarise.** Write a `## Memory Review` block into *this* session's log — list the archived /
+8. **Gate stalled threads (v4.40.0).** For each **unchecked** Open Thread whose
+   `sessions_since_last_used` exceeds `thread_stale_window` (a never-referenced thread counts
+   from `created`; `memory-lint` lists them as `[thread-stale]`), raise **one** Open Thread —
+   the human closure gate — naming every stalled thread with its count:
+   `- [ ] **Close stalled threads (due):** <id> (N sessions), <id> (N sessions) — for each, close it, or re-affirm it (DECAY.md §6)`
+   (id `ot-close-stalled-threads-<YYYYMMDD>`, in its own `thread-<id>.md`; if an unchecked
+   gate already exists, add the new ids to it rather than raising a second). Re-read each
+   listed thread's body with the human — strike items that shipped elsewhere — then the
+   **human** decides per thread: **close** it (`- [x]` + a 3–6-line close record; anything
+   undelivered is recorded as *deliberately dropped*, never silently lost — a `(blueprint)`
+   gap closing this way is an altitude decision, `DECAY.md` §12), or **re-affirm** it (name it
+   under *this* session's `## Memory References` with the reason it stays open — the only thing
+   that resets its count; re-affirmation is the exception, not the default). The review
+   **never closes a thread itself** — a stalled thread is a signal for closure, and the
+   decision is the owner's (`never-pick-a-winner`). Check the gate off once every listed
+   thread is dispositioned; the sweep archives it later like any completed thread. If nothing
+   is stalled, skip this step.
+9. **Stamp.** Set `last_review` to today + the latest session file name.
+10. **Summarise.** Write a `## Memory Review` block into *this* session's log — list the archived /
    swept / reactivated ids **there**, in that block.
    **⚠️ Do not list archived ids under `## Memory References`.** Archiving a fact is **not** a "use."
    `memory-lint` (and the by-hand check) count any id under `## Memory References` as referenced
@@ -127,6 +168,9 @@ it never fires more often than reviews do.
    invariant-reverify thread you created). The `## Memory Review` block is *not* parsed as references,
    so archived ids belong there. *(Learned the hard way: a review summary that listed its archived ids
    under `## Memory References` threw 13 spurious `over-archived` ERRORs.)*
+   **Inspecting a stalled thread as gate evidence is not a use either** — list a stalled thread
+   here only when the human **re-affirmed** it (that entry *is* the reset, `DECAY.md` §6); the
+   gate thread you raised is listed as Created.
 
 **Contradiction backstop.** The review reads every fact anyway, so give them a quick
 contradiction scan — the write-time check (`DECAY.md` §10) may have missed one, or two
@@ -135,6 +179,10 @@ facts may have drifted into conflict over time. Surface any conflict as a
 Open Thread; never silently reconcile or pick a winner. Extend the same scan **up the
 altitudes** (VBDI, `DECAY.md` §12): flag any Implementation / Design / Blueprint item that
 no longer serves the one above it — `- [ ] Drift: <item> doesn't serve <id>`.
+Extend it to **each unchecked thread's body** as well (v4.40.0): strike items that shipped
+elsewhere; a thread whose every item has verifiably shipped closes as a normal completion, and
+one with anything left undelivered goes to the human closure gate (step 8) — never silently
+dropped. A thread's *content* carries no metadata, so only a read catches this.
 
 **Smoke test.** A review is also a natural time to run `memory/smoke-test.md` — a quick
 manual check that memory still answers the orientation questions a newcomer would ask.
@@ -151,7 +199,8 @@ session whose `## Memory References` names the id under `Created` (`DECAY.md` §
 ## Reactivation
 
 When an archived id is named in a session (`Referenced`/`Reactivated`):
-- move the fact from its `archive/<quarter>.md` back into `continuity.md`,
+- move the fact from its `archive/<quarter>.md` back into the live layer
+  (`continuity.md`; a thread back to `memory/open-threads/thread-<id>.md`),
 - set `tier: active`, refresh `last_used`, increment `uses`,
 - remove or annotate its `archive/INDEX.md` line,
 - note it in the review summary.
@@ -173,6 +222,7 @@ This two-way movement is what keeps the system smart rather than merely lossy.
 - Archive-verify: pass (no archived id appears in the last archive_window sessions; no id in both places)
 - Tier changes:  6  (2 working→active, 1 active→archive-candidate, 3 →archived)
 - Invariants:    not due (next re-verify in 6 sessions)   # or: "prompted — 2 invariants up for re-confirmation"
+- Stalled threads: 2  (gate ot-close-stalled-threads-20260620 — legacy-soap-adapter 57, csv-bulk-import 44)   # or: "none"
 - Promoted core: 0  (auto-core off; core is human-set)
 ```
 

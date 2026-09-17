@@ -295,6 +295,29 @@ platform.release("another.function");
 
 The above API will unload the function from memory and release it from the "event loop".
 
+### Register a route pool
+
+When many concurrent conversations each need strict event ordering, register a
+"route pool" - a set of private singleton routes `{prefix}.{n}` sharing one stateless
+function. Each member runs exactly one worker, so it is a strict FIFO lane: an
+application checks out a lane for one conversation's lifetime to keep that
+conversation's events in order, while other conversations flow through their own lanes
+concurrently. This is the pattern behind the HTTP edge's SSE reply lanes
+(`async.http.response.stream.{n}`).
+
+```java
+// registers my.lane.0, my.lane.1, ... my.lane.4 - route pools are always private
+List<String> lanes = platform.registerRoutePool("my.lane", new MyLaneFunction(), 5);
+
+// releases all members and the pool itself
+platform.releaseRoutePool("my.lane");
+```
+
+The returned list contains the generated member routes in order, ready to seed your own
+checkout structure - lane checkout and return are your application's concern; the
+platform covers registration only. Registering an existing pool reloads it: the previous
+member set is released first.
+
 ### Check if a function is available
 
 You can check if a function with the named route has been deployed.
@@ -548,6 +571,17 @@ po.annotateTrace("hello", "world");
 Annotations of key-values, if any, will be recorded in the trace and they are not accessible by
 another function.
 
+**The worker-return deadline.** The per-function trace context is keyed to the worker thread
+and torn down — and the span's telemetry emitted — the moment `handleEvent` returns. Two
+consequences for reactive code:
+
+- `po.getTrace()` returns the current `TraceInfo` (trace id, path, and annotations) **only on
+  the worker thread**; called from a `Mono`/`Flux` completion callback it returns `null`.
+  Capture the `TraceInfo` on the worker thread first if the async continuation needs it.
+- `annotateTrace(...)` after the worker has returned is a **silent no-op** — for a
+  `Mono`-returning function, annotate *before* returning the `Mono`. Events sent from a
+  completion callback still carry the trace id and path, but get no span parenting.
+
 Please be moderate to attach only *small amount of transaction specific information* to the
 performance metrics of your functions.
 
@@ -653,6 +687,59 @@ To interpret an event response from a RPC call, you can use the following PostOf
 MyPoJo result = po.getEventBodyAsPoJo(responseEvent, MyPoJo.class);
 ```
 
+## Binary serialization with MsgPack
+
+The platform serializes event payloads for you, so user code rarely touches the serializer. When your
+application needs its own compact binary format - for example, storing a value in a distributed cache
+or a database blob - you can use the `MsgPack` class directly as a general purpose serializer:
+
+```java
+public byte[] packMapOrList(Object obj) throws IOException;
+public Object unpackMapOrList(byte[] bytes) throws IOException;
+```
+
+```java
+private static final MsgPack msgPack = new MsgPack();
+
+Map<String, Object> profile = Map.of("name", "Alice", "email", "alice@example.com");
+byte[] value = msgPack.packMapOrList(profile);          // store this
+Map<String, Object> restored = (Map<String, Object>) msgPack.unpackMapOrList(value);
+```
+
+`MsgPack` is stateless and thread-safe - a single `static final` instance is the recommended usage.
+
+> **Only a Map or a List is accepted.** A PoJo or a Java primitive is not supported directly: encode
+> it in your application first. For a PoJo, convert it into a Map:
+> ```java
+> Map<String, Object> asMap = SimpleMapper.getInstance().getMapper().readValue(pojo, Map.class);
+> byte[] value = msgPack.packMapOrList(asMap);
+> ```
+> Passing anything else throws `IllegalArgumentException`.
+
+### Why not `pack` / `unpack`?
+
+The older pair is the **event payload codec**, not a general purpose serializer:
+
+```java
+public byte[] pack(Object obj) throws IOException;
+public Object unpack(byte[] bytes) throws IOException;
+```
+
+It accepts a PoJo or a primitive by wrapping the value with its type information under the reserved
+keys `_T` (type) and `_D` (data), which `unpack` then strips. That is correct for event transport, but
+it leaks into general use: a map of your own that happens to contain a `_T` key would be *unwrapped*
+by `unpack` instead of being returned as you stored it. `packMapOrList` / `unpackMapOrList` never add
+or interpret those keys, so what you pack is exactly what you get back.
+
+Use `pack` / `unpack` for event payload transport; use `packMapOrList` / `unpackMapOrList` for your
+application's own serialization.
+
+> **Cross-language note.** `packMapOrList` writes plain MsgPack key-values with no framework-specific
+> wrapper, so any MsgPack-capable language (Rust, Python, Node.js, Go, …) can read the value. Prefer it
+> over `EventEnvelope.toBytes()` when a stored value must be read by another language pack - the
+> envelope's compacted encoding is a Java-side wire format. A worked example is the
+> [distributed cache guide](distributed-cache.md), where all three layers share one cached value.
+
 ## Minimalist API design
 
 As a best practice, we advocate a minimalist approach in API integration.
@@ -680,9 +767,9 @@ sequential, object-oriented and reactive programming styles.
 The core-engine has a built-in lightweight non-blocking HTTP server, but you can also use Spring Boot and other
 application server framework with it.
 
-A sample Spring Boot integration is provided in the "rest-spring-3" project. It is an optional feature, and you can
+A sample Spring Boot integration is provided in the "rest-spring-4" project. It is an optional feature, and you can
 decide to use a regular Spring Boot application with Mercury Composable or to pick the customized Spring Boot in the
-"rest-spring-3" library.
+"rest-spring-4" library.
 
 ## Application template for quick start
 

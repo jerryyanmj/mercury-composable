@@ -113,7 +113,7 @@ class FileElasticStore implements ElasticStore {
                     if (!runningInCloud) {
                         scanExpiredStores(tmpRoot, baseDir);
                     }
-                    Runtime.getRuntime().addShutdownHook(new Thread(FileElasticStore::shutdown));
+                    platform.onShutdown(FileElasticStore::shutdown);
                     platform.getVertx().setPeriodic(KEEP_ALIVE_INTERVAL, t -> keepAlive());
                     log.info("Elastic file store ready ({})", baseDir);
                 }
@@ -304,13 +304,6 @@ class FileElasticStore implements ElasticStore {
     @Override
     public boolean isClosed() {
         return writeCounter == 0;
-    }
-
-    @Override
-    public boolean supportsVirtualThreadDispatch() {
-        // per-route files, no shared lock, no synchronized in the hot path — a blocking segment I/O op
-        // parks the virtual thread's carrier cleanly instead of pinning it, so off-loop dispatch is safe.
-        return true;
     }
 
     private void resetCounter() {

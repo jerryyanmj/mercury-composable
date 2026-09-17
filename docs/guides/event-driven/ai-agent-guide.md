@@ -37,8 +37,10 @@ Functions are **not called directly**. The framework loads them at startup:
 4. Any caller (REST endpoint, Event Script flow, another function) addresses the function **only by
    its route name string**.
 
-A function that violates the contract (duplicate route, invalid `instances`, bad interface) causes the
-application to fail at startup — correctness is checkable before runtime.
+Contract violations are caught at startup, but the application **keeps starting**: a duplicate
+route reloads the earlier registration with a `Reloading` warning, and a bad interface or
+invalid route is skipped with an error log. Check the startup log for these messages —
+correctness is checkable before runtime, but not by relying on a crash.
 
 ---
 
@@ -82,6 +84,11 @@ public interface TypedLambdaFunction<I, O> {
 
 - `headers` — request headers (`Map<String, String>`); case-insensitive lookup via `EventEnvelope.getHeader()`.
 - `input` — the deserialized request body. Type `I` can be `Map<String, Object>`, a PoJo, or a primitive.
+  PoJo shape: serialization is **field-driven** (the customized Gson reads/writes fields, so
+  getters/setters are optional and a no-arg constructor is not required by the Gson path —
+  though keeping one is good practice for portability); field types are enforced on
+  deserialization, which is what makes a PoJo the sanctioned fix for wire-level numeric
+  downcasts.
   For key-by-key data mapping (Event Script / Knowledge Graph), `I` must be `Map` or a PoJo —
   not a `List`.
 - `instance` — the worker index (0 to `instances − 1`). Pass to `new PostOffice(headers, instance)`.
@@ -346,6 +353,25 @@ curl -s -X POST http://127.0.0.1:8085/api/greeting \
 ```
 
 ---
+
+## Scaffolding a project from the template {#scaffolding}
+
+Start a new event-driven application from `examples/lambda-example` and trim against this
+manifest — every file below is load-bearing unless marked otherwise:
+
+| File | Role | Trim? |
+|---|---|---|
+| `pom.xml` | Build; set your own artifact/group ids | keep (edit ids) |
+| `application.properties` (main **and** test) | App name, `rest.server.port` — give the test copy a **distinct port** so tests and a running app never collide | keep (edit values) |
+| `rest.yaml` | Maps URLs to your function routes | replace the example's `hello.*` routes with yours; keep the `cors`/`headers` blocks your routes reference |
+| `event-over-http.yaml` | Outbound event-over-HTTP targets | drop unless you call another app |
+| `errorPage.html`, `public/`, `helloworld.txt` | Static-content demo assets | drop unless serving static content |
+| `app-log-context.yaml` | Log-context enrichment demo | drop unless used |
+| Main class annotated `@MainApplication` | App entry point | keep (rename) |
+
+The minimal `rest.yaml` for a derived project is **just your own endpoints**: one entry per
+URL → function route (plus a health endpoint if you register one). Everything else in the
+template's route list is demonstration.
 
 ## See also {#see-also}
 

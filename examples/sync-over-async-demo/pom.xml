@@ -6,21 +6,22 @@
     <groupId>org.platformlambda</groupId>
     <artifactId>sync-over-async-demo</artifactId>
     <packaging>jar</packaging>
-    <version>4.11.9</version>
-    <name>Worked example: sync-over-async REST facade over Kafka + Redis</name>
+    <version>4.12.11</version>
+    <name>Worked example: sync-over-async facade over Kafka + Redis</name>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>4.1.0</version>
+        <version>4.1.1</version>
         <relativePath/>
     </parent>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <tomcat.version>11.0.24</tomcat.version>
-        <netty.version>4.2.16.Final</netty.version>
-        <jackson-2-bom.version>2.22.1</jackson-2-bom.version>
+        <tomcat.version>11.0.25</tomcat.version>
+        <netty.version>4.2.17.Final</netty.version>
+        <jackson-2-bom.version>2.22.2</jackson-2-bom.version>
+        <jackson-bom.version>3.2.2</jackson-bom.version>
         <log4j2.version>2.26.1</log4j2.version>
         <!-- Security override for the transitive httpcore5/httpcore5-h2 (Snyk HIGH, CWE-770) pulled
              in via minimalist-kafka's Confluent registry client. Spring Boot's dependencyManagement
@@ -44,13 +45,13 @@
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-bom</artifactId>
-                <version>2025.0.6</version>
+                <version>2025.0.7</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
-            <!-- Converge Guava to platform-core's version: Confluent's serdes (via sync-over-async ->
-                 minimalist-kafka) otherwise win with an older 32.0.1. The failureaccess companion already
-                 arrives transitively; this keeps the demo on the same Guava as the reactor. -->
+            <!-- Converge Guava to platform-core's version: Confluent's serdes (via minimalist-kafka)
+                 otherwise win with an older 32.0.1. The failureaccess companion already arrives
+                 transitively; this keeps the demo on the same Guava as the reactor. -->
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
@@ -61,11 +62,30 @@
 
     <dependencies>
         <!-- sync-over-async brings the facade tasks (sync.prepare/sync.await/soa.reply) + the Redis
-             return-route coordinator, and transitively minimalist-kafka + event-script + platform-core. -->
+             return-route coordinator (platform-core arrives transitively). It is transport-neutral,
+             so the application declares its Kafka library itself - see minimalist-kafka below. -->
         <dependency>
             <groupId>org.platformlambda</groupId>
             <artifactId>sync-over-async</artifactId>
-            <version>4.11.9</version>
+            <version>4.12.11</version>
+        </dependency>
+
+        <!-- The Kafka legs: notification function + flow adapter (brings event-script-engine and the
+             Kafka client). Composed with the facade by this application - the extension does not
+             impose a transport. -->
+        <dependency>
+            <groupId>org.platformlambda</groupId>
+            <artifactId>minimalist-kafka</artifactId>
+            <version>4.12.11</version>
+        </dependency>
+
+        <!-- Embedded Redis (real redis-server binary) for the emulated-LLM round-trip test:
+             the whole streaming path runs in CI against a real rendezvous, no network, no key. -->
+        <dependency>
+            <groupId>com.github.codemonstur</groupId>
+            <artifactId>embedded-redis</artifactId>
+            <version>1.4.3</version>
+            <scope>test</scope>
         </dependency>
 
         <dependency>

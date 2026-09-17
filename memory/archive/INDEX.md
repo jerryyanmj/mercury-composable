@@ -100,3 +100,79 @@
 - thread-event-envelope-interop — (design — COMPLETED 2026-07-22 with the v4.10.0 release) Common event envelope wire format — completed thread swept (older than archive_window) — 2026-Q3.md
 - thread-sonar-4-9-1-field-rejection — (field support — CLOSED 2026-07-26 by the review; close condition subsumed by the v4.10.6 — completed thread swept (older than archive_window) — 2026-Q3.md
 - thread-reverify-invariants-2026q2 — (CLOSED 2026-07-27 — ALL 15 CONFIRMED by Eric in a one-by-one walkthrough with fresh — completed thread swept (older than archive_window) — 2026-Q3.md
+- release-4-8-0-shipped — Release 4.8.0 — SHIPPED 2026-07-10 (tag `v4.8.0` on `5d9fda45`; PRs #153-#157): twin-kafka… — faded — 2026-Q3.md
+- bp-graph-workflow-suspension — (blueprint — RATIFIED by Eric 2026-07-28; CLOSED by Eric's gate 2026-07-30 — realized on — faded — 2026-Q3.md
+- thread-release-4-11-0 — (release — SHIPPED AND PUBLISHED 2026-07-30, both repos in lock-step) — faded — 2026-Q3.md
+- release-4-8-1-shipped — Release 4.8.1 — SHIPPED 2026-07-11 (tag `v4.8.1` on `3d226c5b`; PRs #159-#161). Durable — faded (sslu > archive_window 20; 2026-08-21 review) — 2026-Q3.md
+- thread-release-4-11-4 — (release — SHIPPED AND PUBLISHED 2026-08-08, both repos in lock-step at — faded (sslu > archive_window 20; 2026-08-21 review) — 2026-Q3.md
+- thread-task-ttl-override — (feature — COMPLETE ON BOTH ENGINES: Rust half shipped 2026-08-01 in — faded (sslu > archive_window 20; 2026-08-21 review) — 2026-Q3.md
+- thread-release-4-11-1 — (release — SHIPPED 2026-08-01, Java only — the first Java-ahead-of-Rust release — faded (sslu > archive_window 20; 2026-08-21 review) — 2026-Q3.md
+- thread-graph-suspend-resume — (feature — COMPLETE across P1-P5, both engines) Graph suspend/resume: workflow suspension — faded (sslu > archive_window 20; 2026-08-21 review) — 2026-Q3.md
+- thread-sonar-4-10-4-field-rejection — (field support — CLOSED 2026-07-26: field rescan of v4.10.6 PASSED the Sonar gate with a — faded (sslu > archive_window 20; 2026-08-21 review) — 2026-Q3.md
+- thread-kafka-client-version-upgrade — (planned — CLOSED 2026-08-03: executed by the v4.11.2 release, which gained a CVE — faded (sslu > archive_window 20; 2026-08-21 review) — 2026-Q3.md
+- conv-helpers-docker-less — The `helpers/` standalone servers exist for Docker-less developer machines and are — faded — 2026-Q3.md
+- memory-health-fact-cap-2026-08-14 — (memory-health) Post-review continuity holds 34 decay-eligible facts above the — faded — 2026-Q3.md
+- thread-release-4-11-8 — (release — SHIPPED AND PUBLISHED 2026-08-10 local / 2026-08-11 UTC, both repos in — faded — 2026-Q3.md
+- thread-release-4-11-9 — (release — SHIPPED AND PUBLISHED 2026-08-11, both repos in lock-step at v4.11.9; cut — faded — 2026-Q3.md
+- thread-untitled-dry-run-identity — (fix — MERGED ON BOTH ENGINES 2026-08-11, all CI green; rides the next release. — faded — 2026-Q3.md
+- thread-dry-run-graph-scope-fix — (fix — MERGED ON BOTH ENGINES 2026-08-11, all CI green; rides the next release. — faded — 2026-Q3.md
+- thread-release-4-11-7 — (release — SHIPPED AND PUBLISHED 2026-08-10 local / 2026-08-11 UTC, Java only — minimalist… — faded — 2026-Q3.md
+- thread-kafka-kip848-auto — (feature — MERGED 2026-08-11 as — faded — 2026-Q3.md
+- thread-release-4-11-6 — (release — SHIPPED AND PUBLISHED 2026-08-10, both repos in lock-step at — faded — 2026-Q3.md
+- thread-release-4-11-5 — (release — SHIPPED 2026-08-09, both repos in lock-step at v4.11.5) v4.11.5 — — faded — 2026-Q3.md
+- thread-field-graph-scoped-state-and-error-context — (feature — COMPLETE ON BOTH ENGINES 2026-08-10, same day as the field review; — faded — 2026-Q3.md
+- thread-field-review-rationalization — (field validation — CLOSED 2026-08-10: the review WENT WELL. The team demoed a — faded — 2026-Q3.md
+- thread-suspend-resume-rationalization — (design+feature — RATIFIED by Eric 2026-08-07 (R1-R7; R2 refined by Eric); — faded — 2026-Q3.md
+- thread-release-4-11-3 — (release — SHIPPED 2026-08-07, Java only — no Rust-ported surface touched; Rust — faded — 2026-Q3.md
+- thread-kafka-consumer-resilience — (field support — reported 2026-08-06 by a field member's code review; all three — faded — 2026-Q3.md
+- thread-redis-getdel-compat — (field support — COMPLETE ON BOTH ENGINES: Rust half shipped 2026-08-01 in — faded — 2026-Q3.md
+- thread-kafka-2nd-level-routing — (feature — design RATIFIED 2026-07-30; MERGED same day as — faded — 2026-Q3.md
+- thread-release-4-10-2 — (release — CLOSED 2026-07-23) v4.10.2 SHIPPED in lock-step — metadata contract (#221), — faded — 2026-Q3.md
+- thread-release-4-10-1 — (release — CLOSED 2026-07-23) v4.10.1 SHIPPED in lock-step — telemetry presentation — faded — 2026-Q3.md
+- stack-integration-spring — Integration: Spring Boot (rest-spring-3 / -4 modules) — superseded by stack-integration-spring-boot4 — 2026-Q3.md
+- ot-reverify-invariants-20260821 — Re-verify invariants (2026-08-21 review) — CLOSED same day: all 15 confirmed — faded (completed threads past archive_window 20) — 2026-Q3.md
+- thread-otlp-export-retry — (fix — MERGED 2026-08-19 as — faded (completed threads past archive_window 20) — 2026-Q3.md
+- thread-release-4-11-10 — (release — SHIPPED AND PUBLISHED 2026-08-21, both repos lock-step at v4.11.10) — faded (completed threads past archive_window 20) — 2026-Q3.md
+- thread-config-plugin — (feature — MERGED BOTH ENGINES 2026-08-21, shipped in v4.11.10: Java — faded (completed threads past archive_window 20) — 2026-Q3.md
+- thread-objectstream-expiry-test-determinism — (fix — test-only; MERGED 2026-08-21 as — faded (completed threads past archive_window 20) — 2026-Q3.md
+- thread-release-4-11-11 — (release — SHIPPED 2026-08-23, both repos lock-step at v4.11.11; releases — faded (completed thread past archive_window 20) — 2026-Q3.md
+- thread-dynamic-statement-targets — (feature — COMPLETE BOTH ENGINES 2026-08-10, shipped in v4.11.6: Java — faded (completed threads past archive_window 20) — 2026-Q3.md
+- thread-graph-task-model-staging — (feature+fix — COMPLETE BOTH ENGINES 2026-08-08, shipped in v4.11.5: Java — faded (completed threads past archive_window 20) — 2026-Q3.md
+- thread-tutorial-14-decision — (feature — COMPLETE BOTH ENGINES 2026-08-07: Java — faded (completed threads past archive_window 20) — 2026-Q3.md
+- thread-release-4-11-2 — (release — SHIPPED 2026-08-03, Java-only) v4.11.2 — the field lz4-CVE security — faded — 2026-Q3.md
+- graph-suspend-resume-design — Graph workflow suspension: short runs + external state store, encapsulated in skills — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- ot-progressive-rendering-v4120 — (release+feature — v4.12.0 SHIPPED AND PUBLISHED 2026-08-30, all four repos: — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- thread-ai-contract-provider — (feature — MERGED 2026-08-21, shipped in v4.11.10: — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- thread-field-scan-remediation-20260825 — (field support — MERGED 2026-08-25/26: — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- thread-sonar-4-11-x-field-round-3 — (field support — round-3 fixes MERGED 2026-08-07: — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- route-pool-registration-design — Route pools are a first-class platform registration (ADR-0020; Eric ratified D1–D10 — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- ot-route-pool-api — (feature — SHIPPED BOTH ENGINES 2026-08-30, rides the next release: Java — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- thread-http-response-streaming — (feature — COMPLETE BOTH ENGINES 2026-08-28/29: Java — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- thread-spring-round-20260827 — (maintenance + BREAKING — v4.11.12 SHIPPED AND PUBLISHED 2026-08-27, Java only: — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- thread-sse-consumption-streaming — (feature — COMPLETE, ALL PHASES — shipped in v4.12.0 2026-08-30: Java Phase 1 — faded — not referenced in over archive_window (20) sessions — 2026-Q3.md
+- thread-onboarding-efficiency — (onboarding — CLOSED 2026-09-01, all items done, decision recorded) Onboarding — faded — completed thread not referenced in over archive_window (20) sessions — 2026-Q3.md
+- ot-agent-orchestration-e0 — (feature — SHIPPED 2026-09-01, three repos, merges verified: Java — faded (completed threads past archive_window: sslu 30, 28, 32 > 20) — 2026-Q3.md
+- ot-json-plugin — `json` simple plugin — land the PR pair (Java + Rust lock-step). DONE 2026-09-02: — faded (completed threads past archive_window: sslu 30, 28, 32 > 20) — 2026-Q3.md
+- thread-polyglot-initiative — (feature — INITIATIVE COMPLETE 2026-09-01: P1–P5 all done. P5 publication: — faded (completed threads past archive_window: sslu 30, 28, 32 > 20) — 2026-Q3.md
+- polyglot-event-over-http-design — Polyglot functions = Event-over-HTTP wrappers, NOT subprocesses (Eric's design; D0–D8 — faded — not referenced in over archive_window (20) sessions (sslu 31) — 2026-Q3.md
+- conv-no-streamable-http-claim — Positioning rule: do NOT claim the "Streamable HTTP" protocol until an MCP — faded — not referenced in over archive_window (20) sessions (sslu 31) — 2026-Q3.md
+- ot-reverify-invariants-20260904 — (invariant re-verification — DONE 2026-09-04) All 15 never-decay facts re-confirmed by — completed thread past archive_window (sslu 34); invariants all confirmed 2026-09-04 — 2026-Q3.md
+- jackson-dual-lane-coexistence — Jackson runs as two coexisting lanes (established at the 2026-09-04 field Snyk — faded — 2026-Q3.md
+- claims-fixture-gate — The claims-fixture gate drift-tests documentation BEHAVIOR claims (ADR-0023, accepted — faded — 2026-Q3.md
+- graphjs-phase-out-direction — graph.js is FORMALLY DEPRECATED (Eric, 2026-09-02; ADR-0022) — backward compatibility — faded — 2026-Q3.md
+- bp-polyglot-functions — (blueprint) Polyglot function execution — GAP CLOSED (Eric, 2026-09-07). python/node — faded — 2026-Q3.md
+- ot-agent-memory-attribution-locators — (docs) agent-memory locators — DONE 2026-09-10. agent-memory joined the Mercury family — completed; swept after archive_window (21 sessions since last use) — 2026-Q3.md
+- compilegraph-mandatory-gate — CompileGraph is the MANDATORY deployment gate for graph models — CompileFlows parity — faded — 2026-Q3.md
+- ot-reverify-invariants-20260911 — Re-verify invariants — CONFIRMED (Eric, 2026-09-11). All 18 core facts + the — faded — 2026-Q3.md
+- ot-simple-plugin-gate-body-scan — Simple-plugin allowlist gate: method bodies scanned — SHIPPED. PR #358 (squash — faded — 2026-Q3.md
+- ot-three-layer-starter-templates — First-class starter templates for the three layers — SHIPPED. Java PR #357 — faded — 2026-Q3.md
+- thread-add-gradle-build — Add Gradle build support — COMPLETE (Eric's ruling, 2026-09-11). Delivered on the — faded — 2026-Q3.md
+- conv-kafka-transitive-pin-placement — A transitive CVE in the Kafka stack: PIN when a fixed release exists, EXCLUDE the — faded (sslu 21 / 25 > archive_window 20) — 2026-Q3.md
+- ot-streaming-return-route — Streaming return route — cross-pod progressive rendering for sync-over-async. DONE — faded (sslu 21 / 25 > archive_window 20) — 2026-Q3.md
+- conv-telemetry-presentation-parity — Telemetry/log presentation parity across language engines is a field requirement (Eric, — retired 2026-09-16 by Eric at the invariant re-verification — pure invalidation, no successor — 2026-Q3.md
+- soa-transport-neutral-cid — sync-over-async is transport-neutral — its correlation-id key is self-contained (Eric's di… — faded (sslu 23 > archive_window 20); shipped in v4.12.9 PR #364, design realized in code and the sync-over-async guide — 2026-Q3.md
+- ot-maven-central-later — (deferred → CLOSED 2026-09-16, Eric) Publish the Java engine to Maven Central. Not — completed and faded (sslu 114-189); closed in the 2026-09-16 stale-thread audit, narrative in each origin log — 2026-Q3.md
+- thread-docs-improvement-backlog — (docs backlog → MERGED 2026-09-16 into [[thread-doc-improvement-feedback-loop]]) Documenta… — completed and faded (sslu 114-189); closed in the 2026-09-16 stale-thread audit, narrative in each origin log — 2026-Q3.md
+- thread-field-trace-propagation-4-6-3 — (field support → RESOLVED 2026-09-16) The internal API gateway stripped `traceparent` and — completed and faded (sslu 114-189); closed in the 2026-09-16 stale-thread audit, narrative in each origin log — 2026-Q3.md
+- thread-minimalist-kafka-protobuf-revival — (backlog → CLOSED 2026-09-16, Eric — dormant, demand-triggered) Reintroduce Protobuf — completed and faded (sslu 114-189); closed in the 2026-09-16 stale-thread audit, narrative in each origin log — 2026-Q3.md
+- thread-redis-kafka-rpc — (next iteration → DONE, closed 2026-09-16 on a stale-record flag from Copilot) Cross-pod — completed and faded (sslu 114-189); closed in the 2026-09-16 stale-thread audit, narrative in each origin log — 2026-Q3.md
